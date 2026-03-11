@@ -17,7 +17,7 @@ return [
         'connection' => $env('DB_OPS_QUEUE_CONNECTION'),
         'name' => $env('DB_OPS_QUEUE_NAME', 'db-ops'),
         'max_attempts' => (int) $env('DB_OPS_QUEUE_MAX_ATTEMPTS', 1),
-        'retry_after' => (int) $env('DB_OPS_QUEUE_RETRY_AFTER', 90),
+        'retry_after' => (int) $env('DB_OPS_QUEUE_RETRY_AFTER', 3660),
         'timeout' => (int) $env('DB_OPS_QUEUE_TIMEOUT', 3600),
         'orphan_threshold' => (int) $env('DB_OPS_QUEUE_ORPHAN_THRESHOLD', 10),
     ],

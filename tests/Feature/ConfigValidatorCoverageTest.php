@@ -43,10 +43,37 @@ it('rejects a missing configured user model', function (): void {
         ->toThrow(ConfigurationException::class, 'User model class App\\Missing\\User does not exist.');
 });
 
+it('rejects a queue timeout that is not lower than retry_after', function (): void {
+    config()->set('checkpoint.queue.timeout', 3600);
+    config()->set('checkpoint.queue.retry_after', 3600);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(
+            ConfigurationException::class,
+            'checkpoint.queue.retry_after must be greater than checkpoint.queue.timeout to avoid duplicate job processing.',
+        );
+});
+
+it('rejects a non-positive queue timeout', function (): void {
+    config()->set('checkpoint.queue.timeout', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.queue.timeout must be greater than zero.');
+});
+
+it('rejects a non-positive queue retry_after', function (): void {
+    config()->set('checkpoint.queue.retry_after', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.queue.retry_after must be greater than zero.');
+});
+
 it('accepts a valid fake driver configuration', function (): void {
     app()->instance(FakeDriver::class, new FakeDriver);
     config()->set('checkpoint.driver', 'fake');
     config()->set('checkpoint.drivers.fake.class', FakeDriver::class);
+    config()->set('checkpoint.queue.timeout', 3600);
+    config()->set('checkpoint.queue.retry_after', 3660);
 
     expect(fn () => resolve(ConfigValidator::class)->validate())->not->toThrow(ConfigurationException::class);
 });

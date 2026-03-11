@@ -21,3 +21,12 @@ it('throws a configuration exception for invalid config in non-production', func
     expect(fn () => resolve(ConfigValidator::class)->validate())
         ->toThrow(ConfigurationException::class, 'checkpoint.table_prefix must be a non-empty string.');
 });
+
+it('fails doctor when queue timeout settings are unsafe', function (): void {
+    config()->set('checkpoint.queue.timeout', 3600);
+    config()->set('checkpoint.queue.retry_after', 300);
+
+    checkpoint_artisan('db-ops:doctor')
+        ->expectsOutputToContain('Config validation')
+        ->assertFailed();
+});

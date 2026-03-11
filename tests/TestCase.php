@@ -55,6 +55,7 @@ class TestCase extends Orchestra
             'queue' => [
                 'name' => 'db-ops',
                 'max_attempts' => 1,
+                'retry_after' => 3660,
                 'timeout' => 3600,
                 'orphan_threshold' => 10,
             ],

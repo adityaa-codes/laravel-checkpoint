@@ -18,6 +18,7 @@ final readonly class ConfigValidator
     public function validate(): void
     {
         $this->validateDriver();
+        $this->validateQueueSettings();
         $this->validateLogChannel();
         $this->validateUserModel();
         $this->validateTablePrefix();
@@ -57,6 +58,26 @@ final readonly class ConfigValidator
         if (! is_array($channels) || ! array_key_exists($channel, $channels)) {
             throw new ConfigurationException(
                 (string) __('messages.errors.config_log_missing', ['channel' => $channel]),
+            );
+        }
+    }
+
+    private function validateQueueSettings(): void
+    {
+        $timeout = (int) $this->config->get('checkpoint.queue.timeout', 0);
+        $retryAfter = (int) $this->config->get('checkpoint.queue.retry_after', 0);
+
+        if ($timeout < 1) {
+            throw new ConfigurationException('checkpoint.queue.timeout must be greater than zero.');
+        }
+
+        if ($retryAfter < 1) {
+            throw new ConfigurationException('checkpoint.queue.retry_after must be greater than zero.');
+        }
+
+        if ($retryAfter <= $timeout) {
+            throw new ConfigurationException(
+                'checkpoint.queue.retry_after must be greater than checkpoint.queue.timeout to avoid duplicate job processing.',
             );
         }
     }
