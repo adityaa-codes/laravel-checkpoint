@@ -849,8 +849,8 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 4 complete
-- `[-]` 8 partial
+- `[x]` 5 complete
+- `[-]` 7 partial
 - `[ ]` 74 not started
 
 Audit summary:
@@ -877,7 +877,7 @@ Audit summary:
 | [x] | C01 | Scaffold core package | Clone spatie/package-laravel-checkpoint-laravel, run configure.php, set vendor=your-vendor package=laravel-checkpoint namespace=YourVendor\Checkpoint | — |
 | [x] | C02 | composer.json (core) | PHP ^8.4, illuminate/contracts ^11\|^12, spatie/laravel-package-tools ^1.16, symfony/process ^7.0. Dev: pest 4, larastan 3, pint, testbench 10, rector 2, infection/infection | — |
 | [x] | C03 | GitHub Actions (core) | run-tests.yml: PHP 8.4+8.5 × Laravel 11+12 matrix + `composer audit` step. fix-php-code-style.yml with pint. | — |
-| [-] | C04 | Tooling config (core) | phpstan.neon.dist level 8, pint.json preset laravel, rector.php | — |
+| [x] | C04 | Tooling config (core) | phpstan.neon.dist level 8, pint.json preset laravel, rector.php | — |
 | [-] | C51 | Dependabot config | .github/dependabot.yml for composer + github-actions, weekly, group minor/patch | C01 |
 | [x] | C52 | Composer audit in CI | Add `composer audit` step to run-tests.yml; fails build on known vulnerabilities | C03 |
 | [ ] | C54 | Release automation | .github/workflows/release.yml using release-please-action. Commitlint workflow for PR titles. | C01 |
