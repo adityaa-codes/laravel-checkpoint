@@ -8,6 +8,7 @@ use AdityaaCodes\LaravelCheckpoint\Console\EnqueueCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueLogicalBackupCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\HealthCheckCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecordDrillRunCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\RecoverOrphansCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\StatusCommand;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
@@ -29,6 +30,7 @@ class LaravelCheckpointServiceProvider extends PackageServiceProvider
             ->hasMigration('create_checkpoint_backup_drill_runs_table')
             ->hasCommand(EnqueueCommand::class)
             ->hasCommand(HealthCheckCommand::class)
+            ->hasCommand(RecoverOrphansCommand::class)
             ->hasCommand(StatusCommand::class)
             ->hasCommand(RecordDrillRunCommand::class)
             ->hasCommand(EnqueueLogicalBackupCommand::class);
