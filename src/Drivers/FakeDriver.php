@@ -12,7 +12,7 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Throwable;
 
 /** @internal */
-class FakeDriver implements BackupDriver
+final class FakeDriver implements BackupDriver
 {
     /**
      * @var list<CommandRun>

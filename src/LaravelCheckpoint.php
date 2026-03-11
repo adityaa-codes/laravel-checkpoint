@@ -8,10 +8,10 @@ use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Database\Eloquent\Model;
 
-class LaravelCheckpoint
+final readonly class LaravelCheckpoint
 {
     public function __construct(
-        private readonly EnqueueCommandRunAction $enqueueCommandRun,
+        private EnqueueCommandRunAction $enqueueCommandRun,
     ) {}
 
     public function execute(string $operation, ?string $argument = null, ?Model $requestedBy = null): CommandRun

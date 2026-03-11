@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /** @internal */
-class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
+final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;

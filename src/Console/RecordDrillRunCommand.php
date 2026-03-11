@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
-class RecordDrillRunCommand extends Command
+final class RecordDrillRunCommand extends Command
 {
     protected $signature = 'db-ops:record-drill
         {--run-uuid= : Unique drill run UUID}

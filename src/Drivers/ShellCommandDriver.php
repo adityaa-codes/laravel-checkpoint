@@ -17,7 +17,7 @@ use Symfony\Component\Process\Process;
 use Throwable;
 
 /** @internal */
-class ShellCommandDriver implements BackupDriver
+final class ShellCommandDriver implements BackupDriver
 {
     public function execute(CommandRun $run): void
     {

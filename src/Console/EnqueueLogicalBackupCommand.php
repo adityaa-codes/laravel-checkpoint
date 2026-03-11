@@ -8,7 +8,7 @@ use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use Illuminate\Console\Command;
 use Throwable;
 
-class EnqueueLogicalBackupCommand extends Command
+final class EnqueueLogicalBackupCommand extends Command
 {
     protected $signature = 'db-ops:enqueue-backup';
 

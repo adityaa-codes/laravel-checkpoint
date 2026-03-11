@@ -7,7 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Console\Command;
 
-class PruneCommand extends Command
+final class PruneCommand extends Command
 {
     protected $signature = 'db-ops:prune';
 

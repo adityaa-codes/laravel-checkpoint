@@ -6,4 +6,4 @@ namespace AdityaaCodes\LaravelCheckpoint\Exceptions;
 
 use RuntimeException;
 
-class ConfigurationException extends RuntimeException {}
+final class ConfigurationException extends RuntimeException {}

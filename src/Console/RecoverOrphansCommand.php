@@ -9,7 +9,7 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
-class RecoverOrphansCommand extends Command
+final class RecoverOrphansCommand extends Command
 {
     protected $signature = 'db-ops:recover-orphans';
 

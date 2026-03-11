@@ -6,7 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Events;
 
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 
-readonly class BackupDrillCompleted
+final readonly class BackupDrillCompleted
 {
     public function __construct(public BackupDrillRun $run) {}
 }

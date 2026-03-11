@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Rector\Config\RectorConfig;
+use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPublicMethodParameterRector;
 use Rector\TypeDeclaration\Rector\ClassMethod\StrictArrayParamDimFetchRector;
 
 return RectorConfig::configure()
@@ -20,5 +21,6 @@ return RectorConfig::configure()
         typeDeclarations: true,
     )
     ->withSkip([
+        RemoveUnusedPublicMethodParameterRector::class,
         StrictArrayParamDimFetchRector::class,
     ]);

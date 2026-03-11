@@ -6,7 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Events;
 
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 
-readonly class BackupStarted
+final readonly class BackupStarted
 {
     public function __construct(public CommandRun $run) {}
 }

@@ -6,7 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Policies;
 
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 
-class CommandRunPolicy
+final class CommandRunPolicy
 {
     public function viewAny(object $user): bool
     {

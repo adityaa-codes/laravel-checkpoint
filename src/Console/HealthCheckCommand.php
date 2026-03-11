@@ -9,7 +9,7 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
-class HealthCheckCommand extends Command
+final class HealthCheckCommand extends Command
 {
     protected $signature = 'db-ops:health-check';
 

@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Symfony\Component\Process\ExecutableFinder;
 
-class DoctorCommand extends Command
+final class DoctorCommand extends Command
 {
     protected $signature = 'db-ops:doctor';
 

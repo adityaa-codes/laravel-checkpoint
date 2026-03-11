@@ -6,4 +6,4 @@ namespace AdityaaCodes\LaravelCheckpoint\Exceptions;
 
 use RuntimeException;
 
-class InvalidOperationException extends RuntimeException {}
+final class InvalidOperationException extends RuntimeException {}

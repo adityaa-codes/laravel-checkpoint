@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Facade;
  *
  * @see \AdityaaCodes\LaravelCheckpoint\LaravelCheckpoint
  */
-class LaravelCheckpoint extends Facade
+final class LaravelCheckpoint extends Facade
 {
     protected static function getFacadeAccessor(): string
     {

@@ -7,7 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Services;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidOperationException;
 
-class CommandRunCatalog
+final class CommandRunCatalog
 {
     /**
      * @var array<string, array<string, mixed>>

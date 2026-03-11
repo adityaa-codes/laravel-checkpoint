@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Gate;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
-class LaravelCheckpointServiceProvider extends PackageServiceProvider
+final class LaravelCheckpointServiceProvider extends PackageServiceProvider
 {
     public function packageRegistered(): void
     {

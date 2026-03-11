@@ -6,7 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Policies;
 
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 
-class BackupDrillRunPolicy
+final class BackupDrillRunPolicy
 {
     public function viewAny(object $user): bool
     {

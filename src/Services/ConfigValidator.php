@@ -9,10 +9,10 @@ use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use Illuminate\Contracts\Config\Repository;
 
 /** @internal */
-class ConfigValidator
+final readonly class ConfigValidator
 {
     public function __construct(
-        private readonly Repository $config,
+        private Repository $config,
     ) {}
 
     public function validate(): void

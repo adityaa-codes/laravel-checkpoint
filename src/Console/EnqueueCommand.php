@@ -9,7 +9,7 @@ use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
 use Illuminate\Console\Command;
 use Throwable;
 
-class EnqueueCommand extends Command
+final class EnqueueCommand extends Command
 {
     protected $signature = 'db-ops:enqueue {operation?} {--argument=}';
 

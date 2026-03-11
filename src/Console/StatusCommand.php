@@ -7,7 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Console\Command;
 
-class StatusCommand extends Command
+final class StatusCommand extends Command
 {
     protected $signature = 'db-ops:status {--limit=10}';
 
