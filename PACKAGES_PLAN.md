@@ -849,8 +849,8 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 6 complete
-- `[-]` 6 partial
+- `[x]` 7 complete
+- `[-]` 5 partial
 - `[ ]` 74 not started
 
 Audit summary:
@@ -880,7 +880,7 @@ Audit summary:
 | [x] | C04 | Tooling config (core) | phpstan.neon.dist level 8, pint.json preset laravel, rector.php | — |
 | [x] | C51 | Dependabot config | .github/dependabot.yml for composer + github-actions, weekly, group minor/patch | C01 |
 | [x] | C52 | Composer audit in CI | Add `composer audit` step to run-tests.yml; fails build on known vulnerabilities | C03 |
-| [ ] | C54 | Release automation | .github/workflows/release.yml using release-please-action. Commitlint workflow for PR titles. | C01 |
+| [x] | C54 | Release automation | .github/workflows/release.yml using release-please-action. Commitlint workflow for PR titles. | C01 |
 
 #### Phase 2 — Models & Migrations
 
