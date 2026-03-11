@@ -6,6 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Tests;
 
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpointServiceProvider;
+use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Foundation\Auth\User;
 use Illuminate\Support\Facades\Schema;
@@ -13,6 +14,8 @@ use Orchestra\Testbench\TestCase as Orchestra;
 
 class TestCase extends Orchestra
 {
+    use InteractsWithCheckpoint;
+
     protected function setUp(): void
     {
         parent::setUp();
