@@ -3,12 +3,13 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
+use Illuminate\Foundation\Auth\User;
 
 /** @phpstan-ignore-next-line */
 $env = static fn (string $key, mixed $default = null): mixed => env($key, $default);
 
 return [
-    'user_model' => $env('DB_OPS_USER_MODEL', 'App\\Models\\User'),
+    'user_model' => $env('DB_OPS_USER_MODEL', User::class),
     'user_name_column' => $env('DB_OPS_USER_NAME_COLUMN', 'name'),
     'table_prefix' => $env('DB_OPS_TABLE_PREFIX', 'db_ops_'),
 
