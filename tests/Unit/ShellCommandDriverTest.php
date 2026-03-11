@@ -82,3 +82,40 @@ it('creates a pre-restore snapshot before restore operations', function (): void
     Event::assertDispatchedTimes(BackupCompleted::class, 2);
     Event::assertNotDispatched(BackupFailed::class);
 });
+
+it('aborts restore operations when the pre-restore snapshot fails', function (): void {
+    Event::fake([
+        BackupStarted::class,
+        BackupCompleted::class,
+        BackupFailed::class,
+    ]);
+
+    config()->set('checkpoint.drivers.shell.commands.logical_backup', 'php -r exit(1);');
+    config()->set('checkpoint.drivers.shell.commands.logical_restore_file', 'printf restore');
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_restore_file',
+        'argument_text' => 'archive.sql',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new ShellCommandDriver)->execute($run);
+
+    $run->refresh();
+    $snapshotRun = CommandRun::query()
+        ->where('operation', 'logical_backup')
+        ->whereKeyNot($run->getKey())
+        ->sole();
+
+    expect(CommandRun::query()->count())->toBe(2)
+        ->and($snapshotRun->status)->toBe(CommandRunStatus::Failed)
+        ->and($snapshotRun->exit_code)->toBe(1)
+        ->and($run->status)->toBe(CommandRunStatus::Failed)
+        ->and($run->exit_code)->toBe(-1)
+        ->and($run->command_output)->toBe('messages.errors.pre_restore_failed');
+
+    Event::assertDispatchedTimes(BackupStarted::class, 1);
+    Event::assertDispatchedTimes(BackupCompleted::class, 0);
+    Event::assertDispatchedTimes(BackupFailed::class, 2);
+});
