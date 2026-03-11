@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 20 complete
+- `[x]` 21 complete
 - `[-]` 5 partial
-- `[ ]` 61 not started
+- `[ ]` 60 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -904,7 +904,7 @@ Audit summary:
 | [x] | C15 | Event: BackupStarted | readonly class, carries CommandRun $run | — |
 | [x] | C16 | Event: BackupCompleted | readonly class, carries CommandRun $run, int $exitCode, string $output | — |
 | [x] | C17 | Event: BackupFailed | readonly class, carries CommandRun $run, int $exitCode, string $output, Throwable $e | — |
-| [ ] | C58 | Translation strings | lang/en/messages.php with all 30 strings: 7 operation labels, 5 status labels, 8 error messages, 10 CLI strings | C13 |
+| [x] | C58 | Translation strings | lang/en/messages.php with all 30 strings: 7 operation labels, 5 status labels, 8 error messages, 10 CLI strings | C13 |
 
 #### Phase 4 — Driver Layer
 
