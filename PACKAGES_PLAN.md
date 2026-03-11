@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 26 complete
+- `[x]` 28 complete
 - `[-]` 5 partial
-- `[ ]` 55 not started
+- `[ ]` 53 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -919,7 +919,7 @@ Audit summary:
 
 | Status | ID | Title | Description | Depends On |
 |---|---|---|---|---|
-| [ ] | C21 | EnqueueCommandRunAction | Validate via catalog → DB::transaction(create CommandRun) → dispatch()->afterCommit() → fire BackupQueued | C13, C14, C15, C16, C17 |
+| [x] | C21 | EnqueueCommandRunAction | Validate via catalog → DB::transaction(create CommandRun) → dispatch()->afterCommit() → fire BackupQueued | C13, C14, C15, C16, C17 |
 | [ ] | C22 | ProcessCommandRunJob | ShouldQueue + ShouldBeUnique. uniqueId() exclusive for destructive ops. tries() forced to 1 for destructive ops. failed() marks run + fires BackupFailed + logs ERROR. | C19, C21 |
 | [ ] | C43 | Destructive op: force max_attempts=1 | tries() checks catalog.isDestructive(); logs WARNING if config attempts > 1 for destructive op | C22, C13 |
 | [ ] | C47 | Queue mutex per operation type | uniqueId() returns 'db-ops-exclusive:{operation}' for destructive+backup ops; 'db-ops-run:{id}' for info/check ops | C22, C13 |
@@ -955,7 +955,7 @@ Audit summary:
 | Status | ID | Title | Description | Depends On |
 |---|---|---|---|---|
 | [ ] | C32 | Test: CommandRunCatalogTest | validate, extend, isDestructive, isExclusive, custom_operations merge, exception cases | C13 |
-| [ ] | C33 | Test: EnqueueCommandRunActionTest | creates CommandRun, dispatches job afterCommit, fires BackupQueued, argument validation, DB transaction | C21 |
+| [x] | C33 | Test: EnqueueCommandRunActionTest | creates CommandRun, dispatches job afterCommit, fires BackupQueued, argument validation, DB transaction | C21 |
 | [ ] | C34 | Test: ProcessCommandRunJobTest | driver called, status transitions, events fired, tries()=1 for destructive, failed() callback | C22, C43, C47 |
 | [ ] | C35 | Test: EnqueueLogicalBackupCommandTest | schedule timing, artisan exit codes | C23 |
 | [x] | C36 | Test: ShellCommandDriverTest (unit) | argv array construction, placeholder substitution, no shell strings, pre-restore snapshot trigger | C41 |
