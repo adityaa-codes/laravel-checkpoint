@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 37 complete
+- `[x]` 39 complete
 - `[-]` 5 partial
-- `[ ]` 44 not started
+- `[ ]` 42 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -927,7 +927,7 @@ Audit summary:
 | [x] | C24 | EnqueueCommand (generic) | artisan db-ops:enqueue {operation} {--argument=}, interactive select if omitted | C21 |
 | [x] | C25 | StatusCommand | artisan db-ops:status {--limit=10}, table output with colored status | C07 |
 | [x] | C25b | RecordDrillRunCommand | artisan db-ops:record-drill with all --options. Creates BackupDrillRun, fires BackupDrillCompleted. | C08, C28 |
-| [ ] | C45 | HealthCheckCommand | artisan db-ops:health-check. Marks Running runs as Failed if started_at older than queue.timeout. Logs ERROR per recovery. Scheduled every 5 min. | C07, C28 |
+| [x] | C45 | HealthCheckCommand | artisan db-ops:health-check. Marks Running runs as Failed if started_at older than queue.timeout. Logs ERROR per recovery. Scheduled every 5 min. | C07, C28 |
 | [ ] | C42 | RecoverOrphansCommand | artisan db-ops:recover-orphans. Re-dispatches Pending runs with no active job older than orphan_threshold (10 min). Logs WARNING per re-dispatch. Scheduled every 10 min. | C21, C22 |
 | [ ] | C46 | PruneCommand | artisan db-ops:prune. Calls CommandRun::pruneAll() (MassPrunable). Reports pruned count. Scheduled weekly. | C07, C28 |
 | [ ] | C49 | DoctorCommand + ConfigValidator | artisan db-ops:doctor prints health table. ConfigValidator checks driver/log/user_model/table_prefix at boot in non-production. Throws ConfigurationException with actionable messages. | C29, C28 |
@@ -962,7 +962,7 @@ Audit summary:
 | [ ] | C37 | Test: BackupDrillRunTest | scopes, isPassing(), factory states | C08 |
 | [ ] | C38 | Test: CommandRunModelTest | scopes, markAs* helpers, MassPrunable, polymorphic relation | C07 |
 | [ ] | C44 | Test: Pre-restore snapshot | ShellCommandDriver aborts restore if snapshot fails; proceeds if snapshot passes | C44 |
-| [ ] | C45t | Test: HealthCheckCommandTest | marks timed-out runs as Failed, fires BackupFailed, logs ERROR | C45 |
+| [x] | C45t | Test: HealthCheckCommandTest | marks timed-out runs as Failed, fires BackupFailed, logs ERROR | C45 |
 | [ ] | C42t | Test: RecoverOrphansCommandTest | re-dispatches Pending runs beyond threshold, logs WARNING | C42 |
 | [ ] | C46t | Test: PruneCommandTest | prunes runs older than keep_days; retains failed runs per keep_failed_days | C46 |
 | [ ] | C49t | Test: DoctorCommandTest | all checks rendered in table; ConfigurationException thrown on bad config in non-prod | C49 |
