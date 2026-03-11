@@ -30,7 +30,7 @@ class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
         $this->onQueue(config('checkpoint.queue.name', 'db-ops'));
     }
 
-    public function handle(CommandRunCatalog $catalog): void
+    public function handle(): void
     {
         $this->resolveDriver()->execute($this->run->fresh() ?? $this->run);
     }
