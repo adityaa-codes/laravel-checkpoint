@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 57 complete
+- `[x]` 58 complete
 - `[-]` 1 partial
-- `[ ]` 28 not started
+- `[ ]` 27 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -971,7 +971,7 @@ Audit summary:
 
 | Status | ID | Title | Description | Depends On |
 |---|---|---|---|---|
-| [-] | C39 | README (core) | Install, publish config+migrations, env vars reference, usage, driver customization (MySQL example), extending catalog, public API section, testing section | — |
+| [x] | C39 | README (core) | Install, publish config+migrations, env vars reference, usage, driver customization (MySQL example), extending catalog, public API section, testing section | — |
 | [-] | C40 | CHANGELOG stub (core) | v1.0.0 with all initial features | — |
 | [ ] | C55 | SECURITY.md (core) | Supported versions, private advisory link, 48h SLA | C01 |
 | [ ] | C56 | CONTRIBUTING.md (core) | PR process, commit format, test requirements, how to add operations | C01 |
