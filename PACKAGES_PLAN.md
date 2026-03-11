@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 12 complete
+- `[x]` 13 complete
 - `[-]` 5 partial
-- `[ ]` 69 not started
+- `[ ]` 68 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -891,7 +891,7 @@ Audit summary:
 | [x] | C07 | Model: CommandRun | MassPrunable, config-driven table, polymorphic requestedBy(), scopes: pending/running/succeeded/failed/terminal, helpers: markAsRunning/Succeeded/Failed | C05 |
 | [x] | C08 | Model: BackupDrillRun | Config-driven table, isPassing():bool, scopeLatest() | C06 |
 | [x] | C09 | Enum: CommandRunStatus | Cases: Pending/Running/Succeeded/Failed/Cancelled + isTerminal():bool | — |
-| [ ] | C10 | Factory: CommandRunFactory | States: pending, running, succeeded, failed, cancelled with realistic timestamps | C07 |
+| [x] | C10 | Factory: CommandRunFactory | States: pending, running, succeeded, failed, cancelled with realistic timestamps | C07 |
 | [ ] | C11 | Factory: BackupDrillRunFactory | States: passing, failing with realistic RTO/RPO values | C08 |
 
 #### Phase 3 — Service Layer
