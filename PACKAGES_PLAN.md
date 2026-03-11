@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 21 complete
+- `[x]` 22 complete
 - `[-]` 5 partial
-- `[ ]` 60 not started
+- `[ ]` 59 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -910,7 +910,7 @@ Audit summary:
 
 | Status | ID | Title | Description | Depends On |
 |---|---|---|---|---|
-| [ ] | C18 | BackupDriver contract | Interface: execute(CommandRun): void. Docblock specifies full responsibility contract. | — |
+| [x] | C18 | BackupDriver contract | Interface: execute(CommandRun): void. Docblock specifies full responsibility contract. | — |
 | [ ] | C19 | ShellCommandDriver | **Symfony Process with array args only** (never shell strings). Placeholder substitution into argv array. Pre-restore snapshot for *_restore/pitr_restore ops. Configurable timeout. Structured logging. Fires all events. | C18 |
 | [ ] | C41 | ShellCommandDriver: Symfony Process | Verify implementation uses Process(['cmd','--arg']) not shell strings. Write unit test proving no shell interpretation. | C19 |
 | [ ] | C20 | FakeDriver | Records all calls, configurable per-operation fake outcomes (succeed/fail/throw), for testing | C18 |
