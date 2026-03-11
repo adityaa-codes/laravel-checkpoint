@@ -27,6 +27,12 @@ class LaravelCheckpointServiceProvider extends PackageServiceProvider
 {
     public function packageRegistered(): void
     {
+        $this->app->singleton(LaravelCheckpoint::class, function ($app): LaravelCheckpoint {
+            return new LaravelCheckpoint(
+                $app->make(\AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction::class),
+            );
+        });
+
         $this->app->bind(BackupDriver::class, function ($app): BackupDriver {
             $driver = (string) $app['config']->get('checkpoint.driver', 'shell');
             $class = $app['config']->get("checkpoint.drivers.{$driver}.class");
