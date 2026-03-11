@@ -26,6 +26,7 @@ return RectorConfig::configure()
     )
     ->withSets([
         LaravelSetList::LARAVEL_120,
+        LaravelSetList::LARAVEL_CONTAINER_STRING_TO_FULLY_QUALIFIED_NAME,
         LaravelSetList::LARAVEL_CODE_QUALITY,
         LaravelSetList::LARAVEL_COLLECTION,
         LaravelSetList::LARAVEL_FACADE_ALIASES_TO_FULL_NAMES,
