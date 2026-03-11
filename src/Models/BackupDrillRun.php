@@ -4,12 +4,22 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Models;
 
+use AdityaaCodes\LaravelCheckpoint\Database\Factories\BackupDrillRunFactory;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class BackupDrillRun extends Model
 {
+    /** @use HasFactory<BackupDrillRunFactory> */
+    use HasFactory;
+
     protected $guarded = [];
+
+    protected static function newFactory(): BackupDrillRunFactory
+    {
+        return BackupDrillRunFactory::new();
+    }
 
     protected function casts(): array
     {
