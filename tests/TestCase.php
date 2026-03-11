@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Tests;
 
+use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpointServiceProvider;
 use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
@@ -70,6 +71,26 @@ class TestCase extends Orchestra
                     'backup_prefix' => 'backup',
                     'pre_restore_snapshot' => true,
                     'command_timeout_seconds' => 5,
+                ],
+                'pgbackrest' => [
+                    'class' => PgBackRestDriver::class,
+                    'binary' => 'pgbackrest',
+                    'stanza' => 'main',
+                    'repo' => 1,
+                    'process_max' => 2,
+                    'resume' => true,
+                    'start_fast' => true,
+                    'backup_standby' => false,
+                    'checksum_page' => false,
+                    'delta' => false,
+                    'command_timeout_seconds' => 5,
+                    'extra_args' => [
+                        'backup' => [],
+                        'restore' => [],
+                        'verify' => [],
+                        'check' => [],
+                        'info' => [],
+                    ],
                 ],
             ],
             'schedule' => [

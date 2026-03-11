@@ -11,9 +11,13 @@ it('validates built-in operations and their exclusivity rules', function (): voi
 
     expect($catalog->validate('logical_backup', '   '))
         ->toBeNull()
+        ->and($catalog->validate('pgbackrest_restore', ' 20260312-010101F '))
+        ->toBe('20260312-010101F')
         ->and($catalog->validate('logical_restore_file', ' nightly.sql '))
         ->toBe('nightly.sql')
         ->and($catalog->isDestructive('logical_restore_file'))->toBeTrue()
+        ->and($catalog->isDestructive('pgbackrest_restore'))->toBeTrue()
+        ->and($catalog->isExclusive('pgbackrest_backup_full'))->toBeTrue()
         ->and($catalog->isExclusive('logical_backup'))->toBeTrue()
         ->and($catalog->isExclusive('pgbackrest_info'))->toBeFalse();
 });

@@ -37,10 +37,15 @@ it('prompts for the operation and argument when needed', function (): void {
                 'logical_backup',
                 'logical_restore_latest',
                 'logical_restore_file',
-                'pitr_restore',
                 'backup_drill',
+                'pgbackrest_backup_full',
+                'pgbackrest_backup_diff',
+                'pgbackrest_backup_incr',
+                'pgbackrest_restore',
+                'pgbackrest_verify',
                 'pgbackrest_check',
                 'pgbackrest_info',
+                'pitr_restore',
             ],
         )
         ->expectsQuestion('Enter the argument for the selected operation', 'nightly.sql')

@@ -8,6 +8,11 @@ return [
     'operations.logical_restore_file' => 'Logical Restore (Specific File)',
     'operations.pitr_restore' => 'PITR Restore',
     'operations.backup_drill' => 'Backup Drill',
+    'operations.pgbackrest_backup_full' => 'pgBackRest Full Backup',
+    'operations.pgbackrest_backup_diff' => 'pgBackRest Differential Backup',
+    'operations.pgbackrest_backup_incr' => 'pgBackRest Incremental Backup',
+    'operations.pgbackrest_restore' => 'pgBackRest Restore',
+    'operations.pgbackrest_verify' => 'pgBackRest Verify',
     'operations.pgbackrest_check' => 'pgBackRest Check',
     'operations.pgbackrest_info' => 'pgBackRest Info',
 

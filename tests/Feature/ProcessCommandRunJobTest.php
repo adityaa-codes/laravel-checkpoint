@@ -9,6 +9,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
@@ -85,7 +86,7 @@ it('uses the configured unique lock duration and cache store', function (): void
 
     expect($job->uniqueFor())->toBe(7200)
         ->and($job->uniqueVia())->toBeInstanceOf(CacheRepository::class)
-        ->and($job->uniqueVia()->getStore())->toBe(resolve(\Illuminate\Contracts\Cache\Factory::class)->store('array')->getStore());
+        ->and($job->uniqueVia()->getStore())->toBe(resolve(CacheFactory::class)->store('array')->getStore());
 });
 
 it('forces destructive operations to a single attempt and logs a warning for higher config', function (): void {

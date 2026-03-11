@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use Illuminate\Foundation\Auth\User;
 
@@ -56,6 +57,26 @@ return [
             'backup_prefix' => $env('DB_OPS_BACKUP_PREFIX', 'backup'),
             'pre_restore_snapshot' => (bool) $env('DB_OPS_PRE_RESTORE_SNAPSHOT', true),
             'command_timeout_seconds' => (int) $env('DB_OPS_CMD_TIMEOUT', 7200),
+        ],
+        'pgbackrest' => [
+            'class' => PgBackRestDriver::class,
+            'binary' => $env('DB_OPS_PGBACKREST_BINARY', 'pgbackrest'),
+            'stanza' => $env('DB_OPS_PGBACKREST_STANZA', 'main'),
+            'repo' => (int) $env('DB_OPS_PGBACKREST_REPO', 1),
+            'process_max' => (int) $env('DB_OPS_PGBACKREST_PROCESS_MAX', 2),
+            'resume' => (bool) $env('DB_OPS_PGBACKREST_RESUME', true),
+            'start_fast' => (bool) $env('DB_OPS_PGBACKREST_START_FAST', true),
+            'backup_standby' => (bool) $env('DB_OPS_PGBACKREST_BACKUP_STANDBY', false),
+            'checksum_page' => (bool) $env('DB_OPS_PGBACKREST_CHECKSUM_PAGE', false),
+            'delta' => (bool) $env('DB_OPS_PGBACKREST_DELTA', false),
+            'command_timeout_seconds' => (int) $env('DB_OPS_PGBACKREST_TIMEOUT', 7200),
+            'extra_args' => [
+                'backup' => [],
+                'restore' => [],
+                'verify' => [],
+                'check' => [],
+                'info' => [],
+            ],
         ],
     ],
 
