@@ -839,12 +839,32 @@ one is already in-flight. The second job stays in queue until the first releases
 | 13 | Documentation (plugin) | README, SECURITY.md, CONTRIBUTING.md |
 | 14 | Release prep | Tagging v1.0.0, Packagist registration, release-please setup |
 
+### Current Audit Snapshot
+
+Audit date: **2026-03-11**
+
+Status legend:
+- `[x]` complete
+- `[-]` partial or placeholder exists, but not to plan
+- `[ ]` not started
+
+Current totals for the **original 86 tasks**:
+- `[x]` 2 complete
+- `[-]` 9 partial
+- `[ ]` 75 not started
+
+Audit summary:
+- The repository has the Spatie package skeleton in place, so the initial scaffold exists.
+- Core implementation work has not started yet: no real models, enums, drivers, jobs, events, policies, commands, or planned tests are present.
+- Several files exist only as placeholders and are marked `[-]` rather than `[x]`, including `composer.json`, `config/checkpoint.php`, the service provider, facade, architecture test, README, CHANGELOG, and CI/tooling files.
+- The Filament plugin package has not been scaffolded in this repository yet.
+
 ---
 
 ## Task List (Original 86 — see Full Task List below for all 122)
 
 > **86 original tasks** across both packages (Groups A–G improvements listed separately below).
-> Status key: `[ ]` pending. Dependencies shown as prerequisite task IDs.
+> Status key: `[x]` complete, `[-]` partial, `[ ]` pending. Dependencies shown as prerequisite task IDs.
 
 ---
 
@@ -852,110 +872,110 @@ one is already in-flight. The second job stays in queue until the first releases
 
 #### Phase 1 — Scaffold & Tooling
 
-| ID | Title | Description | Depends On |
-|---|---|---|---|
-| C01 | Scaffold core package | Clone spatie/package-laravel-checkpoint-laravel, run configure.php, set vendor=your-vendor package=laravel-checkpoint namespace=YourVendor\Checkpoint | — |
-| C02 | composer.json (core) | PHP ^8.4, illuminate/contracts ^11\|^12, spatie/laravel-package-tools ^1.16, symfony/process ^7.0. Dev: pest 4, larastan 3, pint, testbench 10, rector 2, infection/infection | — |
-| C03 | GitHub Actions (core) | run-tests.yml: PHP 8.4+8.5 × Laravel 11+12 matrix + `composer audit` step. fix-php-code-style.yml with pint. | — |
-| C04 | Tooling config (core) | phpstan.neon.dist level 8, pint.json preset laravel, rector.php | — |
-| C51 | Dependabot config | .github/dependabot.yml for composer + github-actions, weekly, group minor/patch | C01 |
-| C52 | Composer audit in CI | Add `composer audit` step to run-tests.yml; fails build on known vulnerabilities | C03 |
-| C54 | Release automation | .github/workflows/release.yml using release-please-action. Commitlint workflow for PR titles. | C01 |
+| Status | ID | Title | Description | Depends On |
+|---|---|---|---|---|
+| [x] | C01 | Scaffold core package | Clone spatie/package-laravel-checkpoint-laravel, run configure.php, set vendor=your-vendor package=laravel-checkpoint namespace=YourVendor\Checkpoint | — |
+| [x] | C02 | composer.json (core) | PHP ^8.4, illuminate/contracts ^11\|^12, spatie/laravel-package-tools ^1.16, symfony/process ^7.0. Dev: pest 4, larastan 3, pint, testbench 10, rector 2, infection/infection | — |
+| [-] | C03 | GitHub Actions (core) | run-tests.yml: PHP 8.4+8.5 × Laravel 11+12 matrix + `composer audit` step. fix-php-code-style.yml with pint. | — |
+| [-] | C04 | Tooling config (core) | phpstan.neon.dist level 8, pint.json preset laravel, rector.php | — |
+| [-] | C51 | Dependabot config | .github/dependabot.yml for composer + github-actions, weekly, group minor/patch | C01 |
+| [ ] | C52 | Composer audit in CI | Add `composer audit` step to run-tests.yml; fails build on known vulnerabilities | C03 |
+| [ ] | C54 | Release automation | .github/workflows/release.yml using release-please-action. Commitlint workflow for PR titles. | C01 |
 
 #### Phase 2 — Models & Migrations
 
-| ID | Title | Description | Depends On |
-|---|---|---|---|
-| C05 | Migration: command_runs | `db_ops_command_runs`: polymorphic `nullableMorphs('requested_by')`, all columns: operation, argument_text, status, timestamps, command_line, command_output, exit_code, attempts | C01 |
-| C06 | Migration: backup_drill_runs | `db_ops_backup_drill_runs`: run_uuid, marker_uuid, marker_email, marker_count, marker_result, rto/rpo fields, overall_result, executed_by, executed_at | C01 |
-| C07 | Model: CommandRun | MassPrunable, config-driven table, polymorphic requestedBy(), scopes: pending/running/succeeded/failed/terminal, helpers: markAsRunning/Succeeded/Failed | C05 |
-| C08 | Model: BackupDrillRun | Config-driven table, isPassing():bool, scopeLatest() | C06 |
-| C09 | Enum: CommandRunStatus | Cases: Pending/Running/Succeeded/Failed/Cancelled + isTerminal():bool | — |
-| C10 | Factory: CommandRunFactory | States: pending, running, succeeded, failed, cancelled with realistic timestamps | C07 |
-| C11 | Factory: BackupDrillRunFactory | States: passing, failing with realistic RTO/RPO values | C08 |
+| Status | ID | Title | Description | Depends On |
+|---|---|---|---|---|
+| [ ] | C05 | Migration: command_runs | `db_ops_command_runs`: polymorphic `nullableMorphs('requested_by')`, all columns: operation, argument_text, status, timestamps, command_line, command_output, exit_code, attempts | C01 |
+| [ ] | C06 | Migration: backup_drill_runs | `db_ops_backup_drill_runs`: run_uuid, marker_uuid, marker_email, marker_count, marker_result, rto/rpo fields, overall_result, executed_by, executed_at | C01 |
+| [ ] | C07 | Model: CommandRun | MassPrunable, config-driven table, polymorphic requestedBy(), scopes: pending/running/succeeded/failed/terminal, helpers: markAsRunning/Succeeded/Failed | C05 |
+| [ ] | C08 | Model: BackupDrillRun | Config-driven table, isPassing():bool, scopeLatest() | C06 |
+| [ ] | C09 | Enum: CommandRunStatus | Cases: Pending/Running/Succeeded/Failed/Cancelled + isTerminal():bool | — |
+| [ ] | C10 | Factory: CommandRunFactory | States: pending, running, succeeded, failed, cancelled with realistic timestamps | C07 |
+| [ ] | C11 | Factory: BackupDrillRunFactory | States: passing, failing with realistic RTO/RPO values | C08 |
 
 #### Phase 3 — Service Layer
 
-| ID | Title | Description | Depends On |
-|---|---|---|---|
-| C12 | Exceptions | InvalidOperationException, InvalidArgumentException, ConfigurationException — all extend RuntimeException | — |
-| C13 | CommandRunCatalog | All 7 built-in operations, extend(), isDestructive(), isExclusive(), custom_operations config merge, translatable hints | C12 |
-| C14 | Event: BackupQueued | readonly class, carries CommandRun $run | — |
-| C15 | Event: BackupStarted | readonly class, carries CommandRun $run | — |
-| C16 | Event: BackupCompleted | readonly class, carries CommandRun $run, int $exitCode, string $output | — |
-| C17 | Event: BackupFailed | readonly class, carries CommandRun $run, int $exitCode, string $output, Throwable $e | — |
-| C58 | Translation strings | lang/en/messages.php with all 30 strings: 7 operation labels, 5 status labels, 8 error messages, 10 CLI strings | C13 |
+| Status | ID | Title | Description | Depends On |
+|---|---|---|---|---|
+| [ ] | C12 | Exceptions | InvalidOperationException, InvalidArgumentException, ConfigurationException — all extend RuntimeException | — |
+| [ ] | C13 | CommandRunCatalog | All 7 built-in operations, extend(), isDestructive(), isExclusive(), custom_operations config merge, translatable hints | C12 |
+| [ ] | C14 | Event: BackupQueued | readonly class, carries CommandRun $run | — |
+| [ ] | C15 | Event: BackupStarted | readonly class, carries CommandRun $run | — |
+| [ ] | C16 | Event: BackupCompleted | readonly class, carries CommandRun $run, int $exitCode, string $output | — |
+| [ ] | C17 | Event: BackupFailed | readonly class, carries CommandRun $run, int $exitCode, string $output, Throwable $e | — |
+| [ ] | C58 | Translation strings | lang/en/messages.php with all 30 strings: 7 operation labels, 5 status labels, 8 error messages, 10 CLI strings | C13 |
 
 #### Phase 4 — Driver Layer
 
-| ID | Title | Description | Depends On |
-|---|---|---|---|
-| C18 | BackupDriver contract | Interface: execute(CommandRun): void. Docblock specifies full responsibility contract. | — |
-| C19 | ShellCommandDriver | **Symfony Process with array args only** (never shell strings). Placeholder substitution into argv array. Pre-restore snapshot for *_restore/pitr_restore ops. Configurable timeout. Structured logging. Fires all events. | C18 |
-| C41 | ShellCommandDriver: Symfony Process | Verify implementation uses Process(['cmd','--arg']) not shell strings. Write unit test proving no shell interpretation. | C19 |
-| C20 | FakeDriver | Records all calls, configurable per-operation fake outcomes (succeed/fail/throw), for testing | C18 |
+| Status | ID | Title | Description | Depends On |
+|---|---|---|---|---|
+| [ ] | C18 | BackupDriver contract | Interface: execute(CommandRun): void. Docblock specifies full responsibility contract. | — |
+| [ ] | C19 | ShellCommandDriver | **Symfony Process with array args only** (never shell strings). Placeholder substitution into argv array. Pre-restore snapshot for *_restore/pitr_restore ops. Configurable timeout. Structured logging. Fires all events. | C18 |
+| [ ] | C41 | ShellCommandDriver: Symfony Process | Verify implementation uses Process(['cmd','--arg']) not shell strings. Write unit test proving no shell interpretation. | C19 |
+| [ ] | C20 | FakeDriver | Records all calls, configurable per-operation fake outcomes (succeed/fail/throw), for testing | C18 |
 
 #### Phase 5 — Jobs & Console Commands
 
-| ID | Title | Description | Depends On |
-|---|---|---|---|
-| C21 | EnqueueCommandRunAction | Validate via catalog → DB::transaction(create CommandRun) → dispatch()->afterCommit() → fire BackupQueued | C13, C14, C15, C16, C17 |
-| C22 | ProcessCommandRunJob | ShouldQueue + ShouldBeUnique. uniqueId() exclusive for destructive ops. tries() forced to 1 for destructive ops. failed() marks run + fires BackupFailed + logs ERROR. | C19, C21 |
-| C43 | Destructive op: force max_attempts=1 | tries() checks catalog.isDestructive(); logs WARNING if config attempts > 1 for destructive op | C22, C13 |
-| C47 | Queue mutex per operation type | uniqueId() returns 'db-ops-exclusive:{operation}' for destructive+backup ops; 'db-ops-run:{id}' for info/check ops | C22, C13 |
-| C23 | EnqueueLogicalBackupCommand | artisan db-ops:enqueue-backup, success/failure output, uses EnqueueCommandRunAction | C21 |
-| C24 | EnqueueCommand (generic) | artisan db-ops:enqueue {operation} {--argument=}, interactive select if omitted | C21 |
-| C25 | StatusCommand | artisan db-ops:status {--limit=10}, table output with colored status | C07 |
-| C25b | RecordDrillRunCommand | artisan db-ops:record-drill with all --options. Creates BackupDrillRun, fires BackupDrillCompleted. | C08, C28 |
-| C45 | HealthCheckCommand | artisan db-ops:health-check. Marks Running runs as Failed if started_at older than queue.timeout. Logs ERROR per recovery. Scheduled every 5 min. | C07, C28 |
-| C42 | RecoverOrphansCommand | artisan db-ops:recover-orphans. Re-dispatches Pending runs with no active job older than orphan_threshold (10 min). Logs WARNING per re-dispatch. Scheduled every 10 min. | C21, C22 |
-| C46 | PruneCommand | artisan db-ops:prune. Calls CommandRun::pruneAll() (MassPrunable). Reports pruned count. Scheduled weekly. | C07, C28 |
-| C49 | DoctorCommand + ConfigValidator | artisan db-ops:doctor prints health table. ConfigValidator checks driver/log/user_model/table_prefix at boot in non-production. Throws ConfigurationException with actionable messages. | C29, C28 |
+| Status | ID | Title | Description | Depends On |
+|---|---|---|---|---|
+| [ ] | C21 | EnqueueCommandRunAction | Validate via catalog → DB::transaction(create CommandRun) → dispatch()->afterCommit() → fire BackupQueued | C13, C14, C15, C16, C17 |
+| [ ] | C22 | ProcessCommandRunJob | ShouldQueue + ShouldBeUnique. uniqueId() exclusive for destructive ops. tries() forced to 1 for destructive ops. failed() marks run + fires BackupFailed + logs ERROR. | C19, C21 |
+| [ ] | C43 | Destructive op: force max_attempts=1 | tries() checks catalog.isDestructive(); logs WARNING if config attempts > 1 for destructive op | C22, C13 |
+| [ ] | C47 | Queue mutex per operation type | uniqueId() returns 'db-ops-exclusive:{operation}' for destructive+backup ops; 'db-ops-run:{id}' for info/check ops | C22, C13 |
+| [ ] | C23 | EnqueueLogicalBackupCommand | artisan db-ops:enqueue-backup, success/failure output, uses EnqueueCommandRunAction | C21 |
+| [ ] | C24 | EnqueueCommand (generic) | artisan db-ops:enqueue {operation} {--argument=}, interactive select if omitted | C21 |
+| [ ] | C25 | StatusCommand | artisan db-ops:status {--limit=10}, table output with colored status | C07 |
+| [ ] | C25b | RecordDrillRunCommand | artisan db-ops:record-drill with all --options. Creates BackupDrillRun, fires BackupDrillCompleted. | C08, C28 |
+| [ ] | C45 | HealthCheckCommand | artisan db-ops:health-check. Marks Running runs as Failed if started_at older than queue.timeout. Logs ERROR per recovery. Scheduled every 5 min. | C07, C28 |
+| [ ] | C42 | RecoverOrphansCommand | artisan db-ops:recover-orphans. Re-dispatches Pending runs with no active job older than orphan_threshold (10 min). Logs WARNING per re-dispatch. Scheduled every 10 min. | C21, C22 |
+| [ ] | C46 | PruneCommand | artisan db-ops:prune. Calls CommandRun::pruneAll() (MassPrunable). Reports pruned count. Scheduled weekly. | C07, C28 |
+| [ ] | C49 | DoctorCommand + ConfigValidator | artisan db-ops:doctor prints health table. ConfigValidator checks driver/log/user_model/table_prefix at boot in non-production. Throws ConfigurationException with actionable messages. | C29, C28 |
 
 #### Phase 6 — Provider, Config & Testing Helpers
 
-| ID | Title | Description | Depends On |
-|---|---|---|---|
-| C26 | BackupDrillRunPolicy | viewAny, view only. No create/edit/delete. | — |
-| C27 | CommandRunPolicy | viewAny, view, create (canQueue). | — |
-| C28 | CheckpointServiceProvider | spatie/laravel-package-tools: config, migrations, translations, all commands, scheduling (backup+health+orphans+prune), policy registration, driver binding | C13, C22, C26, C27, C29 |
-| C29 | config/checkpoint.php | All settings documented. Commands as env-var-driven strings (parsed to argv by driver). queue.timeout, orphan_threshold, prune settings, log_channel. | — |
-| C30 | Facade: Checkpoint | Points to EnqueueCommandRunAction::execute() | — |
-| C31 | InteractsWithCheckpoint testing trait | fakeDriver(), assertBackupQueued(op, arg?), assertBackupNotQueued(op), assertNoBackupsQueued(), assertBackupFailed(op) | — |
-| C50 | Public API surface + @internal | Add @internal to ShellCommandDriver, FakeDriver, ProcessCommandRunJob, ConfigValidator. Document public API in README Extending section. | C28 |
+| Status | ID | Title | Description | Depends On |
+|---|---|---|---|---|
+| [ ] | C26 | BackupDrillRunPolicy | viewAny, view only. No create/edit/delete. | — |
+| [ ] | C27 | CommandRunPolicy | viewAny, view, create (canQueue). | — |
+| [-] | C28 | CheckpointServiceProvider | spatie/laravel-package-tools: config, migrations, translations, all commands, scheduling (backup+health+orphans+prune), policy registration, driver binding | C13, C22, C26, C27, C29 |
+| [-] | C29 | config/checkpoint.php | All settings documented. Commands as env-var-driven strings (parsed to argv by driver). queue.timeout, orphan_threshold, prune settings, log_channel. | — |
+| [-] | C30 | Facade: Checkpoint | Points to EnqueueCommandRunAction::execute() | — |
+| [ ] | C31 | InteractsWithCheckpoint testing trait | fakeDriver(), assertBackupQueued(op, arg?), assertBackupNotQueued(op), assertNoBackupsQueued(), assertBackupFailed(op) | — |
+| [ ] | C50 | Public API surface + @internal | Add @internal to ShellCommandDriver, FakeDriver, ProcessCommandRunJob, ConfigValidator. Document public API in README Extending section. | C28 |
 
 #### Phase 7 — Architecture Tests
 
-| ID | Title | Description | Depends On |
-|---|---|---|---|
-| C53 | Architecture tests (Pest arch) | tests/ArchTest.php: no App\ refs, Contracts are interfaces, Events are readonly, Jobs implement ShouldQueue, Drivers implement BackupDriver | C01 |
+| Status | ID | Title | Description | Depends On |
+|---|---|---|---|---|
+| [-] | C53 | Architecture tests (Pest arch) | tests/ArchTest.php: no App\ refs, Contracts are interfaces, Events are readonly, Jobs implement ShouldQueue, Drivers implement BackupDriver | C01 |
 
 #### Phase 8 — Feature/Unit Tests
 
-| ID | Title | Description | Depends On |
-|---|---|---|---|
-| C32 | Test: CommandRunCatalogTest | validate, extend, isDestructive, isExclusive, custom_operations merge, exception cases | C13 |
-| C33 | Test: EnqueueCommandRunActionTest | creates CommandRun, dispatches job afterCommit, fires BackupQueued, argument validation, DB transaction | C21 |
-| C34 | Test: ProcessCommandRunJobTest | driver called, status transitions, events fired, tries()=1 for destructive, failed() callback | C22, C43, C47 |
-| C35 | Test: EnqueueLogicalBackupCommandTest | schedule timing, artisan exit codes | C23 |
-| C36 | Test: ShellCommandDriverTest (unit) | argv array construction, placeholder substitution, no shell strings, pre-restore snapshot trigger | C41 |
-| C37 | Test: BackupDrillRunTest | scopes, isPassing(), factory states | C08 |
-| C38 | Test: CommandRunModelTest | scopes, markAs* helpers, MassPrunable, polymorphic relation | C07 |
-| C44 | Test: Pre-restore snapshot | ShellCommandDriver aborts restore if snapshot fails; proceeds if snapshot passes | C44 |
-| C45t | Test: HealthCheckCommandTest | marks timed-out runs as Failed, fires BackupFailed, logs ERROR | C45 |
-| C42t | Test: RecoverOrphansCommandTest | re-dispatches Pending runs beyond threshold, logs WARNING | C42 |
-| C46t | Test: PruneCommandTest | prunes runs older than keep_days; retains failed runs per keep_failed_days | C46 |
-| C49t | Test: DoctorCommandTest | all checks rendered in table; ConfigurationException thrown on bad config in non-prod | C49 |
+| Status | ID | Title | Description | Depends On |
+|---|---|---|---|---|
+| [ ] | C32 | Test: CommandRunCatalogTest | validate, extend, isDestructive, isExclusive, custom_operations merge, exception cases | C13 |
+| [ ] | C33 | Test: EnqueueCommandRunActionTest | creates CommandRun, dispatches job afterCommit, fires BackupQueued, argument validation, DB transaction | C21 |
+| [ ] | C34 | Test: ProcessCommandRunJobTest | driver called, status transitions, events fired, tries()=1 for destructive, failed() callback | C22, C43, C47 |
+| [ ] | C35 | Test: EnqueueLogicalBackupCommandTest | schedule timing, artisan exit codes | C23 |
+| [ ] | C36 | Test: ShellCommandDriverTest (unit) | argv array construction, placeholder substitution, no shell strings, pre-restore snapshot trigger | C41 |
+| [ ] | C37 | Test: BackupDrillRunTest | scopes, isPassing(), factory states | C08 |
+| [ ] | C38 | Test: CommandRunModelTest | scopes, markAs* helpers, MassPrunable, polymorphic relation | C07 |
+| [ ] | C44 | Test: Pre-restore snapshot | ShellCommandDriver aborts restore if snapshot fails; proceeds if snapshot passes | C44 |
+| [ ] | C45t | Test: HealthCheckCommandTest | marks timed-out runs as Failed, fires BackupFailed, logs ERROR | C45 |
+| [ ] | C42t | Test: RecoverOrphansCommandTest | re-dispatches Pending runs beyond threshold, logs WARNING | C42 |
+| [ ] | C46t | Test: PruneCommandTest | prunes runs older than keep_days; retains failed runs per keep_failed_days | C46 |
+| [ ] | C49t | Test: DoctorCommandTest | all checks rendered in table; ConfigurationException thrown on bad config in non-prod | C49 |
 
 #### Phase 9 — Documentation (Core)
 
-| ID | Title | Description | Depends On |
-|---|---|---|---|
-| C39 | README (core) | Install, publish config+migrations, env vars reference, usage, driver customization (MySQL example), extending catalog, public API section, testing section | — |
-| C40 | CHANGELOG stub (core) | v1.0.0 with all initial features | — |
-| C55 | SECURITY.md (core) | Supported versions, private advisory link, 48h SLA | C01 |
-| C56 | CONTRIBUTING.md (core) | PR process, commit format, test requirements, how to add operations | C01 |
-| C57 | UPGRADING.md (core) | v1.0.0 baseline, migration from Modules/Operations | C01 |
+| Status | ID | Title | Description | Depends On |
+|---|---|---|---|---|
+| [-] | C39 | README (core) | Install, publish config+migrations, env vars reference, usage, driver customization (MySQL example), extending catalog, public API section, testing section | — |
+| [-] | C40 | CHANGELOG stub (core) | v1.0.0 with all initial features | — |
+| [ ] | C55 | SECURITY.md (core) | Supported versions, private advisory link, 48h SLA | C01 |
+| [ ] | C56 | CONTRIBUTING.md (core) | PR process, commit format, test requirements, how to add operations | C01 |
+| [ ] | C57 | UPGRADING.md (core) | v1.0.0 baseline, migration from Modules/Operations | C01 |
 
 ---
 
@@ -963,52 +983,52 @@ one is already in-flight. The second job stays in queue until the first releases
 
 #### Phase 10 — Scaffold
 
-| ID | Title | Description | Depends On |
-|---|---|---|---|
-| F01 | Scaffold filament plugin | Clone filamentphp/plugin-laravel-checkpoint, configure vendor/package/namespace | C40 |
-| F02 | composer.json (filament) | filament/filament ^5.0, core ^1.0. Dev: pest 4, pest-plugin-livewire ^4, testbench 10 | — |
-| F03 | GitHub Actions (filament) | Same matrix as core + Livewire pest plugin + composer audit | — |
-| F27 | Workbench test app spec | workbench/app/Providers/PanelProvider.php registers plugin. TestUser + SQLite in-memory. FilamentUser interface impl. | F01 |
+| Status | ID | Title | Description | Depends On |
+|---|---|---|---|---|
+| [ ] | F01 | Scaffold filament plugin | Clone filamentphp/plugin-laravel-checkpoint, configure vendor/package/namespace | C40 |
+| [ ] | F02 | composer.json (filament) | filament/filament ^5.0, core ^1.0. Dev: pest 4, pest-plugin-livewire ^4, testbench 10 | — |
+| [ ] | F03 | GitHub Actions (filament) | Same matrix as core + Livewire pest plugin + composer audit | — |
+| [ ] | F27 | Workbench test app spec | workbench/app/Providers/PanelProvider.php registers plugin. TestUser + SQLite in-memory. FilamentUser interface impl. | F01 |
 
 #### Phase 11 — Plugin Class & Resources
 
-| ID | Title | Description | Depends On |
-|---|---|---|---|
-| F04 | CheckpointFilamentPlugin | register() calls $panel->resources() conditionally. Fluent API: navigationGroup, sort, hide*, notifyOnCompletion. get() static accessor. | F01 |
-| F05 | CheckpointFilamentServiceProvider | Registers plugin views, config, FilamentAsset | F01 |
-| F06 | CheckpointFilamentTheme | Theme CSS per plugin-laravel-checkpoint pattern | F01 |
-| F07 | config/checkpoint-filament.php | navigation_group, sort values, notify_on_completion | — |
-| F08 | CommandRunResource | Nav: icon heroicon-o-cog-6-tooth, group+sort via Plugin::get() | F04 |
-| F09 | CommandRunsTable | Columns (all), filters (operation/status/date range), header actions for all 7 ops with modal inputs, all actions gated by CommandRunPolicy::create | F08, F26 |
-| F10 | CommandRunInfolist | All fields, command_output as code block (font-mono), command_line entry | F08 |
-| F11 | ListCommandRuns page | 30s Livewire polling, header stat widgets (Pending/Running/Succeeded/Failed counts) | F09 |
-| F12 | ViewCommandRun page | Read-only infolist | F10 |
-| F13 | BackupDrillRunResource | Nav badge: latest overall_result, PASS=success/FAIL=danger, icon heroicon-o-lifebuoy, group+sort via Plugin::get() | F04 |
-| F14 | BackupDrillRunsTable | All columns, filter by overall_result | F13 |
-| F15 | BackupDrillRunInfolist | Sections: Summary, Marker, RTO, RPO | F13 |
-| F16 | ListBackupDrillRuns page | Navigation badge showing latest result | F14 |
-| F17 | ViewBackupDrillRun page | Read-only infolist | F15 |
-| F18 | Bulk cancel action | BulkAction: set status=Cancelled for selected Pending/Running. Gated by policy. | F09 |
-| F19 | CommandRunCompletedNotification | Filament DatabaseNotification on BackupCompleted+BackupFailed. Sent to requester if not system user. | F04 |
-| F20 | InteractsWithCheckpointFilament | Testing trait: actingAsFilamentUser(), assertFilamentNotificationSent() | — |
-| F25 | Multi-tenancy docs | README section: CommandRun/BackupDrillRun are global (not tenant-scoped). Example for opting out. | F23 |
-| F26 | Authorization for queue actions | All header actions use visible(fn() => auth()->user()->can('create', CommandRun::class)) | F09 |
+| Status | ID | Title | Description | Depends On |
+|---|---|---|---|---|
+| [ ] | F04 | CheckpointFilamentPlugin | register() calls $panel->resources() conditionally. Fluent API: navigationGroup, sort, hide*, notifyOnCompletion. get() static accessor. | F01 |
+| [ ] | F05 | CheckpointFilamentServiceProvider | Registers plugin views, config, FilamentAsset | F01 |
+| [ ] | F06 | CheckpointFilamentTheme | Theme CSS per plugin-laravel-checkpoint pattern | F01 |
+| [ ] | F07 | config/checkpoint-filament.php | navigation_group, sort values, notify_on_completion | — |
+| [ ] | F08 | CommandRunResource | Nav: icon heroicon-o-cog-6-tooth, group+sort via Plugin::get() | F04 |
+| [ ] | F09 | CommandRunsTable | Columns (all), filters (operation/status/date range), header actions for all 7 ops with modal inputs, all actions gated by CommandRunPolicy::create | F08, F26 |
+| [ ] | F10 | CommandRunInfolist | All fields, command_output as code block (font-mono), command_line entry | F08 |
+| [ ] | F11 | ListCommandRuns page | 30s Livewire polling, header stat widgets (Pending/Running/Succeeded/Failed counts) | F09 |
+| [ ] | F12 | ViewCommandRun page | Read-only infolist | F10 |
+| [ ] | F13 | BackupDrillRunResource | Nav badge: latest overall_result, PASS=success/FAIL=danger, icon heroicon-o-lifebuoy, group+sort via Plugin::get() | F04 |
+| [ ] | F14 | BackupDrillRunsTable | All columns, filter by overall_result | F13 |
+| [ ] | F15 | BackupDrillRunInfolist | Sections: Summary, Marker, RTO, RPO | F13 |
+| [ ] | F16 | ListBackupDrillRuns page | Navigation badge showing latest result | F14 |
+| [ ] | F17 | ViewBackupDrillRun page | Read-only infolist | F15 |
+| [ ] | F18 | Bulk cancel action | BulkAction: set status=Cancelled for selected Pending/Running. Gated by policy. | F09 |
+| [ ] | F19 | CommandRunCompletedNotification | Filament DatabaseNotification on BackupCompleted+BackupFailed. Sent to requester if not system user. | F04 |
+| [ ] | F20 | InteractsWithCheckpointFilament | Testing trait: actingAsFilamentUser(), assertFilamentNotificationSent() | — |
+| [ ] | F25 | Multi-tenancy docs | README section: CommandRun/BackupDrillRun are global (not tenant-scoped). Example for opting out. | F23 |
+| [ ] | F26 | Authorization for queue actions | All header actions use visible(fn() => auth()->user()->can('create', CommandRun::class)) | F09 |
 
 #### Phase 12 — Tests (Filament)
 
-| ID | Title | Description | Depends On |
-|---|---|---|---|
-| F21 | Test: CommandRunResourceTest | list renders, view renders, all 7 queue actions, argument validation, bulk cancel, auth gates | F09, F10 |
-| F22 | Test: BackupDrillRunResourceTest | list renders, view renders, nav badge PASS=green/FAIL=red, filter | F14, F15 |
+| Status | ID | Title | Description | Depends On |
+|---|---|---|---|---|
+| [ ] | F21 | Test: CommandRunResourceTest | list renders, view renders, all 7 queue actions, argument validation, bulk cancel, auth gates | F09, F10 |
+| [ ] | F22 | Test: BackupDrillRunResourceTest | list renders, view renders, nav badge PASS=green/FAIL=red, filter | F14, F15 |
 
 #### Phase 13 — Documentation (Filament)
 
-| ID | Title | Description | Depends On |
-|---|---|---|---|
-| F23 | README (filament plugin) | Install, register in panel, Tailwind @source instruction, fluent options, notification setup, multi-tenancy note | — |
-| F24 | CHANGELOG stub (filament) | v1.0.0 | — |
-| F25b | SECURITY.md (filament) | Same policy as core, references core advisory channel | F01 |
-| F23b | CONTRIBUTING.md (filament) | Same as core, adds Filament-specific: no compiled Tailwind, Livewire test requirements | F01 |
+| Status | ID | Title | Description | Depends On |
+|---|---|---|---|---|
+| [ ] | F23 | README (filament plugin) | Install, register in panel, Tailwind @source instruction, fluent options, notification setup, multi-tenancy note | — |
+| [ ] | F24 | CHANGELOG stub (filament) | v1.0.0 | — |
+| [ ] | F25b | SECURITY.md (filament) | Same policy as core, references core advisory channel | F01 |
+| [ ] | F23b | CONTRIBUTING.md (filament) | Same as core, adds Filament-specific: no compiled Tailwind, Livewire test requirements | F01 |
 
 ---
 
