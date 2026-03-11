@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Models;
 
+use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\MassPrunable;
@@ -13,16 +14,6 @@ class CommandRun extends Model
 {
     use MassPrunable;
 
-    public const STATUS_PENDING = 'pending';
-
-    public const STATUS_RUNNING = 'running';
-
-    public const STATUS_SUCCEEDED = 'succeeded';
-
-    public const STATUS_FAILED = 'failed';
-
-    public const STATUS_CANCELLED = 'cancelled';
-
     protected $guarded = [];
 
     protected function casts(): array
@@ -30,6 +21,7 @@ class CommandRun extends Model
         return [
             'attempts' => 'integer',
             'exit_code' => 'integer',
+            'status' => CommandRunStatus::class,
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
         ];
@@ -50,37 +42,37 @@ class CommandRun extends Model
 
     public function scopePending(Builder $query): Builder
     {
-        return $query->where('status', self::STATUS_PENDING);
+        return $query->where('status', CommandRunStatus::Pending);
     }
 
     public function scopeRunning(Builder $query): Builder
     {
-        return $query->where('status', self::STATUS_RUNNING);
+        return $query->where('status', CommandRunStatus::Running);
     }
 
     public function scopeSucceeded(Builder $query): Builder
     {
-        return $query->where('status', self::STATUS_SUCCEEDED);
+        return $query->where('status', CommandRunStatus::Succeeded);
     }
 
     public function scopeFailed(Builder $query): Builder
     {
-        return $query->where('status', self::STATUS_FAILED);
+        return $query->where('status', CommandRunStatus::Failed);
     }
 
     public function scopeTerminal(Builder $query): Builder
     {
         return $query->whereIn('status', [
-            self::STATUS_SUCCEEDED,
-            self::STATUS_FAILED,
-            self::STATUS_CANCELLED,
+            CommandRunStatus::Succeeded,
+            CommandRunStatus::Failed,
+            CommandRunStatus::Cancelled,
         ]);
     }
 
     public function markAsRunning(): self
     {
         $this->forceFill([
-            'status' => self::STATUS_RUNNING,
+            'status' => CommandRunStatus::Running,
             'started_at' => now(),
         ])->save();
 
@@ -90,7 +82,7 @@ class CommandRun extends Model
     public function markAsSucceeded(int $exitCode, string $output): self
     {
         $this->forceFill([
-            'status' => self::STATUS_SUCCEEDED,
+            'status' => CommandRunStatus::Succeeded,
             'exit_code' => $exitCode,
             'command_output' => $output,
             'finished_at' => now(),
@@ -102,7 +94,7 @@ class CommandRun extends Model
     public function markAsFailed(int $exitCode = -1, string $output = ''): self
     {
         $this->forceFill([
-            'status' => self::STATUS_FAILED,
+            'status' => CommandRunStatus::Failed,
             'exit_code' => $exitCode,
             'command_output' => $output,
             'finished_at' => now(),
@@ -119,12 +111,12 @@ class CommandRun extends Model
         return static::query()
             ->where(function (Builder $query) use ($keepDays): void {
                 $query
-                    ->where('status', '!=', self::STATUS_FAILED)
+                    ->where('status', '!=', CommandRunStatus::Failed)
                     ->where('created_at', '<=', now()->subDays($keepDays));
             })
             ->orWhere(function (Builder $query) use ($keepFailedDays): void {
                 $query
-                    ->where('status', self::STATUS_FAILED)
+                    ->where('status', CommandRunStatus::Failed)
                     ->where('created_at', '<=', now()->subDays($keepFailedDays));
             });
     }
