@@ -66,6 +66,8 @@ final readonly class ConfigValidator
     {
         $timeout = (int) $this->config->get('checkpoint.queue.timeout', 0);
         $retryAfter = (int) $this->config->get('checkpoint.queue.retry_after', 0);
+        $uniqueFor = (int) $this->config->get('checkpoint.queue.unique_for', 0);
+        $lockStore = $this->config->get('checkpoint.queue.lock_store');
 
         if ($timeout < 1) {
             throw new ConfigurationException('checkpoint.queue.timeout must be greater than zero.');
@@ -78,6 +80,28 @@ final readonly class ConfigValidator
         if ($retryAfter <= $timeout) {
             throw new ConfigurationException(
                 'checkpoint.queue.retry_after must be greater than checkpoint.queue.timeout to avoid duplicate job processing.',
+            );
+        }
+
+        if ($uniqueFor < 1) {
+            throw new ConfigurationException('checkpoint.queue.unique_for must be greater than zero.');
+        }
+
+        if ($uniqueFor < $retryAfter) {
+            throw new ConfigurationException(
+                'checkpoint.queue.unique_for must be greater than or equal to checkpoint.queue.retry_after.',
+            );
+        }
+
+        if ($lockStore === null || $lockStore === '') {
+            return;
+        }
+
+        $stores = $this->config->get('cache.stores', []);
+
+        if (! is_string($lockStore) || ! is_array($stores) || ! array_key_exists($lockStore, $stores)) {
+            throw new ConfigurationException(
+                sprintf('checkpoint.queue.lock_store [%s] is not configured in cache.stores.', (string) $lockStore),
             );
         }
     }

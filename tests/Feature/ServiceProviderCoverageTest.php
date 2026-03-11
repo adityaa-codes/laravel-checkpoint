@@ -27,7 +27,8 @@ it('registers command and drill policies on boot', function (): void {
 });
 
 it('registers the default scheduled checkpoint commands', function (): void {
-    $commands = collect(resolve(Schedule::class)->events())
+    $events = collect(resolve(Schedule::class)->events());
+    $commands = $events
         ->map(static fn ($event): ?string => $event->command)
         ->filter()
         ->implode("\n");
@@ -36,6 +37,24 @@ it('registers the default scheduled checkpoint commands', function (): void {
         ->toContain('db-ops:health-check')
         ->toContain('db-ops:recover-orphans')
         ->toContain('db-ops:prune');
+
+    $events->each(function ($event): void {
+        expect($event->withoutOverlapping)->toBeTrue()
+            ->and($event->expiresAt)->toBe(180)
+            ->and($event->onOneServer)->toBeTrue();
+    });
+});
+
+it('can disable schedule overlap and cluster guards', function (): void {
+    config()->set('checkpoint.schedule.without_overlapping', false);
+    config()->set('checkpoint.schedule.on_one_server', false);
+
+    app()->forgetInstance(Schedule::class);
+
+    collect(resolve(Schedule::class)->events())->each(function ($event): void {
+        expect($event->withoutOverlapping)->toBeFalse()
+            ->and($event->onOneServer)->toBeFalse();
+    });
 });
 
 it('skips config validation during production boot', function (): void {

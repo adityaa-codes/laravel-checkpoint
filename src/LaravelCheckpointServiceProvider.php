@@ -19,6 +19,7 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
+use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Gate;
 use Spatie\LaravelPackageTools\Package;
@@ -82,23 +83,40 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
     {
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
             if ((bool) config('checkpoint.schedule.logical_backup_enabled', true)) {
-                $schedule
+                $this->configureScheduledCommand($schedule
                     ->command('db-ops:enqueue-backup')
                     ->dailyAt((string) config('checkpoint.schedule.logical_backup_daily_at', '16:00'))
-                    ->timezone((string) config('checkpoint.schedule.logical_backup_timezone', 'UTC'));
+                    ->timezone((string) config('checkpoint.schedule.logical_backup_timezone', 'UTC')));
             }
 
             if ((bool) config('checkpoint.schedule.health_check_enabled', true)) {
-                $schedule->command('db-ops:health-check')->everyFiveMinutes();
+                $this->configureScheduledCommand(
+                    $schedule->command('db-ops:health-check')->everyFiveMinutes(),
+                );
             }
 
             if ((bool) config('checkpoint.schedule.recover_orphans_enabled', true)) {
-                $schedule->command('db-ops:recover-orphans')->everyTenMinutes();
+                $this->configureScheduledCommand(
+                    $schedule->command('db-ops:recover-orphans')->everyTenMinutes(),
+                );
             }
 
             if ((bool) config('checkpoint.schedule.prune_enabled', true)) {
-                $schedule->command('db-ops:prune')->weekly();
+                $this->configureScheduledCommand(
+                    $schedule->command('db-ops:prune')->weekly(),
+                );
             }
         });
+    }
+
+    private function configureScheduledCommand(ScheduledEvent $event): void
+    {
+        if ((bool) config('checkpoint.schedule.without_overlapping', true)) {
+            $event->withoutOverlapping((int) config('checkpoint.schedule.overlap_expires_at', 180));
+        }
+
+        if ((bool) config('checkpoint.schedule.on_one_server', true)) {
+            $event->onOneServer();
+        }
     }
 }

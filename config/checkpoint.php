@@ -20,6 +20,8 @@ return [
         'retry_after' => (int) $env('DB_OPS_QUEUE_RETRY_AFTER', 3660),
         'timeout' => (int) $env('DB_OPS_QUEUE_TIMEOUT', 3600),
         'orphan_threshold' => (int) $env('DB_OPS_QUEUE_ORPHAN_THRESHOLD', 10),
+        'unique_for' => (int) $env('DB_OPS_QUEUE_UNIQUE_FOR', 3660),
+        'lock_store' => $env('DB_OPS_QUEUE_LOCK_STORE'),
     ],
 
     'schedule' => [
@@ -29,6 +31,9 @@ return [
         'health_check_enabled' => (bool) $env('DB_OPS_HEALTH_CHECK_ENABLED', true),
         'recover_orphans_enabled' => (bool) $env('DB_OPS_RECOVER_ORPHANS_ENABLED', true),
         'prune_enabled' => (bool) $env('DB_OPS_PRUNE_ENABLED', true),
+        'without_overlapping' => (bool) $env('DB_OPS_SCHEDULE_WITHOUT_OVERLAPPING', true),
+        'overlap_expires_at' => (int) $env('DB_OPS_SCHEDULE_OVERLAP_EXPIRES_AT', 180),
+        'on_one_server' => (bool) $env('DB_OPS_SCHEDULE_ON_ONE_SERVER', true),
         'prune_keep_days' => (int) $env('DB_OPS_PRUNE_KEEP_DAYS', 90),
         'prune_keep_failed_days' => (int) $env('DB_OPS_PRUNE_KEEP_FAILED_DAYS', 365),
     ],

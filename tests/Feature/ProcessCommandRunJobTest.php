@@ -9,6 +9,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 
@@ -68,6 +69,23 @@ it('returns a per-run unique id for non-exclusive operations', function (): void
 
     expect(new ProcessCommandRunJob($run)->uniqueId())
         ->toBe('db-ops-run:'.$run->getKey());
+});
+
+it('uses the configured unique lock duration and cache store', function (): void {
+    config()->set('checkpoint.queue.unique_for', 7200);
+    config()->set('checkpoint.queue.lock_store', 'array');
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    $job = new ProcessCommandRunJob($run);
+
+    expect($job->uniqueFor())->toBe(7200)
+        ->and($job->uniqueVia())->toBeInstanceOf(CacheRepository::class)
+        ->and($job->uniqueVia()->getStore())->toBe(resolve(\Illuminate\Contracts\Cache\Factory::class)->store('array')->getStore());
 });
 
 it('forces destructive operations to a single attempt and logs a warning for higher config', function (): void {

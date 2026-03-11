@@ -58,6 +58,8 @@ class TestCase extends Orchestra
                 'retry_after' => 3660,
                 'timeout' => 3600,
                 'orphan_threshold' => 10,
+                'unique_for' => 3660,
+                'lock_store' => 'array',
             ],
             'drivers' => [
                 'shell' => [
@@ -71,10 +73,19 @@ class TestCase extends Orchestra
                 ],
             ],
             'schedule' => [
+                'without_overlapping' => true,
+                'overlap_expires_at' => 180,
+                'on_one_server' => true,
                 'prune_keep_days' => 90,
                 'prune_keep_failed_days' => 365,
             ],
             'custom_operations' => [],
+        ]);
+
+        $app['config']->set('cache.default', 'array');
+        $app['config']->set('cache.stores.array', [
+            'driver' => 'array',
+            'serialize' => false,
         ]);
     }
 

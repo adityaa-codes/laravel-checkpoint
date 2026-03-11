@@ -68,12 +68,36 @@ it('rejects a non-positive queue retry_after', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.queue.retry_after must be greater than zero.');
 });
 
+it('rejects a non-positive unique queue lock duration', function (): void {
+    config()->set('checkpoint.queue.unique_for', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.queue.unique_for must be greater than zero.');
+});
+
+it('rejects a unique queue lock duration shorter than retry_after', function (): void {
+    config()->set('checkpoint.queue.retry_after', 3660);
+    config()->set('checkpoint.queue.unique_for', 300);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.queue.unique_for must be greater than or equal to checkpoint.queue.retry_after.');
+});
+
+it('rejects an unknown queue lock store', function (): void {
+    config()->set('checkpoint.queue.lock_store', 'redis-locks');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.queue.lock_store [redis-locks] is not configured in cache.stores.');
+});
+
 it('accepts a valid fake driver configuration', function (): void {
     app()->instance(FakeDriver::class, new FakeDriver);
     config()->set('checkpoint.driver', 'fake');
     config()->set('checkpoint.drivers.fake.class', FakeDriver::class);
     config()->set('checkpoint.queue.timeout', 3600);
     config()->set('checkpoint.queue.retry_after', 3660);
+    config()->set('checkpoint.queue.unique_for', 3660);
+    config()->set('checkpoint.queue.lock_store', 'array');
 
     expect(fn () => resolve(ConfigValidator::class)->validate())->not->toThrow(ConfigurationException::class);
 });

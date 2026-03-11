@@ -216,13 +216,13 @@ Tasks:
 - `[x]` validate that `checkpoint.queue.retry_after` is greater than `checkpoint.queue.timeout`
 - `[x]` fail doctor/config validation when timeout and retry settings are unsafe
 - `[ ]` add explicit config docs for worker `--timeout` alignment
-- `[ ]` support `uniqueFor` on `ProcessCommandRunJob`
-- `[ ]` support `uniqueVia()` with configurable cache store
+- `[x]` support `uniqueFor` on `ProcessCommandRunJob`
+- `[x]` support `uniqueVia()` with configurable cache store
 - `[ ]` document Redis as the recommended production lock backend
-- `[ ]` add scheduler `withoutOverlapping()` for backup, prune, health, orphan recovery
-- `[ ]` add scheduler `onOneServer()` for clustered production deployments
+- `[x]` add scheduler `withoutOverlapping()` for backup, prune, health, orphan recovery
+- `[x]` add scheduler `onOneServer()` for clustered production deployments
 - `[x]` add tests for invalid timeout/retry config
-- `[ ]` add tests for scheduled overlap/cluster protection
+- `[x]` add tests for scheduled overlap/cluster protection
 
 Acceptance:
 

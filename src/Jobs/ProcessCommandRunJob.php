@@ -10,11 +10,13 @@ use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -45,6 +47,22 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
         }
 
         return sprintf('db-ops-run:%s', (string) $this->run->getKey());
+    }
+
+    public function uniqueFor(): int
+    {
+        return max(1, (int) config('checkpoint.queue.unique_for', 3660));
+    }
+
+    public function uniqueVia(): CacheRepository
+    {
+        $store = config('checkpoint.queue.lock_store');
+
+        if (! is_string($store) || $store === '') {
+            return Cache::store();
+        }
+
+        return Cache::store($store);
     }
 
     public function tries(): int
