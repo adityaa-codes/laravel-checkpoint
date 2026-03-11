@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 15 complete
+- `[x]` 16 complete
 - `[-]` 5 partial
-- `[ ]` 66 not started
+- `[ ]` 65 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -899,7 +899,7 @@ Audit summary:
 | Status | ID | Title | Description | Depends On |
 |---|---|---|---|---|
 | [x] | C12 | Exceptions | InvalidOperationException, InvalidArgumentException, ConfigurationException — all extend RuntimeException | — |
-| [ ] | C13 | CommandRunCatalog | All 7 built-in operations, extend(), isDestructive(), isExclusive(), custom_operations config merge, translatable hints | C12 |
+| [x] | C13 | CommandRunCatalog | All 7 built-in operations, extend(), isDestructive(), isExclusive(), custom_operations config merge, translatable hints | C12 |
 | [ ] | C14 | Event: BackupQueued | readonly class, carries CommandRun $run | — |
 | [ ] | C15 | Event: BackupStarted | readonly class, carries CommandRun $run | — |
 | [ ] | C16 | Event: BackupCompleted | readonly class, carries CommandRun $run, int $exitCode, string $output | — |
