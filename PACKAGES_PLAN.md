@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 45 complete
+- `[x]` 46 complete
 - `[-]` 5 partial
-- `[ ]` 36 not started
+- `[ ]` 35 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -954,7 +954,7 @@ Audit summary:
 
 | Status | ID | Title | Description | Depends On |
 |---|---|---|---|---|
-| [ ] | C32 | Test: CommandRunCatalogTest | validate, extend, isDestructive, isExclusive, custom_operations merge, exception cases | C13 |
+| [x] | C32 | Test: CommandRunCatalogTest | validate, extend, isDestructive, isExclusive, custom_operations merge, exception cases | C13 |
 | [x] | C33 | Test: EnqueueCommandRunActionTest | creates CommandRun, dispatches job afterCommit, fires BackupQueued, argument validation, DB transaction | C21 |
 | [x] | C34 | Test: ProcessCommandRunJobTest | driver called, status transitions, events fired, tries()=1 for destructive, failed() callback | C22, C43, C47 |
 | [x] | C35 | Test: EnqueueLogicalBackupCommandTest | schedule timing, artisan exit codes | C23 |
