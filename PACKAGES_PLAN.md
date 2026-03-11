@@ -849,8 +849,8 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 55 complete
-- `[-]` 3 partial
+- `[x]` 56 complete
+- `[-]` 2 partial
 - `[ ]` 28 not started
 
 Audit summary:
@@ -942,7 +942,7 @@ Audit summary:
 | [x] | C29 | config/checkpoint.php | All settings documented. Commands as env-var-driven strings (parsed to argv by driver). queue.timeout, orphan_threshold, prune settings, log_channel. | — |
 | [x] | C30 | Facade: Checkpoint | Points to EnqueueCommandRunAction::execute() | — |
 | [x] | C31 | InteractsWithCheckpoint testing trait | fakeDriver(), assertBackupQueued(op, arg?), assertBackupNotQueued(op), assertNoBackupsQueued(), assertBackupFailed(op) | — |
-| [ ] | C50 | Public API surface + @internal | Add @internal to ShellCommandDriver, FakeDriver, ProcessCommandRunJob, ConfigValidator. Document public API in README Extending section. | C28 |
+| [x] | C50 | Public API surface + @internal | Add @internal to ShellCommandDriver, FakeDriver, ProcessCommandRunJob, ConfigValidator. Document public API in README Extending section. | C28 |
 
 #### Phase 7 — Architecture Tests
 
