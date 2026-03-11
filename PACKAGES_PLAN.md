@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 50 complete
+- `[x]` 51 complete
 - `[-]` 5 partial
-- `[ ]` 31 not started
+- `[ ]` 30 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -937,7 +937,7 @@ Audit summary:
 | Status | ID | Title | Description | Depends On |
 |---|---|---|---|---|
 | [x] | C26 | BackupDrillRunPolicy | viewAny, view only. No create/edit/delete. | — |
-| [ ] | C27 | CommandRunPolicy | viewAny, view, create (canQueue). | — |
+| [x] | C27 | CommandRunPolicy | viewAny, view, create (canQueue). | — |
 | [-] | C28 | CheckpointServiceProvider | spatie/laravel-package-tools: config, migrations, translations, all commands, scheduling (backup+health+orphans+prune), policy registration, driver binding | C13, C22, C26, C27, C29 |
 | [-] | C29 | config/checkpoint.php | All settings documented. Commands as env-var-driven strings (parsed to argv by driver). queue.timeout, orphan_threshold, prune settings, log_channel. | — |
 | [-] | C30 | Facade: Checkpoint | Points to EnqueueCommandRunAction::execute() | — |
