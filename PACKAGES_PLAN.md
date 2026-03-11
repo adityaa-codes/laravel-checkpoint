@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 11 complete
+- `[x]` 12 complete
 - `[-]` 5 partial
-- `[ ]` 70 not started
+- `[ ]` 69 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -890,7 +890,7 @@ Audit summary:
 | [x] | C06 | Migration: backup_drill_runs | `db_ops_backup_drill_runs`: run_uuid, marker_uuid, marker_email, marker_count, marker_result, rto/rpo fields, overall_result, executed_by, executed_at | C01 |
 | [x] | C07 | Model: CommandRun | MassPrunable, config-driven table, polymorphic requestedBy(), scopes: pending/running/succeeded/failed/terminal, helpers: markAsRunning/Succeeded/Failed | C05 |
 | [x] | C08 | Model: BackupDrillRun | Config-driven table, isPassing():bool, scopeLatest() | C06 |
-| [ ] | C09 | Enum: CommandRunStatus | Cases: Pending/Running/Succeeded/Failed/Cancelled + isTerminal():bool | — |
+| [x] | C09 | Enum: CommandRunStatus | Cases: Pending/Running/Succeeded/Failed/Cancelled + isTerminal():bool | — |
 | [ ] | C10 | Factory: CommandRunFactory | States: pending, running, succeeded, failed, cancelled with realistic timestamps | C07 |
 | [ ] | C11 | Factory: BackupDrillRunFactory | States: passing, failing with realistic RTO/RPO values | C08 |
 
