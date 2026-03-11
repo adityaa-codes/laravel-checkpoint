@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Tests;
 
+use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpointServiceProvider;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Schema;
@@ -46,8 +47,13 @@ class TestCase extends Orchestra
             'table_prefix' => 'db_ops_',
             'log_channel' => 'stack',
             'driver' => 'shell',
+            'queue' => [
+                'name' => 'db-ops',
+                'max_attempts' => 1,
+            ],
             'drivers' => [
                 'shell' => [
+                    'class' => ShellCommandDriver::class,
                     'commands' => [],
                     'pgbackrest_stanza' => 'main',
                     'backup_dir' => '/tmp/checkpoint-tests',
