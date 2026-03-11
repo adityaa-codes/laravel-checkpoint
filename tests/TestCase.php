@@ -1,10 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace AdityaaCodes\LaravelCheckpoint\Tests;
 
-use Illuminate\Database\Eloquent\Factories\Factory;
-use Orchestra\Testbench\TestCase as Orchestra;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpointServiceProvider;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Facades\Schema;
+use Orchestra\Testbench\TestCase as Orchestra;
 
 class TestCase extends Orchestra
 {
@@ -13,25 +16,64 @@ class TestCase extends Orchestra
         parent::setUp();
 
         Factory::guessFactoryNamesUsing(
-            fn (string $modelName) => 'AdityaaCodes\\LaravelCheckpoint\\Database\\Factories\\'.class_basename($modelName).'Factory'
+            fn (string $modelName): string => 'AdityaaCodes\\LaravelCheckpoint\\Database\\Factories\\'.class_basename($modelName).'Factory'
         );
+
+        $this->runPackageMigrations();
     }
 
-    protected function getPackageProviders($app)
+    /**
+     * @return array<int, class-string>
+     */
+    protected function getPackageProviders($app): array
     {
         return [
             LaravelCheckpointServiceProvider::class,
         ];
     }
 
-    public function getEnvironmentSetUp($app)
+    public function getEnvironmentSetUp($app): void
     {
-        config()->set('database.default', 'testing');
+        $app['config']->set('database.default', 'testing');
+        $app['config']->set('database.connections.testing', [
+            'driver' => 'sqlite',
+            'database' => ':memory:',
+            'prefix' => '',
+            'foreign_key_constraints' => true,
+        ]);
 
-        /*
-         foreach (\Illuminate\Support\Facades\File::allFiles(__DIR__ . '/../database/migrations') as $migration) {
-            (include $migration->getRealPath())->up();
-         }
-         */
+        $app['config']->set('checkpoint', [
+            'table_prefix' => 'db_ops_',
+            'log_channel' => 'stack',
+            'driver' => 'shell',
+            'drivers' => [
+                'shell' => [
+                    'commands' => [],
+                    'pgbackrest_stanza' => 'main',
+                    'backup_dir' => '/tmp/checkpoint-tests',
+                    'backup_prefix' => 'backup',
+                    'pre_restore_snapshot' => true,
+                    'command_timeout_seconds' => 5,
+                ],
+            ],
+            'schedule' => [
+                'prune_keep_days' => 90,
+                'prune_keep_failed_days' => 365,
+            ],
+            'custom_operations' => [],
+        ]);
+    }
+
+    private function runPackageMigrations(): void
+    {
+        if (! Schema::hasTable('db_ops_command_runs')) {
+            $migration = require __DIR__.'/../database/migrations/create_checkpoint_command_runs_table.php.stub';
+            $migration->up();
+        }
+
+        if (! Schema::hasTable('db_ops_backup_drill_runs')) {
+            $migration = require __DIR__.'/../database/migrations/create_checkpoint_backup_drill_runs_table.php.stub';
+            $migration->up();
+        }
     }
 }
