@@ -7,6 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Tests;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpointServiceProvider;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Foundation\Auth\User;
 use Illuminate\Support\Facades\Schema;
 use Orchestra\Testbench\TestCase as Orchestra;
 
@@ -44,12 +45,16 @@ class TestCase extends Orchestra
         ]);
 
         $app['config']->set('checkpoint', [
+            'user_model' => User::class,
+            'user_name_column' => 'name',
             'table_prefix' => 'db_ops_',
             'log_channel' => 'stack',
             'driver' => 'shell',
             'queue' => [
                 'name' => 'db-ops',
                 'max_attempts' => 1,
+                'timeout' => 3600,
+                'orphan_threshold' => 10,
             ],
             'drivers' => [
                 'shell' => [
