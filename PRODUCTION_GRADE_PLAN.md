@@ -233,7 +233,7 @@ Goal:
 Replace free-form PostgreSQL production backup handling with structured pgBackRest behavior.
 
 Status:
-- `[-]` in progress
+- `[x]` complete
 
 Tasks:
 
@@ -257,9 +257,9 @@ Tasks:
   - `[x]` `pgbackrest_check`
   - `[x]` `pgbackrest_info`
 - `[x]` add typed placeholder-free command building
-- `[ ]` add structured parsing for `info` and `check` output where possible
-- `[ ]` add tests for command construction, backup type selection, and failure behavior
-- `[ ]` add doctor checks for pgBackRest binary presence and config completeness
+- `[x]` add structured parsing for `info` and `check` output where possible
+- `[x]` add tests for command construction, backup type selection, and failure behavior
+- `[x]` add doctor checks for pgBackRest binary presence and config completeness
 
 Acceptance:
 
