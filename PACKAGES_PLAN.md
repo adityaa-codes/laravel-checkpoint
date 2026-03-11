@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 48 complete
+- `[x]` 49 complete
 - `[-]` 5 partial
-- `[ ]` 33 not started
+- `[ ]` 32 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -961,7 +961,7 @@ Audit summary:
 | [x] | C36 | Test: ShellCommandDriverTest (unit) | argv array construction, placeholder substitution, no shell strings, pre-restore snapshot trigger | C41 |
 | [x] | C37 | Test: BackupDrillRunTest | scopes, isPassing(), factory states | C08 |
 | [x] | C38 | Test: CommandRunModelTest | scopes, markAs* helpers, MassPrunable, polymorphic relation | C07 |
-| [ ] | C44 | Test: Pre-restore snapshot | ShellCommandDriver aborts restore if snapshot fails; proceeds if snapshot passes | C44 |
+| [x] | C44 | Test: Pre-restore snapshot | ShellCommandDriver aborts restore if snapshot fails; proceeds if snapshot passes | C44 |
 | [x] | C45t | Test: HealthCheckCommandTest | marks timed-out runs as Failed, fires BackupFailed, logs ERROR | C45 |
 | [x] | C42t | Test: RecoverOrphansCommandTest | re-dispatches Pending runs beyond threshold, logs WARNING | C42 |
 | [x] | C46t | Test: PruneCommandTest | prunes runs older than keep_days; retains failed runs per keep_failed_days | C46 |
