@@ -55,7 +55,7 @@ it('returns an exclusive unique id for exclusive operations', function (): void 
         'attempts' => 0,
     ]);
 
-    expect((new ProcessCommandRunJob($run))->uniqueId())
+    expect(new ProcessCommandRunJob($run)->uniqueId())
         ->toBe('db-ops-exclusive:logical_backup');
 });
 
@@ -66,7 +66,7 @@ it('returns a per-run unique id for non-exclusive operations', function (): void
         'attempts' => 0,
     ]);
 
-    expect((new ProcessCommandRunJob($run))->uniqueId())
+    expect(new ProcessCommandRunJob($run)->uniqueId())
         ->toBe('db-ops-run:'.$run->getKey());
 });
 
@@ -87,7 +87,7 @@ it('forces destructive operations to a single attempt and logs a warning for hig
         'attempts' => 0,
     ]);
 
-    expect((new ProcessCommandRunJob($run))->tries())->toBe(1);
+    expect(new ProcessCommandRunJob($run)->tries())->toBe(1);
 });
 
 it('marks the run failed and emits the failure event in the failed callback', function (): void {
@@ -107,7 +107,7 @@ it('marks the run failed and emits the failure event in the failed callback', fu
         'attempts' => 0,
     ]);
 
-    (new ProcessCommandRunJob($run))->failed(new RuntimeException('boom'));
+    new ProcessCommandRunJob($run)->failed(new RuntimeException('boom'));
 
     $run->refresh();
 
@@ -115,10 +115,8 @@ it('marks the run failed and emits the failure event in the failed callback', fu
         ->and($run->exit_code)->toBe(-1)
         ->and($run->command_output)->toBe('boom');
 
-    Event::assertDispatched(BackupFailed::class, function (BackupFailed $event) use ($run): bool {
-        return $event->run->is($run)
-            && $event->exitCode === -1
-            && $event->output === 'boom'
-            && $event->exception instanceof RuntimeException;
-    });
+    Event::assertDispatched(BackupFailed::class, fn (BackupFailed $event): bool => $event->run->is($run)
+        && $event->exitCode === -1
+        && $event->output === 'boom'
+        && $event->exception instanceof RuntimeException);
 });

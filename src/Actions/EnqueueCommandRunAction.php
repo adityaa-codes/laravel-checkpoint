@@ -22,16 +22,14 @@ class EnqueueCommandRunAction
     {
         $normalizedArgument = $this->catalog->validate($operation, $argument);
 
-        $run = DB::transaction(function () use ($operation, $normalizedArgument, $requestedBy): CommandRun {
-            return CommandRun::query()->create([
-                'operation' => $operation,
-                'argument_text' => $normalizedArgument,
-                'status' => CommandRunStatus::Pending,
-                'attempts' => 0,
-                'requested_by_type' => $requestedBy?->getMorphClass(),
-                'requested_by_id' => $requestedBy?->getKey(),
-            ]);
-        });
+        $run = DB::transaction(fn (): CommandRun => CommandRun::query()->create([
+            'operation' => $operation,
+            'argument_text' => $normalizedArgument,
+            'status' => CommandRunStatus::Pending,
+            'attempts' => 0,
+            'requested_by_type' => $requestedBy?->getMorphClass(),
+            'requested_by_id' => $requestedBy?->getKey(),
+        ]));
 
         ProcessCommandRunJob::dispatch($run)
             ->onQueue(config('checkpoint.queue.name', 'db-ops'))

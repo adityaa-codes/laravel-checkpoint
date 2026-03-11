@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Event;
 it('records a backup drill run and fires the completion event', function (): void {
     Event::fake([BackupDrillCompleted::class]);
 
-    $this->artisan('db-ops:record-drill', [
+    checkpoint_artisan('db-ops:record-drill', [
         '--run-uuid' => '11111111-1111-4111-8111-111111111111',
         '--marker-uuid' => '22222222-2222-4222-8222-222222222222',
         '--marker-email' => 'drill@example.com',
@@ -42,7 +42,7 @@ it('records a backup drill run and fires the completion event', function (): voi
 it('fails validation when required drill fields are missing', function (): void {
     Event::fake([BackupDrillCompleted::class]);
 
-    $this->artisan('db-ops:record-drill', [
+    checkpoint_artisan('db-ops:record-drill', [
         '--overall-result' => 'pass',
     ])
         ->expectsOutputToContain('The run uuid field is required.')

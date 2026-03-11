@@ -69,6 +69,10 @@ class FakeDriver implements BackupDriver
         event(new BackupStarted($run));
 
         if ($outcome['type'] === 'throw') {
+            if (! isset($outcome['throwable'])) {
+                throw new \LogicException('Throw outcomes must provide a throwable instance.');
+            }
+
             $throwable = $outcome['throwable'];
             $run->markAsFailed(output: $throwable->getMessage());
             event(new BackupFailed($run, -1, $throwable->getMessage(), $throwable));

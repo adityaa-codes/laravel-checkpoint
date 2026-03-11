@@ -22,15 +22,15 @@ it('creates a pending command run and dispatches processing after commit', funct
         ->and($run->argument_text)->toBe('nightly.sql')
         ->and($run->attempts)->toBe(0);
 
-    expect(CommandRun::query()->find($run->getKey()))
-        ->not->toBeNull()
-        ->argument_text->toBe('nightly.sql');
+    /** @var CommandRun|null $storedRun */
+    $storedRun = CommandRun::query()->find($run->getKey());
 
-    Bus::assertDispatched(ProcessCommandRunJob::class, function (ProcessCommandRunJob $job) use ($run): bool {
-        return $job->run->is($run)
-            && $job->queue === 'db-ops'
-            && $job->afterCommit === true;
-    });
+    expect($storedRun)->not->toBeNull();
+    expect($storedRun?->argument_text)->toBe('nightly.sql');
+
+    Bus::assertDispatched(ProcessCommandRunJob::class, fn (ProcessCommandRunJob $job): bool => $job->run->is($run)
+        && $job->queue === 'db-ops'
+        && $job->afterCommit === true);
 
     Event::assertDispatched(BackupQueued::class, fn (BackupQueued $event): bool => $event->run->is($run));
 });

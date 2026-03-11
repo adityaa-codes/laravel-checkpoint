@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint;
 
-use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
+use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueLogicalBackupCommand;
@@ -13,6 +13,7 @@ use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecordDrillRunCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecoverOrphansCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\StatusCommand;
+use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
@@ -27,11 +28,9 @@ class LaravelCheckpointServiceProvider extends PackageServiceProvider
 {
     public function packageRegistered(): void
     {
-        $this->app->singleton(LaravelCheckpoint::class, function ($app): LaravelCheckpoint {
-            return new LaravelCheckpoint(
-                $app->make(\AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction::class),
-            );
-        });
+        $this->app->singleton(LaravelCheckpoint::class, fn ($app): LaravelCheckpoint => new LaravelCheckpoint(
+            $app->make(EnqueueCommandRunAction::class),
+        ));
 
         $this->app->bind(BackupDriver::class, function ($app): BackupDriver {
             $driver = (string) $app['config']->get('checkpoint.driver', 'shell');

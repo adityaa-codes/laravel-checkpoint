@@ -21,10 +21,10 @@ it('validates built-in operations and their exclusivity rules', function (): voi
 it('throws for unsupported operations and missing required arguments', function (): void {
     $catalog = new CommandRunCatalog;
 
-    expect(fn () => $catalog->operation('not-real'))
+    expect(fn (): array => $catalog->operation('not-real'))
         ->toThrow(InvalidOperationException::class, 'Unsupported operation: not-real');
 
-    expect(fn () => $catalog->validate('logical_restore_file', null))
+    expect(fn (): ?string => $catalog->validate('logical_restore_file', null))
         ->toThrow(InvalidArgumentException::class, 'Operation logical_restore_file requires an argument.');
 });
 
@@ -43,7 +43,7 @@ it('supports runtime extension with custom validators', function (): void {
         ->and($catalog->isExclusive('custom_snapshot'))->toBeTrue()
         ->and($catalog->isDestructive('custom_snapshot'))->toBeFalse();
 
-    expect(fn () => $catalog->validate('custom_snapshot', 'weekly'))
+    expect(fn (): ?string => $catalog->validate('custom_snapshot', 'weekly'))
         ->toThrow(InvalidArgumentException::class, 'Invalid argument for custom_snapshot. Expected: snapshot label');
 });
 
@@ -65,6 +65,6 @@ it('merges configured custom operations at construction time', function (): void
         ->and($catalog->validate('tenant_backup', '42'))->toBe('42')
         ->and($catalog->isExclusive('tenant_backup'))->toBeTrue();
 
-    expect(fn () => $catalog->validate('tenant_backup', 'abc'))
+    expect(fn (): ?string => $catalog->validate('tenant_backup', 'abc'))
         ->toThrow(InvalidArgumentException::class, 'Invalid argument for tenant_backup. Expected: tenant id');
 });

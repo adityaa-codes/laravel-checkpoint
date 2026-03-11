@@ -8,12 +8,13 @@ use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
+use Mockery\MockInterface;
 
 it('queues a logical backup from the artisan command', function (): void {
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    $this->artisan('db-ops:enqueue-backup')
+    checkpoint_artisan('db-ops:enqueue-backup')
         ->expectsOutput('Queued Logical Backup run #1.')
         ->assertSuccessful();
 
@@ -27,6 +28,7 @@ it('queues a logical backup from the artisan command', function (): void {
 });
 
 it('prints an error and exits with failure when enqueueing fails', function (): void {
+    /** @var MockInterface&EnqueueCommandRunAction $action */
     $action = Mockery::mock(EnqueueCommandRunAction::class);
     $action->shouldReceive('execute')
         ->once()
@@ -35,7 +37,7 @@ it('prints an error and exits with failure when enqueueing fails', function (): 
 
     app()->instance(EnqueueCommandRunAction::class, $action);
 
-    $this->artisan('db-ops:enqueue-backup')
+    checkpoint_artisan('db-ops:enqueue-backup')
         ->expectsOutputToContain('Queue broker unavailable.')
         ->assertFailed();
 

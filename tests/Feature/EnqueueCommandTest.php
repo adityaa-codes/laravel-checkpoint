@@ -12,7 +12,7 @@ it('queues the provided operation from the generic command', function (): void {
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    $this->artisan('db-ops:enqueue pgbackrest_info')
+    checkpoint_artisan('db-ops:enqueue pgbackrest_info')
         ->expectsOutput('Queued pgBackRest Info run #1.')
         ->assertSuccessful();
 
@@ -29,7 +29,7 @@ it('prompts for the operation and argument when needed', function (): void {
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    $this->artisan('db-ops:enqueue')
+    checkpoint_artisan('db-ops:enqueue')
         ->expectsChoice(
             'Which operation would you like to queue?',
             'logical_restore_file',

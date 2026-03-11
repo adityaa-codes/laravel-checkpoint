@@ -8,6 +8,7 @@ use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpointServiceProvider;
 use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\User;
 use Illuminate\Support\Facades\Schema;
 use Orchestra\Testbench\TestCase as Orchestra;
@@ -20,9 +21,7 @@ class TestCase extends Orchestra
     {
         parent::setUp();
 
-        Factory::guessFactoryNamesUsing(
-            fn (string $modelName): string => 'AdityaaCodes\\LaravelCheckpoint\\Database\\Factories\\'.class_basename($modelName).'Factory'
-        );
+        Factory::guessFactoryNamesUsing($this->guessFactoryName(...));
 
         $this->runPackageMigrations();
     }
@@ -89,5 +88,17 @@ class TestCase extends Orchestra
             $migration = require __DIR__.'/../database/migrations/create_checkpoint_backup_drill_runs_table.php.stub';
             $migration->up();
         }
+    }
+
+    /**
+     * @param  class-string<Model>  $modelName
+     * @return class-string<Factory<Model>>
+     */
+    private function guessFactoryName(string $modelName): string
+    {
+        /** @var class-string<Factory<Model>> $factoryClass */
+        $factoryClass = 'AdityaaCodes\\LaravelCheckpoint\\Database\\Factories\\'.class_basename($modelName).'Factory';
+
+        return $factoryClass;
     }
 }

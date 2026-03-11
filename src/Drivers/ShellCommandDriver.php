@@ -12,6 +12,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Log;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Process\Process;
 use Throwable;
 
@@ -127,12 +128,10 @@ class ShellCommandDriver implements BackupDriver
             );
         }
 
-        $process = new Process(
+        return new Process(
             $this->substitutePlaceholders($argv, $run),
             timeout: (float) config('checkpoint.drivers.shell.command_timeout_seconds', 7200),
         );
-
-        return $process;
     }
 
     /**
@@ -194,7 +193,7 @@ class ShellCommandDriver implements BackupDriver
         return trim($process->getOutput()."\n".$process->getErrorOutput());
     }
 
-    private function logger(): \Psr\Log\LoggerInterface
+    private function logger(): LoggerInterface
     {
         return Log::channel(config('checkpoint.log_channel', 'stack'));
     }

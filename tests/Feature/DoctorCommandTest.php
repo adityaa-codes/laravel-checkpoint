@@ -6,7 +6,7 @@ use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 
 it('renders the doctor health table', function (): void {
-    $this->artisan('db-ops:doctor')
+    checkpoint_artisan('db-ops:doctor')
         ->expectsOutputToContain('Config: driver')
         ->expectsOutputToContain('Config: queue.name')
         ->expectsOutputToContain('DB: command_runs table')

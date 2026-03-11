@@ -35,7 +35,7 @@ it('marks timed-out running runs as failed and leaves recent runs untouched', fu
         'started_at' => Carbon::now()->subMinutes(2),
     ]);
 
-    $this->artisan('db-ops:health-check')
+    checkpoint_artisan('db-ops:health-check')
         ->expectsOutput('Marked run #1 as failed (timed out after 300 seconds).')
         ->assertSuccessful();
 
@@ -47,9 +47,7 @@ it('marks timed-out running runs as failed and leaves recent runs untouched', fu
         ->and($timedOutRun->exit_code)->toBe(-1)
         ->and($healthyRun->status)->toBe(CommandRunStatus::Running);
 
-    Event::assertDispatched(BackupFailed::class, function (BackupFailed $event) use ($timedOutRun): bool {
-        return $event->run->is($timedOutRun)
-            && $event->output === 'Timed out by health check'
-            && $event->exitCode === -1;
-    });
+    Event::assertDispatched(BackupFailed::class, fn (BackupFailed $event): bool => $event->run->is($timedOutRun)
+        && $event->output === 'Timed out by health check'
+        && $event->exitCode === -1);
 });

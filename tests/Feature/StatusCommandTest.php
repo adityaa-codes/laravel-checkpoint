@@ -27,7 +27,7 @@ it('shows recent command runs in descending order with the requested limit', fun
         'exit_code' => 1,
     ]);
 
-    $this->artisan('db-ops:status --limit=2')
+    checkpoint_artisan('db-ops:status --limit=2')
         ->expectsTable(
             ['ID', 'Operation', 'Status', 'Exit', 'Started', 'Finished'],
             [

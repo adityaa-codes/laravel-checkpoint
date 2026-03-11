@@ -37,7 +37,7 @@ it('re-dispatches stale pending runs and leaves recent pending runs untouched', 
         'updated_at' => Carbon::now()->subMinutes(5),
     ]);
 
-    $this->artisan('db-ops:recover-orphans')
+    checkpoint_artisan('db-ops:recover-orphans')
         ->expectsOutput('Re-dispatched orphaned run #1.')
         ->assertSuccessful();
 

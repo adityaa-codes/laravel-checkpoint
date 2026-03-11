@@ -34,7 +34,7 @@ it('prunes old runs while retaining recent failed runs per retention policy', fu
         'updated_at' => Carbon::now()->subDays(5),
     ]);
 
-    $this->artisan('db-ops:prune')
+    checkpoint_artisan('db-ops:prune')
         ->expectsOutput('Pruned 1 command run records.')
         ->assertSuccessful();
 

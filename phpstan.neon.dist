@@ -8,4 +8,11 @@ parameters:
         - config
         - database
         - tests
+    ignoreErrors:
+        -
+            message: '#Call to an undefined method Pest\\PendingCalls\\TestCall::expect\(\)\.#'
+            path: tests/ArchTest.php
+        -
+            message: '#Call to an undefined method Mockery\\ExpectationInterface\|Mockery\\HigherOrderMessage::once\(\)\.#'
+            path: tests/Feature/EnqueueLogicalBackupCommandTest.php
     tmpDir: build/phpstan

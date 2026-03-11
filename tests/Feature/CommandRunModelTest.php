@@ -84,8 +84,8 @@ it('selects prunable records using the configured retention windows', function (
     sort($prunableIds);
     sort($expectedPrunableIds);
 
-    expect($prunableIds)->toBe($expectedPrunableIds)
-        ->not->toContain($retainedFailed->id);
+    expect($prunableIds)->toBe($expectedPrunableIds);
+    expect($prunableIds)->not->toContain($retainedFailed->id);
 });
 
 it('exposes a polymorphic requester relation', function (): void {
