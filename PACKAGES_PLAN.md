@@ -849,8 +849,8 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 58 complete
-- `[-]` 1 partial
+- `[x]` 59 complete
+- `[-]` 0 partial
 - `[ ]` 27 not started
 
 Audit summary:
@@ -972,7 +972,7 @@ Audit summary:
 | Status | ID | Title | Description | Depends On |
 |---|---|---|---|---|
 | [x] | C39 | README (core) | Install, publish config+migrations, env vars reference, usage, driver customization (MySQL example), extending catalog, public API section, testing section | — |
-| [-] | C40 | CHANGELOG stub (core) | v1.0.0 with all initial features | — |
+| [x] | C40 | CHANGELOG stub (core) | v1.0.0 with all initial features | — |
 | [ ] | C55 | SECURITY.md (core) | Supported versions, private advisory link, 48h SLA | C01 |
 | [ ] | C56 | CONTRIBUTING.md (core) | PR process, commit format, test requirements, how to add operations | C01 |
 | [ ] | C57 | UPGRADING.md (core) | v1.0.0 baseline, migration from Modules/Operations | C01 |
