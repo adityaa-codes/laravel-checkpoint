@@ -849,8 +849,8 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 52 complete
-- `[-]` 5 partial
+- `[x]` 54 complete
+- `[-]` 3 partial
 - `[ ]` 29 not started
 
 Audit summary:
@@ -938,8 +938,8 @@ Audit summary:
 |---|---|---|---|---|
 | [x] | C26 | BackupDrillRunPolicy | viewAny, view only. No create/edit/delete. | — |
 | [x] | C27 | CommandRunPolicy | viewAny, view, create (canQueue). | — |
-| [-] | C28 | CheckpointServiceProvider | spatie/laravel-package-tools: config, migrations, translations, all commands, scheduling (backup+health+orphans+prune), policy registration, driver binding | C13, C22, C26, C27, C29 |
-| [-] | C29 | config/checkpoint.php | All settings documented. Commands as env-var-driven strings (parsed to argv by driver). queue.timeout, orphan_threshold, prune settings, log_channel. | — |
+| [x] | C28 | CheckpointServiceProvider | spatie/laravel-package-tools: config, migrations, translations, all commands, scheduling (backup+health+orphans+prune), policy registration, driver binding | C13, C22, C26, C27, C29 |
+| [x] | C29 | config/checkpoint.php | All settings documented. Commands as env-var-driven strings (parsed to argv by driver). queue.timeout, orphan_threshold, prune settings, log_channel. | — |
 | [-] | C30 | Facade: Checkpoint | Points to EnqueueCommandRunAction::execute() | — |
 | [x] | C31 | InteractsWithCheckpoint testing trait | fakeDriver(), assertBackupQueued(op, arg?), assertBackupNotQueued(op), assertNoBackupsQueued(), assertBackupFailed(op) | — |
 | [ ] | C50 | Public API surface + @internal | Add @internal to ShellCommandDriver, FakeDriver, ProcessCommandRunJob, ConfigValidator. Document public API in README Extending section. | C28 |
