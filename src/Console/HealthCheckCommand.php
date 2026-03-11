@@ -7,7 +7,9 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Log\LogManager;
 
 final class HealthCheckCommand extends Command
 {
@@ -15,9 +17,17 @@ final class HealthCheckCommand extends Command
 
     protected $description = 'Mark timed-out running command runs as failed.';
 
+    public function __construct(
+        private readonly Repository $config,
+        private readonly Dispatcher $events,
+        private readonly LogManager $logs,
+    ) {
+        parent::__construct();
+    }
+
     public function handle(): int
     {
-        $timeoutSeconds = max(1, (int) config('checkpoint.queue.timeout', 3600));
+        $timeoutSeconds = max(1, (int) $this->config->get('checkpoint.queue.timeout', 3600));
         $threshold = now()->subSeconds($timeoutSeconds);
 
         CommandRun::query()
@@ -28,9 +38,9 @@ final class HealthCheckCommand extends Command
 
                 $run->markAsFailed(output: $output);
 
-                event(new BackupFailed($run, -1, $output));
+                $this->events->dispatch(new BackupFailed($run, -1, $output));
 
-                Log::channel(config('checkpoint.log_channel', 'stack'))
+                $this->logs->channel((string) $this->config->get('checkpoint.log_channel', 'stack'))
                     ->error('Health check marked command run as failed', [
                         'run_id' => $run->getKey(),
                         'operation' => $run->operation,

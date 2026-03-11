@@ -7,7 +7,9 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Contracts\Bus\Dispatcher;
+use Illuminate\Contracts\Config\Repository;
+use Illuminate\Log\LogManager;
 
 final class RecoverOrphansCommand extends Command
 {
@@ -15,19 +17,29 @@ final class RecoverOrphansCommand extends Command
 
     protected $description = 'Re-dispatch stale pending checkpoint command runs.';
 
+    public function __construct(
+        private readonly Repository $config,
+        private readonly Dispatcher $dispatcher,
+        private readonly LogManager $logs,
+    ) {
+        parent::__construct();
+    }
+
     public function handle(): int
     {
-        $thresholdMinutes = max(1, (int) config('checkpoint.queue.orphan_threshold', 10));
+        $thresholdMinutes = max(1, (int) $this->config->get('checkpoint.queue.orphan_threshold', 10));
         $threshold = now()->subMinutes($thresholdMinutes);
 
         CommandRun::query()
             ->pending()
             ->where('created_at', '<', $threshold)
             ->each(function (CommandRun $run): void {
-                dispatch(new ProcessCommandRunJob($run))
-                    ->onQueue(config('checkpoint.queue.name', 'db-ops'));
+                $job = new ProcessCommandRunJob($run)
+                    ->onQueue((string) $this->config->get('checkpoint.queue.name', 'db-ops'));
 
-                Log::channel(config('checkpoint.log_channel', 'stack'))
+                $this->dispatcher->dispatch($job);
+
+                $this->logs->channel((string) $this->config->get('checkpoint.log_channel', 'stack'))
                     ->warning('Recover orphans re-dispatched command run', [
                         'run_id' => $run->getKey(),
                         'operation' => $run->operation,

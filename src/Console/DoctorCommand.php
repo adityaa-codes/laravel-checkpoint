@@ -8,9 +8,9 @@ use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Console\Command;
+use Illuminate\Contracts\Config\Repository;
+use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\QueryException;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Symfony\Component\Process\ExecutableFinder;
 
 final class DoctorCommand extends Command
@@ -19,12 +19,20 @@ final class DoctorCommand extends Command
 
     protected $description = 'Show checkpoint package health checks.';
 
-    public function handle(ConfigValidator $validator): int
+    public function __construct(
+        private readonly ConfigValidator $validator,
+        private readonly Repository $config,
+        private readonly DatabaseManager $database,
+    ) {
+        parent::__construct();
+    }
+
+    public function handle(): int
     {
         $rows = [];
 
         try {
-            $validator->validate();
+            $this->validator->validate();
         } catch (\Throwable $exception) {
             $rows[] = ['Config validation', $this->statusWord('fail'), $exception->getMessage()];
             $this->table(['Check', 'Status', 'Notes'], $rows);
@@ -32,15 +40,15 @@ final class DoctorCommand extends Command
             return self::FAILURE;
         }
 
-        $rows[] = ['Config: driver', $this->statusWord('pass'), (string) config('checkpoint.driver')];
-        $rows[] = ['Config: queue.name', $this->statusWord('pass'), (string) config('checkpoint.queue.name', 'db-ops')];
-        $rows[] = ['Config: log_channel', $this->statusWord('pass'), (string) config('checkpoint.log_channel', 'stack')];
+        $rows[] = ['Config: driver', $this->statusWord('pass'), (string) $this->config->get('checkpoint.driver')];
+        $rows[] = ['Config: queue.name', $this->statusWord('pass'), (string) $this->config->get('checkpoint.queue.name', 'db-ops')];
+        $rows[] = ['Config: log_channel', $this->statusWord('pass'), (string) $this->config->get('checkpoint.log_channel', 'stack')];
         $rows[] = $this->binaryRow('pg_dump');
         $rows[] = $this->binaryRow('pgbackrest');
         $rows[] = $this->binaryRow('gzip');
         $rows[] = $this->tableRow('command_runs', (new CommandRun)->getTable());
         $rows[] = $this->tableRow('backup_drill_runs', (new BackupDrillRun)->getTable());
-        $rows[] = ['Queue: '.config('checkpoint.queue.name', 'db-ops'), $this->statusWord('warn'), 'Cannot verify queue without running worker'];
+        $rows[] = ['Queue: '.$this->config->get('checkpoint.queue.name', 'db-ops'), $this->statusWord('warn'), 'Cannot verify queue without running worker'];
         $rows[] = ['Orphaned runs', $this->statusWord('pass'), sprintf('%d pending runs beyond threshold', $this->orphanedRunsCount())];
 
         $this->table(['Check', 'Status', 'Notes'], $rows);
@@ -67,12 +75,14 @@ final class DoctorCommand extends Command
      */
     private function tableRow(string $label, string $table): array
     {
-        if (! Schema::hasTable($table)) {
+        $connection = $this->database->connection();
+
+        if (! $connection->getSchemaBuilder()->hasTable($table)) {
             return ['DB: '.$label.' table', $this->statusWord('fail'), 'Table not found'];
         }
 
         try {
-            $count = DB::table($table)->count();
+            $count = $connection->table($table)->count();
         } catch (QueryException) {
             $count = 0;
         }
@@ -82,7 +92,7 @@ final class DoctorCommand extends Command
 
     private function orphanedRunsCount(): int
     {
-        $thresholdMinutes = max(1, (int) config('checkpoint.queue.orphan_threshold', 10));
+        $thresholdMinutes = max(1, (int) $this->config->get('checkpoint.queue.orphan_threshold', 10));
 
         return CommandRun::query()
             ->pending()

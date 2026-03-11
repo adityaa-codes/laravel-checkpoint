@@ -7,8 +7,9 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillCompleted;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Date;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Contracts\Validation\Factory;
+use Illuminate\Support\DateFactory;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -32,13 +33,21 @@ final class RecordDrillRunCommand extends Command
 
     protected $description = 'Record a backup drill result.';
 
+    public function __construct(
+        private readonly Factory $validator,
+        private readonly DateFactory $date,
+        private readonly Dispatcher $events,
+    ) {
+        parent::__construct();
+    }
+
     public function handle(): int
     {
         try {
             $attributes = $this->validatedAttributes();
             $run = BackupDrillRun::query()->create($attributes);
 
-            event(new BackupDrillCompleted($run));
+            $this->events->dispatch(new BackupDrillCompleted($run));
 
             $this->info($this->recordedMessage($run));
 
@@ -78,7 +87,7 @@ final class RecordDrillRunCommand extends Command
             'executed_at' => $this->option('executed-at'),
         ];
 
-        $validated = Validator::make($input, [
+        $validated = $this->validator->make($input, [
             'run_uuid' => ['required', 'uuid'],
             'marker_uuid' => ['nullable', 'uuid'],
             'marker_email' => ['nullable', 'email'],
@@ -95,7 +104,7 @@ final class RecordDrillRunCommand extends Command
             'executed_at' => ['required', 'date'],
         ])->validate();
 
-        $validated['executed_at'] = Date::parse((string) $validated['executed_at']);
+        $validated['executed_at'] = $this->date->parse((string) $validated['executed_at']);
 
         return $validated;
     }
