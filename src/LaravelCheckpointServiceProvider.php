@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace AdityaaCodes\LaravelCheckpoint;
 
+use AdityaaCodes\LaravelCheckpoint\Console\EnqueueLogicalBackupCommand;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
-use AdityaaCodes\LaravelCheckpoint\Commands\LaravelCheckpointCommand;
 
 class LaravelCheckpointServiceProvider extends PackageServiceProvider
 {
@@ -21,6 +23,6 @@ class LaravelCheckpointServiceProvider extends PackageServiceProvider
             ->hasViews()
             ->hasMigration('create_checkpoint_command_runs_table')
             ->hasMigration('create_checkpoint_backup_drill_runs_table')
-            ->hasCommand(LaravelCheckpointCommand::class);
+            ->hasCommand(EnqueueLogicalBackupCommand::class);
     }
 }
