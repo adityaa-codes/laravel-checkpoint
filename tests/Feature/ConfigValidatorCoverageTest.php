@@ -57,6 +57,24 @@ it('rejects non-array pgbackrest extra args', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.extra_args.info must be an array.');
 });
 
+it('rejects pgdump parallel jobs for non-directory formats', function (): void {
+    config()->set('checkpoint.drivers.pgdump.format', 'custom');
+    config()->set('checkpoint.drivers.pgdump.jobs', 4);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(
+            ConfigurationException::class,
+            'checkpoint.drivers.pgdump.jobs may only exceed one when format is directory.',
+        );
+});
+
+it('rejects pgdump compression levels outside the supported range', function (): void {
+    config()->set('checkpoint.drivers.pgdump.compress_level', 10);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgdump.compress_level must be between 0 and 9.');
+});
+
 it('rejects a queue timeout that is not lower than retry_after', function (): void {
     config()->set('checkpoint.queue.timeout', 3600);
     config()->set('checkpoint.queue.retry_after', 3600);

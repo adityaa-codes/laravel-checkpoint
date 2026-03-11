@@ -19,6 +19,7 @@ final readonly class ConfigValidator
     {
         $this->validateDriver();
         $this->validatePgBackRestConfig();
+        $this->validatePgDumpConfig();
         $this->validateQueueSettings();
         $this->validateLogChannel();
         $this->validateUserModel();
@@ -107,6 +108,79 @@ final readonly class ConfigValidator
             if (! array_key_exists($key, $extraArgs) || ! is_array($extraArgs[$key])) {
                 throw new ConfigurationException(
                     sprintf('checkpoint.drivers.pgbackrest.extra_args.%s must be an array.', $key),
+                );
+            }
+        }
+    }
+
+    private function validatePgDumpConfig(): void
+    {
+        $config = $this->config->get('checkpoint.drivers.pgdump', []);
+
+        if (! is_array($config)) {
+            throw new ConfigurationException('checkpoint.drivers.pgdump must be an array.');
+        }
+
+        $dumpBinary = $config['dump_binary'] ?? null;
+        $restoreBinary = $config['restore_binary'] ?? null;
+        $format = $config['format'] ?? null;
+        $jobs = $config['jobs'] ?? null;
+        $compressLevel = $config['compress_level'] ?? null;
+        $outputDir = $config['output_dir'] ?? null;
+        $outputPrefix = $config['output_prefix'] ?? null;
+        $fileExtension = $config['file_extension'] ?? null;
+        $timeout = $config['command_timeout_seconds'] ?? null;
+
+        if (! is_string($dumpBinary) || trim($dumpBinary) === '') {
+            throw new ConfigurationException('checkpoint.drivers.pgdump.dump_binary must be a non-empty string.');
+        }
+
+        if (! is_string($restoreBinary) || trim($restoreBinary) === '') {
+            throw new ConfigurationException('checkpoint.drivers.pgdump.restore_binary must be a non-empty string.');
+        }
+
+        if (! is_string($format) || ! in_array($format, ['directory', 'custom'], true)) {
+            throw new ConfigurationException('checkpoint.drivers.pgdump.format must be directory or custom.');
+        }
+
+        if (! is_int($jobs) || $jobs < 1) {
+            throw new ConfigurationException('checkpoint.drivers.pgdump.jobs must be greater than zero.');
+        }
+
+        if ($format !== 'directory' && $jobs !== 1) {
+            throw new ConfigurationException('checkpoint.drivers.pgdump.jobs may only exceed one when format is directory.');
+        }
+
+        if (! is_int($compressLevel) || $compressLevel < 0 || $compressLevel > 9) {
+            throw new ConfigurationException('checkpoint.drivers.pgdump.compress_level must be between 0 and 9.');
+        }
+
+        if (! is_string($outputDir) || trim($outputDir) === '') {
+            throw new ConfigurationException('checkpoint.drivers.pgdump.output_dir must be a non-empty string.');
+        }
+
+        if (! is_string($outputPrefix) || trim($outputPrefix) === '') {
+            throw new ConfigurationException('checkpoint.drivers.pgdump.output_prefix must be a non-empty string.');
+        }
+
+        if (! is_string($fileExtension) || trim($fileExtension) === '') {
+            throw new ConfigurationException('checkpoint.drivers.pgdump.file_extension must be a non-empty string.');
+        }
+
+        if (! is_int($timeout) || $timeout < 1) {
+            throw new ConfigurationException('checkpoint.drivers.pgdump.command_timeout_seconds must be greater than zero.');
+        }
+
+        $extraArgs = $config['extra_args'] ?? [];
+
+        if (! is_array($extraArgs)) {
+            throw new ConfigurationException('checkpoint.drivers.pgdump.extra_args must be an array.');
+        }
+
+        foreach (['backup', 'restore'] as $key) {
+            if (! array_key_exists($key, $extraArgs) || ! is_array($extraArgs[$key])) {
+                throw new ConfigurationException(
+                    sprintf('checkpoint.drivers.pgdump.extra_args.%s must be an array.', $key),
                 );
             }
         }

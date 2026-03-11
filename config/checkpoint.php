@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use Illuminate\Foundation\Auth\User;
 
@@ -76,6 +77,24 @@ return [
                 'verify' => [],
                 'check' => [],
                 'info' => [],
+            ],
+        ],
+        'pgdump' => [
+            'class' => PgDumpDriver::class,
+            'dump_binary' => $env('DB_OPS_PGDUMP_BINARY', 'pg_dump'),
+            'restore_binary' => $env('DB_OPS_PGRESTORE_BINARY', 'pg_restore'),
+            'format' => $env('DB_OPS_PGDUMP_FORMAT', 'directory'),
+            'jobs' => (int) $env('DB_OPS_PGDUMP_JOBS', 4),
+            'compress_level' => (int) $env('DB_OPS_PGDUMP_COMPRESS_LEVEL', 6),
+            'output_dir' => $env('DB_OPS_PGDUMP_OUTPUT_DIR', storage_path('app/checkpoint/logical-exports')),
+            'output_prefix' => $env('DB_OPS_PGDUMP_OUTPUT_PREFIX', 'logical-export'),
+            'file_extension' => $env('DB_OPS_PGDUMP_FILE_EXTENSION', 'dump'),
+            'clean' => (bool) $env('DB_OPS_PGDUMP_RESTORE_CLEAN', true),
+            'create' => (bool) $env('DB_OPS_PGDUMP_RESTORE_CREATE', false),
+            'command_timeout_seconds' => (int) $env('DB_OPS_PGDUMP_TIMEOUT', 7200),
+            'extra_args' => [
+                'backup' => [],
+                'restore' => [],
             ],
         ],
     ],

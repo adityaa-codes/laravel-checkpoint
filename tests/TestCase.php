@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Tests;
 
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpointServiceProvider;
 use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
@@ -90,6 +91,24 @@ class TestCase extends Orchestra
                         'verify' => [],
                         'check' => [],
                         'info' => [],
+                    ],
+                ],
+                'pgdump' => [
+                    'class' => PgDumpDriver::class,
+                    'dump_binary' => 'pg_dump',
+                    'restore_binary' => 'pg_restore',
+                    'format' => 'directory',
+                    'jobs' => 4,
+                    'compress_level' => 6,
+                    'output_dir' => sys_get_temp_dir().'/checkpoint-logical-exports',
+                    'output_prefix' => 'logical-export',
+                    'file_extension' => 'dump',
+                    'clean' => true,
+                    'create' => false,
+                    'command_timeout_seconds' => 5,
+                    'extra_args' => [
+                        'backup' => [],
+                        'restore' => [],
                     ],
                 ],
             ],
