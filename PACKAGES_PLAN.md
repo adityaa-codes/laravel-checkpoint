@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 24 complete
+- `[x]` 26 complete
 - `[-]` 5 partial
-- `[ ]` 57 not started
+- `[ ]` 55 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -912,7 +912,7 @@ Audit summary:
 |---|---|---|---|---|
 | [x] | C18 | BackupDriver contract | Interface: execute(CommandRun): void. Docblock specifies full responsibility contract. | — |
 | [x] | C19 | ShellCommandDriver | **Symfony Process with array args only** (never shell strings). Placeholder substitution into argv array. Pre-restore snapshot for *_restore/pitr_restore ops. Configurable timeout. Structured logging. Fires all events. | C18 |
-| [ ] | C41 | ShellCommandDriver: Symfony Process | Verify implementation uses Process(['cmd','--arg']) not shell strings. Write unit test proving no shell interpretation. | C19 |
+| [x] | C41 | ShellCommandDriver: Symfony Process | Verify implementation uses Process(['cmd','--arg']) not shell strings. Write unit test proving no shell interpretation. | C19 |
 | [x] | C20 | FakeDriver | Records all calls, configurable per-operation fake outcomes (succeed/fail/throw), for testing | C18 |
 
 #### Phase 5 — Jobs & Console Commands
@@ -958,7 +958,7 @@ Audit summary:
 | [ ] | C33 | Test: EnqueueCommandRunActionTest | creates CommandRun, dispatches job afterCommit, fires BackupQueued, argument validation, DB transaction | C21 |
 | [ ] | C34 | Test: ProcessCommandRunJobTest | driver called, status transitions, events fired, tries()=1 for destructive, failed() callback | C22, C43, C47 |
 | [ ] | C35 | Test: EnqueueLogicalBackupCommandTest | schedule timing, artisan exit codes | C23 |
-| [ ] | C36 | Test: ShellCommandDriverTest (unit) | argv array construction, placeholder substitution, no shell strings, pre-restore snapshot trigger | C41 |
+| [x] | C36 | Test: ShellCommandDriverTest (unit) | argv array construction, placeholder substitution, no shell strings, pre-restore snapshot trigger | C41 |
 | [ ] | C37 | Test: BackupDrillRunTest | scopes, isPassing(), factory states | C08 |
 | [ ] | C38 | Test: CommandRunModelTest | scopes, markAs* helpers, MassPrunable, polymorphic relation | C07 |
 | [ ] | C44 | Test: Pre-restore snapshot | ShellCommandDriver aborts restore if snapshot fails; proceeds if snapshot passes | C44 |
