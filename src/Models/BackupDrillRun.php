@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Models;
 
 use AdityaaCodes\LaravelCheckpoint\Database\Factories\BackupDrillRunFactory;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -74,10 +75,10 @@ class BackupDrillRun extends Model
 
     /**
      * @param  Builder<self>  $query
-     * @return Builder<self>
      */
-    public function scopeLatest(Builder $query): Builder
+    #[Scope]
+    protected function recent(Builder $query): void
     {
-        return $query->latest('executed_at');
+        $query->latest('executed_at');
     }
 }

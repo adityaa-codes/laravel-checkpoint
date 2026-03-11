@@ -6,6 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Models;
 
 use AdityaaCodes\LaravelCheckpoint\Database\Factories\CommandRunFactory;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
+use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\MassPrunable;
@@ -76,47 +77,47 @@ class CommandRun extends Model
 
     /**
      * @param  Builder<self>  $query
-     * @return Builder<self>
      */
-    public function scopePending(Builder $query): Builder
+    #[Scope]
+    protected function pending(Builder $query): void
     {
-        return $query->where('status', CommandRunStatus::Pending);
+        $query->where('status', CommandRunStatus::Pending);
     }
 
     /**
      * @param  Builder<self>  $query
-     * @return Builder<self>
      */
-    public function scopeRunning(Builder $query): Builder
+    #[Scope]
+    protected function running(Builder $query): void
     {
-        return $query->where('status', CommandRunStatus::Running);
+        $query->where('status', CommandRunStatus::Running);
     }
 
     /**
      * @param  Builder<self>  $query
-     * @return Builder<self>
      */
-    public function scopeSucceeded(Builder $query): Builder
+    #[Scope]
+    protected function succeeded(Builder $query): void
     {
-        return $query->where('status', CommandRunStatus::Succeeded);
+        $query->where('status', CommandRunStatus::Succeeded);
     }
 
     /**
      * @param  Builder<self>  $query
-     * @return Builder<self>
      */
-    public function scopeFailed(Builder $query): Builder
+    #[Scope]
+    protected function failed(Builder $query): void
     {
-        return $query->where('status', CommandRunStatus::Failed);
+        $query->where('status', CommandRunStatus::Failed);
     }
 
     /**
      * @param  Builder<self>  $query
-     * @return Builder<self>
      */
-    public function scopeTerminal(Builder $query): Builder
+    #[Scope]
+    protected function terminal(Builder $query): void
     {
-        return $query->whereIn('status', [
+        $query->whereIn('status', [
             CommandRunStatus::Succeeded,
             CommandRunStatus::Failed,
             CommandRunStatus::Cancelled,
