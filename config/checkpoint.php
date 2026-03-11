@@ -24,6 +24,7 @@ return [
         'logical_backup_daily_at' => env('DB_OPS_BACKUP_DAILY_AT', '16:00'),
         'logical_backup_timezone' => env('DB_OPS_BACKUP_TIMEZONE', 'UTC'),
         'health_check_enabled' => (bool) env('DB_OPS_HEALTH_CHECK_ENABLED', true),
+        'recover_orphans_enabled' => (bool) env('DB_OPS_RECOVER_ORPHANS_ENABLED', true),
         'prune_enabled' => (bool) env('DB_OPS_PRUNE_ENABLED', true),
         'prune_keep_days' => (int) env('DB_OPS_PRUNE_KEEP_DAYS', 90),
         'prune_keep_failed_days' => (int) env('DB_OPS_PRUNE_KEEP_FAILED_DAYS', 365),
