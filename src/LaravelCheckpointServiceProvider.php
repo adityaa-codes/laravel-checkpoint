@@ -20,6 +20,7 @@ class LaravelCheckpointServiceProvider extends PackageServiceProvider
             ->hasConfigFile()
             ->hasViews()
             ->hasMigration('create_checkpoint_command_runs_table')
+            ->hasMigration('create_checkpoint_backup_drill_runs_table')
             ->hasCommand(LaravelCheckpointCommand::class);
     }
 }
