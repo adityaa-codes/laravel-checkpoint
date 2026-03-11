@@ -28,6 +28,19 @@ class CommandRunFactory extends Factory
                 'pgbackrest_info',
             ]),
             'argument_text' => fake()->optional()->word(),
+            'backup_type' => null,
+            'backup_label' => null,
+            'stanza' => null,
+            'repository' => null,
+            'verification_state' => null,
+            'restore_target' => null,
+            'artifact_path' => null,
+            'backup_size_bytes' => null,
+            'duration_seconds' => null,
+            'throughput_bytes_per_second' => null,
+            'verified_at' => null,
+            'last_known_good_at' => null,
+            'metadata' => null,
             'status' => CommandRunStatus::Pending,
             'command_line' => null,
             'command_output' => null,
@@ -47,6 +60,8 @@ class CommandRunFactory extends Factory
             'finished_at' => null,
             'exit_code' => null,
             'command_output' => null,
+            'duration_seconds' => null,
+            'throughput_bytes_per_second' => null,
         ]);
     }
 
@@ -73,6 +88,7 @@ class CommandRunFactory extends Factory
             'command_line' => fake()->sentence(3),
             'command_output' => fake()->sentence(),
             'exit_code' => 0,
+            'duration_seconds' => 60,
         ]);
     }
 
@@ -86,6 +102,7 @@ class CommandRunFactory extends Factory
             'command_line' => fake()->sentence(3),
             'command_output' => fake()->sentence(),
             'exit_code' => 1,
+            'duration_seconds' => 60,
         ]);
     }
 

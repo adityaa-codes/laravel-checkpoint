@@ -23,12 +23,15 @@ final class StatusCommand extends Command
             ->get();
 
         $this->table(
-            ['ID', 'Operation', 'Status', 'Exit', 'Started', 'Finished'],
+            ['ID', 'Operation', 'Status', 'Exit', 'Backup', 'Verify', 'Last Good', 'Started', 'Finished'],
             $runs->map(fn (CommandRun $run): array => [
                 (string) $run->getKey(),
                 $run->operation,
                 $this->coloredStatus((string) $run->status->value),
                 $run->exit_code !== null ? (string) $run->exit_code : '-',
+                $this->backupSummary($run),
+                $run->verification_state ?? '-',
+                $run->last_known_good_at?->format('Y-m-d H:i:s') ?? '-',
                 $run->started_at?->format('Y-m-d H:i:s') ?? '-',
                 $run->finished_at?->format('Y-m-d H:i:s') ?? '-',
             ])->all(),
@@ -60,5 +63,19 @@ final class StatusCommand extends Command
         }
 
         return str($status)->title()->toString();
+    }
+
+    private function backupSummary(CommandRun $run): string
+    {
+        $parts = array_filter([
+            $run->backup_type,
+            $run->backup_label,
+        ]);
+
+        if ($parts === []) {
+            return '-';
+        }
+
+        return implode(':', $parts);
     }
 }

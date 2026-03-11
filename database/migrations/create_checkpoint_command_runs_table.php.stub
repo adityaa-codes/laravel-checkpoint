@@ -13,6 +13,19 @@ return new class extends Migration
             $table->nullableMorphs('requested_by');
             $table->string('operation');
             $table->text('argument_text')->nullable();
+            $table->string('backup_type')->nullable();
+            $table->string('backup_label')->nullable();
+            $table->string('stanza')->nullable();
+            $table->unsignedInteger('repository')->nullable();
+            $table->string('verification_state')->nullable();
+            $table->text('restore_target')->nullable();
+            $table->text('artifact_path')->nullable();
+            $table->unsignedBigInteger('backup_size_bytes')->nullable();
+            $table->unsignedInteger('duration_seconds')->nullable();
+            $table->unsignedBigInteger('throughput_bytes_per_second')->nullable();
+            $table->timestamp('verified_at')->nullable();
+            $table->timestamp('last_known_good_at')->nullable();
+            $table->json('metadata')->nullable();
             $table->string('status');
             $table->text('command_line')->nullable();
             $table->longText('command_output')->nullable();
@@ -23,6 +36,7 @@ return new class extends Migration
             $table->timestamps();
 
             $table->index(['operation', 'status']);
+            $table->index('last_known_good_at');
             $table->index('created_at');
         });
     }

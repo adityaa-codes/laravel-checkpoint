@@ -1,0 +1,111 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        $table = $this->tableName();
+
+        if (! Schema::hasTable($table)) {
+            return;
+        }
+
+        Schema::table($table, function (Blueprint $table): void {
+            if (! Schema::hasColumn($table->getTable(), 'backup_type')) {
+                $table->string('backup_type')->nullable()->after('argument_text');
+            }
+
+            if (! Schema::hasColumn($table->getTable(), 'backup_label')) {
+                $table->string('backup_label')->nullable()->after('backup_type');
+            }
+
+            if (! Schema::hasColumn($table->getTable(), 'stanza')) {
+                $table->string('stanza')->nullable()->after('backup_label');
+            }
+
+            if (! Schema::hasColumn($table->getTable(), 'repository')) {
+                $table->unsignedInteger('repository')->nullable()->after('stanza');
+            }
+
+            if (! Schema::hasColumn($table->getTable(), 'verification_state')) {
+                $table->string('verification_state')->nullable()->after('repository');
+            }
+
+            if (! Schema::hasColumn($table->getTable(), 'restore_target')) {
+                $table->text('restore_target')->nullable()->after('verification_state');
+            }
+
+            if (! Schema::hasColumn($table->getTable(), 'artifact_path')) {
+                $table->text('artifact_path')->nullable()->after('restore_target');
+            }
+
+            if (! Schema::hasColumn($table->getTable(), 'backup_size_bytes')) {
+                $table->unsignedBigInteger('backup_size_bytes')->nullable()->after('artifact_path');
+            }
+
+            if (! Schema::hasColumn($table->getTable(), 'duration_seconds')) {
+                $table->unsignedInteger('duration_seconds')->nullable()->after('backup_size_bytes');
+            }
+
+            if (! Schema::hasColumn($table->getTable(), 'throughput_bytes_per_second')) {
+                $table->unsignedBigInteger('throughput_bytes_per_second')->nullable()->after('duration_seconds');
+            }
+
+            if (! Schema::hasColumn($table->getTable(), 'verified_at')) {
+                $table->timestamp('verified_at')->nullable()->after('throughput_bytes_per_second');
+            }
+
+            if (! Schema::hasColumn($table->getTable(), 'last_known_good_at')) {
+                $table->timestamp('last_known_good_at')->nullable()->after('verified_at');
+            }
+
+            if (! Schema::hasColumn($table->getTable(), 'metadata')) {
+                $table->json('metadata')->nullable()->after('last_known_good_at');
+            }
+        });
+
+        Schema::table($table, function (Blueprint $table): void {
+            $table->index('last_known_good_at');
+        });
+    }
+
+    public function down(): void
+    {
+        $table = $this->tableName();
+
+        if (! Schema::hasTable($table)) {
+            return;
+        }
+
+        Schema::table($table, function (Blueprint $table): void {
+            $table->dropIndex($this->tableName().'_last_known_good_at_index');
+            $table->dropColumn([
+                'backup_type',
+                'backup_label',
+                'stanza',
+                'repository',
+                'verification_state',
+                'restore_target',
+                'artifact_path',
+                'backup_size_bytes',
+                'duration_seconds',
+                'throughput_bytes_per_second',
+                'verified_at',
+                'last_known_good_at',
+                'metadata',
+            ]);
+        });
+    }
+
+    private function tableName(): string
+    {
+        return sprintf(
+            '%scommand_runs',
+            config('checkpoint.table_prefix', 'db_ops_'),
+        );
+    }
+};

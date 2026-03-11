@@ -48,11 +48,13 @@ final class ShellCommandDriver implements BackupDriver
     {
         try {
             $process = $this->buildProcess($run);
+            $plannedMetadata = $this->plannedMetadata($run);
 
             $run->markAsRunning();
             $run->forceFill([
                 'command_line' => $process->getCommandLine(),
             ])->save();
+            $run->recordMetadata($plannedMetadata);
 
             event(new BackupStarted($run));
 
@@ -66,11 +68,13 @@ final class ShellCommandDriver implements BackupDriver
 
             $output = $this->combinedOutput($process);
             $exitCode = $process->getExitCode() ?? -1;
+            $completedMetadata = $this->completedMetadata($run, $plannedMetadata, $exitCode);
 
             $run->forceFill([
                 'command_output' => $output,
                 'exit_code' => $exitCode,
             ])->save();
+            $run->recordMetadata($completedMetadata);
 
             if ($exitCode === 0) {
                 $run->markAsSucceeded($exitCode, $output);
@@ -196,5 +200,44 @@ final class ShellCommandDriver implements BackupDriver
     private function logger(): LoggerInterface
     {
         return Log::channel(config('checkpoint.log_channel', 'stack'));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function plannedMetadata(CommandRun $run): array
+    {
+        return match ($run->operation) {
+            'logical_backup' => [
+                'backup_type' => 'logical_export',
+                'artifact_path' => config('checkpoint.drivers.shell.backup_dir', storage_path('db-backups'))
+                    .'/'.config('checkpoint.drivers.shell.backup_prefix', 'backup')
+                    .'-'.$run->getKey().'.sql',
+                'verification_state' => 'not_applicable',
+                'metadata' => ['driver' => 'shell'],
+            ],
+            'logical_restore_latest', 'logical_restore_file', 'pitr_restore' => [
+                'restore_target' => $run->argument_text,
+                'metadata' => ['driver' => 'shell'],
+            ],
+            default => ['metadata' => ['driver' => 'shell']],
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return array<string, mixed>
+     */
+    private function completedMetadata(CommandRun $run, array $plannedMetadata, int $exitCode): array
+    {
+        $completed = [
+            'metadata' => $plannedMetadata['metadata'] ?? ['driver' => 'shell'],
+        ];
+
+        if ($run->operation === 'logical_backup' && $exitCode === 0) {
+            $completed['last_known_good_at'] = now();
+        }
+
+        return $completed;
     }
 }

@@ -136,6 +136,11 @@ class TestCase extends Orchestra
             $migration->up();
         }
 
+        if (! Schema::hasColumn('db_ops_command_runs', 'backup_type')) {
+            $migration = require __DIR__.'/../database/migrations/add_checkpoint_metadata_to_command_runs_table.php.stub';
+            $migration->up();
+        }
+
         if (! Schema::hasTable('db_ops_backup_drill_runs')) {
             $migration = require __DIR__.'/../database/migrations/create_checkpoint_backup_drill_runs_table.php.stub';
             $migration->up();

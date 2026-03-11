@@ -22,11 +22,13 @@ final class PgDumpDriver implements BackupDriver
     {
         try {
             $process = $this->buildProcess($run);
+            $plannedMetadata = $this->plannedMetadata($run);
 
             $run->markAsRunning();
             $run->forceFill([
                 'command_line' => $process->getCommandLine(),
             ])->save();
+            $run->recordMetadata($plannedMetadata);
 
             event(new BackupStarted($run));
 
@@ -40,11 +42,13 @@ final class PgDumpDriver implements BackupDriver
 
             $output = $this->combinedOutput($process);
             $exitCode = $process->getExitCode() ?? -1;
+            $completedMetadata = $this->completedMetadata($run, $plannedMetadata, $exitCode);
 
             $run->forceFill([
                 'command_output' => $output,
                 'exit_code' => $exitCode,
             ])->save();
+            $run->recordMetadata($completedMetadata);
 
             if ($exitCode === 0) {
                 $run->markAsSucceeded($exitCode, $output);
@@ -371,6 +375,100 @@ final class PgDumpDriver implements BackupDriver
     private function combinedOutput(Process $process): string
     {
         return trim($process->getOutput()."\n".$process->getErrorOutput());
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function plannedMetadata(CommandRun $run): array
+    {
+        return match ($run->operation) {
+            'logical_backup' => [
+                'backup_type' => 'logical_export',
+                'artifact_path' => $this->backupTarget($run, $this->format()),
+                'verification_state' => 'not_applicable',
+                'metadata' => [
+                    'driver' => 'pgdump',
+                    'format' => $this->format(),
+                    'jobs' => $this->jobs(),
+                    'compress_level' => $this->compressLevel(),
+                ],
+            ],
+            'logical_restore_latest', 'logical_restore_file' => [
+                'restore_target' => $this->restoreTarget($run, $this->format()),
+                'metadata' => [
+                    'driver' => 'pgdump',
+                    'format' => $this->format(),
+                    'jobs' => $this->jobs(),
+                ],
+            ],
+            default => [],
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return array<string, mixed>
+     */
+    private function completedMetadata(CommandRun $run, array $plannedMetadata, int $exitCode): array
+    {
+        $metadata = $plannedMetadata['metadata'] ?? [];
+
+        if (! is_array($metadata)) {
+            $metadata = [];
+        }
+
+        $completed = [
+            'metadata' => $metadata,
+        ];
+
+        if ($run->operation === 'logical_backup') {
+            $artifactPath = $plannedMetadata['artifact_path'] ?? null;
+            $backupSize = is_string($artifactPath) ? $this->pathSize($artifactPath) : null;
+
+            $completed['backup_size_bytes'] = $backupSize;
+
+            if ($exitCode === 0) {
+                $completed['last_known_good_at'] = now();
+            }
+        }
+
+        if (in_array($run->operation, ['logical_restore_latest', 'logical_restore_file'], true)) {
+            $completed['metadata'] = [
+                ...$metadata,
+                'restored_via' => 'pg_restore',
+            ];
+        }
+
+        return $completed;
+    }
+
+    private function pathSize(string $path): ?int
+    {
+        if (is_file($path)) {
+            $size = filesize($path);
+
+            return $size === false ? null : $size;
+        }
+
+        if (! is_dir($path)) {
+            return null;
+        }
+
+        $size = 0;
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS),
+        );
+
+        foreach ($iterator as $file) {
+            if (! $file->isFile()) {
+                continue;
+            }
+
+            $size += $file->getSize();
+        }
+
+        return $size;
     }
 
     private function logger(): LoggerInterface

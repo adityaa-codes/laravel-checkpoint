@@ -22,6 +22,17 @@ use Illuminate\Support\Carbon;
  * @property int|string|null $requested_by_id
  * @property string $operation
  * @property string|null $argument_text
+ * @property string|null $backup_type
+ * @property string|null $backup_label
+ * @property string|null $stanza
+ * @property int|null $repository
+ * @property string|null $verification_state
+ * @property string|null $restore_target
+ * @property string|null $artifact_path
+ * @property int|null $backup_size_bytes
+ * @property int|null $duration_seconds
+ * @property int|null $throughput_bytes_per_second
+ * @property array<string, mixed>|null $metadata
  * @property CommandRunStatus $status
  * @property string|null $command_line
  * @property string|null $command_output
@@ -29,6 +40,8 @@ use Illuminate\Support\Carbon;
  * @property int $attempts
  * @property Carbon|null $started_at
  * @property Carbon|null $finished_at
+ * @property Carbon|null $verified_at
+ * @property Carbon|null $last_known_good_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  *
@@ -55,10 +68,17 @@ class CommandRun extends Model
     {
         return [
             'attempts' => 'integer',
+            'backup_size_bytes' => 'integer',
+            'duration_seconds' => 'integer',
             'exit_code' => 'integer',
+            'metadata' => 'array',
+            'repository' => 'integer',
             'status' => CommandRunStatus::class,
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
+            'throughput_bytes_per_second' => 'integer',
+            'verified_at' => 'datetime',
+            'last_known_good_at' => 'datetime',
         ];
     }
 
@@ -126,6 +146,36 @@ class CommandRun extends Model
         ]);
     }
 
+    /**
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function verified(Builder $query): void
+    {
+        $query->where('verification_state', 'verified');
+    }
+
+    /**
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function lastKnownGood(Builder $query): void
+    {
+        $query
+            ->whereNotNull('last_known_good_at')
+            ->latest('last_known_good_at');
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    public function recordMetadata(array $attributes): self
+    {
+        $this->forceFill($attributes)->save();
+
+        return $this;
+    }
+
     public function markAsRunning(): self
     {
         $this->forceFill([
@@ -138,11 +188,14 @@ class CommandRun extends Model
 
     public function markAsSucceeded(int $exitCode, string $output): self
     {
+        $finishedAt = now();
+
         $this->forceFill([
             'status' => CommandRunStatus::Succeeded,
             'exit_code' => $exitCode,
             'command_output' => $output,
-            'finished_at' => now(),
+            'finished_at' => $finishedAt,
+            ...$this->timingMetrics($finishedAt),
         ])->save();
 
         return $this;
@@ -150,11 +203,14 @@ class CommandRun extends Model
 
     public function markAsFailed(int $exitCode = -1, string $output = ''): self
     {
+        $finishedAt = now();
+
         $this->forceFill([
             'status' => CommandRunStatus::Failed,
             'exit_code' => $exitCode,
             'command_output' => $output,
-            'finished_at' => now(),
+            'finished_at' => $finishedAt,
+            ...$this->timingMetrics($finishedAt),
         ])->save();
 
         return $this;
@@ -178,5 +234,28 @@ class CommandRun extends Model
                     ->where('status', CommandRunStatus::Failed)
                     ->where('created_at', '<=', now()->subDays($keepFailedDays));
             });
+    }
+
+    /**
+     * @return array{duration_seconds:int|null,throughput_bytes_per_second:int|null}
+     */
+    private function timingMetrics(Carbon $finishedAt): array
+    {
+        $durationSeconds = null;
+
+        if ($this->started_at instanceof Carbon) {
+            $durationSeconds = (int) max(1, $this->started_at->diffInSeconds($finishedAt));
+        }
+
+        $throughput = null;
+
+        if ($durationSeconds !== null && is_int($this->backup_size_bytes) && $this->backup_size_bytes > 0) {
+            $throughput = (int) floor($this->backup_size_bytes / $durationSeconds);
+        }
+
+        return [
+            'duration_seconds' => $durationSeconds,
+            'throughput_bytes_per_second' => $throughput,
+        ];
     }
 }

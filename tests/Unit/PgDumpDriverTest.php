@@ -3,8 +3,13 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
+use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupCompleted;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use Illuminate\Support\Facades\Event;
 use Symfony\Component\Process\Process;
 
 it('builds directory format pg_dump commands with parallel jobs', function (): void {
@@ -116,6 +121,66 @@ it('rejects unsupported pg_dump operations', function (): void {
         ->toThrow(ConfigurationException::class, 'Unsupported pg_dump operation [pgbackrest_info].');
 });
 
+it('records metadata for successful logical exports', function (): void {
+    Event::fake([
+        BackupStarted::class,
+        BackupCompleted::class,
+        BackupFailed::class,
+    ]);
+
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgdump-exec-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary pgdump execution path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    config()->set('checkpoint.drivers.pgdump.dump_binary', fakePgDumpScript(<<<'SH'
+#!/bin/sh
+for arg in "$@"; do
+  case "$arg" in
+    --file=*)
+      target="${arg#--file=}"
+      mkdir -p "$target"
+      printf 'segment' > "$target/part-0001.bin"
+      ;;
+  esac
+done
+printf 'export complete'
+SH));
+    config()->set('checkpoint.drivers.pgdump.format', 'directory');
+    config()->set('checkpoint.drivers.pgdump.jobs', 4);
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new PgDumpDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+        ->and($run->backup_type)->toBe('logical_export')
+        ->and($run->artifact_path)->toBe($outputDir.'/logical-export-'.$run->getKey())
+        ->and($run->backup_size_bytes)->toBe(7)
+        ->and($run->verification_state)->toBe('not_applicable')
+        ->and($run->last_known_good_at)->not->toBeNull()
+        ->and($run->duration_seconds)->toBeInt()
+        ->and($run->metadata)->toMatchArray([
+            'driver' => 'pgdump',
+            'format' => 'directory',
+            'jobs' => 4,
+        ]);
+
+    Event::assertDispatched(BackupCompleted::class);
+    Event::assertNotDispatched(BackupFailed::class);
+});
+
 function buildPgDumpProcess(PgDumpDriver $driver, CommandRun $run): Process
 {
     $method = new ReflectionMethod($driver, 'buildProcess');
@@ -124,4 +189,18 @@ function buildPgDumpProcess(PgDumpDriver $driver, CommandRun $run): Process
     $process = $method->invoke($driver, $run);
 
     return $process;
+}
+
+function fakePgDumpScript(string $contents): string
+{
+    $path = tempnam(sys_get_temp_dir(), 'pgdump-test-');
+
+    if ($path === false) {
+        throw new RuntimeException('Unable to allocate a temporary pgdump test script.');
+    }
+
+    file_put_contents($path, $contents."\n");
+    chmod($path, 0755);
+
+    return $path;
 }

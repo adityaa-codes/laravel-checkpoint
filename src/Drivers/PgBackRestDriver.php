@@ -10,6 +10,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Process\Process;
@@ -22,11 +23,13 @@ final class PgBackRestDriver implements BackupDriver
     {
         try {
             $process = $this->buildProcess($run);
+            $plannedMetadata = $this->plannedMetadata($run);
 
             $run->markAsRunning();
             $run->forceFill([
                 'command_line' => $process->getCommandLine(),
             ])->save();
+            $run->recordMetadata($plannedMetadata);
 
             event(new BackupStarted($run));
 
@@ -40,16 +43,15 @@ final class PgBackRestDriver implements BackupDriver
 
             $output = $this->combinedOutput($process);
             $exitCode = $process->getExitCode() ?? -1;
-            $normalizedOutput = $this->normalizeOutput(
-                $run->operation,
-                $output,
-                $exitCode,
-            );
+            $summary = $this->operationSummary($run->operation, $output, $exitCode);
+            $normalizedOutput = $this->normalizeOutput($summary, $output);
+            $completedMetadata = $this->completedMetadata($run, $plannedMetadata, $summary, $exitCode);
 
             $run->forceFill([
                 'command_output' => $normalizedOutput,
                 'exit_code' => $exitCode,
             ])->save();
+            $run->recordMetadata($completedMetadata);
 
             if ($exitCode === 0) {
                 $run->markAsSucceeded($exitCode, $normalizedOutput);
@@ -258,14 +260,11 @@ final class PgBackRestDriver implements BackupDriver
         return trim($process->getOutput()."\n".$process->getErrorOutput());
     }
 
-    private function normalizeOutput(string $operation, string $rawOutput, int $exitCode): string
+    /**
+     * @param  array<string, mixed>|null  $summary
+     */
+    private function normalizeOutput(?array $summary, string $rawOutput): string
     {
-        $summary = match ($operation) {
-            'pgbackrest_info' => $this->parseInfoSummary($rawOutput),
-            'pgbackrest_check' => $this->parseCheckSummary($rawOutput, $exitCode),
-            default => null,
-        };
-
         if ($summary === null) {
             return $rawOutput;
         }
@@ -286,6 +285,18 @@ final class PgBackRestDriver implements BackupDriver
         }
 
         return "[checkpoint-summary]\n".$encodedSummary."\n\n[raw-output]\n".$trimmedOutput;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function operationSummary(string $operation, string $output, int $exitCode): ?array
+    {
+        return match ($operation) {
+            'pgbackrest_info' => $this->parseInfoSummary($output),
+            'pgbackrest_check', 'pgbackrest_verify' => $this->parseCheckSummary($output, $exitCode),
+            default => null,
+        };
     }
 
     /**
@@ -387,6 +398,94 @@ final class PgBackRestDriver implements BackupDriver
             'error_count' => $errorCount,
             'stanza' => $stanza,
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function plannedMetadata(CommandRun $run): array
+    {
+        $metadata = [
+            'stanza' => (string) config('checkpoint.drivers.pgbackrest.stanza', 'main'),
+            'repository' => (int) config('checkpoint.drivers.pgbackrest.repo', 1),
+            'metadata' => [
+                'driver' => 'pgbackrest',
+            ],
+        ];
+
+        return match ($run->operation) {
+            'pgbackrest_backup_full' => [...$metadata, 'backup_type' => 'full'],
+            'pgbackrest_backup_diff' => [...$metadata, 'backup_type' => 'diff'],
+            'pgbackrest_backup_incr' => [...$metadata, 'backup_type' => 'incr'],
+            'pgbackrest_restore' => [...$metadata, 'restore_target' => $run->argument_text],
+            'pgbackrest_verify', 'pgbackrest_check' => [...$metadata, 'verification_state' => 'pending'],
+            'pgbackrest_info' => $metadata,
+            default => [],
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @param  array<string, mixed>|null  $summary
+     * @return array<string, mixed>
+     */
+    private function completedMetadata(
+        CommandRun $run,
+        array $plannedMetadata,
+        ?array $summary,
+        int $exitCode,
+    ): array {
+        $metadata = $plannedMetadata['metadata'] ?? [];
+
+        if (! is_array($metadata)) {
+            $metadata = [];
+        }
+
+        if ($summary !== null) {
+            $metadata['summary'] = $summary;
+        }
+
+        $completed = [
+            'metadata' => $metadata,
+        ];
+
+        if ($summary !== null && $run->operation === 'pgbackrest_info') {
+            $latestBackup = $summary['stanzas'][0]['latest_backup'] ?? null;
+
+            if (is_array($latestBackup)) {
+                $completed = [
+                    ...$completed,
+                    'backup_label' => is_string($latestBackup['label'] ?? null) ? $latestBackup['label'] : null,
+                    'backup_type' => is_string($latestBackup['type'] ?? null) ? $latestBackup['type'] : null,
+                    'backup_size_bytes' => is_int($latestBackup['repository_size'] ?? null) ? $latestBackup['repository_size'] : null,
+                    'last_known_good_at' => $this->timestampToCarbon($latestBackup['timestamp_stop'] ?? null),
+                ];
+            }
+        }
+
+        if (in_array($run->operation, ['pgbackrest_check', 'pgbackrest_verify'], true)) {
+            $completed['verification_state'] = $exitCode === 0 ? 'verified' : 'failed';
+            $completed['verified_at'] = now();
+
+            if ($exitCode === 0) {
+                $completed['last_known_good_at'] = now();
+            }
+        }
+
+        if (in_array($run->operation, ['pgbackrest_backup_full', 'pgbackrest_backup_diff', 'pgbackrest_backup_incr'], true) && $exitCode === 0) {
+            $completed['last_known_good_at'] = now();
+        }
+
+        return $completed;
+    }
+
+    private function timestampToCarbon(mixed $timestamp): ?\Illuminate\Support\Carbon
+    {
+        if (! is_int($timestamp) || $timestamp < 1) {
+            return null;
+        }
+
+        return Date::createFromTimestampUTC($timestamp);
     }
 
     private function logger(): LoggerInterface

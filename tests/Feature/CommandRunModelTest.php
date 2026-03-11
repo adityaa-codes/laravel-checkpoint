@@ -26,6 +26,25 @@ it('filters command runs through the status scopes', function (): void {
         ->and($terminalIds)->toBe($expectedTerminalIds);
 });
 
+it('filters verified and last-known-good backup runs through metadata scopes', function (): void {
+    $verifiedRun = CommandRun::factory()->succeeded()->create([
+        'verification_state' => 'verified',
+        'last_known_good_at' => Date::now()->subMinute(),
+    ]);
+    $nonVerifiedRun = CommandRun::factory()->succeeded()->create([
+        'verification_state' => 'failed',
+        'last_known_good_at' => null,
+    ]);
+    $olderGoodRun = CommandRun::factory()->succeeded()->create([
+        'verification_state' => 'verified',
+        'last_known_good_at' => Date::now()->subMinutes(5),
+    ]);
+
+    expect(CommandRun::query()->verified()->pluck('id')->all())->toBe([$verifiedRun->id, $olderGoodRun->id])
+        ->and(CommandRun::query()->lastKnownGood()->pluck('id')->all())->toBe([$verifiedRun->id, $olderGoodRun->id])
+        ->and(CommandRun::query()->lastKnownGood()->pluck('id')->all())->not->toContain($nonVerifiedRun->id);
+});
+
 it('updates status metadata through markAs helper methods', function (): void {
     Date::setTestNow('2026-03-11 12:00:00');
 
@@ -38,6 +57,9 @@ it('updates status metadata through markAs helper methods', function (): void {
         ->and($run->started_at?->toDateTimeString())->toBe('2026-03-11 12:00:00');
 
     Date::setTestNow('2026-03-11 12:05:00');
+    $run->recordMetadata([
+        'backup_size_bytes' => 600,
+    ]);
 
     $run->markAsSucceeded(0, 'done');
     $run->refresh();
@@ -45,6 +67,8 @@ it('updates status metadata through markAs helper methods', function (): void {
     expect($run->status)->toBe(CommandRunStatus::Succeeded)
         ->and($run->exit_code)->toBe(0)
         ->and($run->command_output)->toBe('done')
+        ->and($run->duration_seconds)->toBe(300)
+        ->and($run->throughput_bytes_per_second)->toBe(2)
         ->and($run->finished_at?->toDateTimeString())->toBe('2026-03-11 12:05:00');
 
     Date::setTestNow('2026-03-11 12:10:00');
