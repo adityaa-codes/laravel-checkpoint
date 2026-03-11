@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 36 complete
+- `[x]` 37 complete
 - `[-]` 5 partial
-- `[ ]` 45 not started
+- `[ ]` 44 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -926,7 +926,7 @@ Audit summary:
 | [x] | C23 | EnqueueLogicalBackupCommand | artisan db-ops:enqueue-backup, success/failure output, uses EnqueueCommandRunAction | C21 |
 | [x] | C24 | EnqueueCommand (generic) | artisan db-ops:enqueue {operation} {--argument=}, interactive select if omitted | C21 |
 | [x] | C25 | StatusCommand | artisan db-ops:status {--limit=10}, table output with colored status | C07 |
-| [ ] | C25b | RecordDrillRunCommand | artisan db-ops:record-drill with all --options. Creates BackupDrillRun, fires BackupDrillCompleted. | C08, C28 |
+| [x] | C25b | RecordDrillRunCommand | artisan db-ops:record-drill with all --options. Creates BackupDrillRun, fires BackupDrillCompleted. | C08, C28 |
 | [ ] | C45 | HealthCheckCommand | artisan db-ops:health-check. Marks Running runs as Failed if started_at older than queue.timeout. Logs ERROR per recovery. Scheduled every 5 min. | C07, C28 |
 | [ ] | C42 | RecoverOrphansCommand | artisan db-ops:recover-orphans. Re-dispatches Pending runs with no active job older than orphan_threshold (10 min). Logs WARNING per re-dispatch. Scheduled every 10 min. | C21, C22 |
 | [ ] | C46 | PruneCommand | artisan db-ops:prune. Calls CommandRun::pruneAll() (MassPrunable). Reports pruned count. Scheduled weekly. | C07, C28 |
