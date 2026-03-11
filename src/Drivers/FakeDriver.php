@@ -17,7 +17,7 @@ final class FakeDriver implements BackupDriver
     /**
      * @var list<CommandRun>
      */
-    public array $calls = [];
+    private array $calls = [];
 
     /**
      * @var array<string, array{type: 'success'|'fail'|'throw', exit_code?: int, output?: string, throwable?: Throwable}>
@@ -92,5 +92,13 @@ final class FakeDriver implements BackupDriver
 
         $run->markAsSucceeded($exitCode, $output);
         event(new BackupCompleted($run, $exitCode, $output));
+    }
+
+    /**
+     * @return list<CommandRun>
+     */
+    public function calls(): array
+    {
+        return $this->calls;
     }
 }

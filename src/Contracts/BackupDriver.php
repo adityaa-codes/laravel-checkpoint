@@ -6,6 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Contracts;
 
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 
+/** @api */
 interface BackupDriver
 {
     /**

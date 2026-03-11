@@ -37,8 +37,8 @@ it('uses the configured driver to process a command run', function (): void {
 
     $run->refresh();
 
-    expect($driver->calls)->toHaveCount(1)
-        ->and($driver->calls[0]->is($run))->toBeTrue()
+    expect($driver->calls())->toHaveCount(1)
+        ->and($driver->calls()[0]->is($run))->toBeTrue()
         ->and($run->status)->toBe(CommandRunStatus::Succeeded)
         ->and($run->exit_code)->toBe(0)
         ->and($run->command_output)->toBe('info');

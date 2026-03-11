@@ -10,6 +10,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupQueued;
 use Illuminate\Support\Facades\Event;
 use PHPUnit\Framework\Assert;
 
+/** @api */
 trait InteractsWithCheckpoint
 {
     protected FakeDriver $checkpointFakeDriver;

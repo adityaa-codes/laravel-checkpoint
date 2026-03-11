@@ -15,6 +15,8 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 
 /**
+ * @api
+ *
  * @property int $id
  * @property string|null $requested_by_type
  * @property int|string|null $requested_by_id

@@ -26,7 +26,7 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
     use Queueable;
     use SerializesModels;
 
-    public function __construct(public CommandRun $run)
+    public function __construct(public readonly CommandRun $run)
     {
         $this->onQueue(config('checkpoint.queue.name', 'db-ops'));
     }

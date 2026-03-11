@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
 /**
+ * @api
+ *
  * @property int $id
  * @property string $run_uuid
  * @property string|null $marker_uuid

@@ -8,6 +8,7 @@ use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Database\Eloquent\Model;
 
+/** @api */
 final readonly class LaravelCheckpoint
 {
     public function __construct(
