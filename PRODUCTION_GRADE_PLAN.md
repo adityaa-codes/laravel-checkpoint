@@ -36,7 +36,7 @@ This plan is based on:
 - `[ ]` queue timeout / retry contract is now enforced in code, but production worker guidance still needs wider operator rollout
 - `[x]` backup execution now has first-class pgBackRest and pgDump drivers alongside the shell escape hatch
 - `[ ]` scheduler overlap and cluster guards are now implemented
-- `[!]` there is no structured backup state, retention state, or verification model beyond raw command output
+- `[x]` command runs now persist structured backup state, verification state, and last-known-good timestamps
 - `[!]` no object storage / multi-repository / encryption-first config model yet
 - `[x]` huge-database logical export strategy now exists through the dedicated `pgdump` driver
 
@@ -295,18 +295,18 @@ Goal:
 Turn command runs into actionable backup records.
 
 Status:
-- `[ ]` not started
+- `[x]` complete
 
 Tasks:
 
-- `[ ]` decide persistence model:
-  - `[ ]` extend `command_runs`
+- `[x]` decide persistence model:
+  - `[x]` extend `command_runs`
   - `[ ]` or add `backup_run_reports`
-- `[ ]` persist backup type, repo, label, stanza, verification state, and restore target
-- `[ ]` persist backup size, duration, throughput, and completion timestamps
-- `[ ]` persist verification status from pgBackRest check/verify flows
-- `[ ]` expose last-known-good backup state in queries and status command
-- `[ ]` add tests for metadata persistence and query behavior
+- `[x]` persist backup type, repo, label, stanza, verification state, and restore target
+- `[x]` persist backup size, duration, throughput, and completion timestamps
+- `[x]` persist verification status from pgBackRest check/verify flows
+- `[x]` expose last-known-good backup state in queries and status command
+- `[x]` add tests for metadata persistence and query behavior
 
 Acceptance:
 
