@@ -33,11 +33,9 @@ This plan is based on:
 
 ### Current Production Gaps
 
-- `[!]` queue defaults are not production-safe for long-running jobs
-  - current defaults in `config/checkpoint.php` are `retry_after=90` and `timeout=3600`
-  - this conflicts with Laravel queue guidance for long-running workers and can allow duplicate processing
+- `[ ]` queue timeout / retry contract is now enforced in code, but production worker guidance still needs wider operator rollout
 - `[!]` backup execution is still modeled as generic shell commands instead of a first-class pgBackRest strategy
-- `[!]` scheduler jobs are not yet protected with `withoutOverlapping()` / `onOneServer()`
+- `[ ]` scheduler overlap and cluster guards are now implemented
 - `[!]` there is no structured backup state, retention state, or verification model beyond raw command output
 - `[!]` no object storage / multi-repository / encryption-first config model yet
 - `[!]` no explicit huge-database logical export strategy such as `pg_dump -Fd -j`
@@ -209,16 +207,16 @@ Goal:
 Make current execution safe for long-running production jobs.
 
 Status:
-- `[-]` in progress
+- `[x]` complete
 
 Tasks:
 
 - `[x]` validate that `checkpoint.queue.retry_after` is greater than `checkpoint.queue.timeout`
 - `[x]` fail doctor/config validation when timeout and retry settings are unsafe
-- `[ ]` add explicit config docs for worker `--timeout` alignment
+- `[x]` add explicit config docs for worker `--timeout` alignment
 - `[x]` support `uniqueFor` on `ProcessCommandRunJob`
 - `[x]` support `uniqueVia()` with configurable cache store
-- `[ ]` document Redis as the recommended production lock backend
+- `[x]` document Redis as the recommended production lock backend
 - `[x]` add scheduler `withoutOverlapping()` for backup, prune, health, orphan recovery
 - `[x]` add scheduler `onOneServer()` for clustered production deployments
 - `[x]` add tests for invalid timeout/retry config

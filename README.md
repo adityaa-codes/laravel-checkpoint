@@ -28,8 +28,8 @@ php artisan migrate
 Important config groups in `config/checkpoint.php`:
 
 - `user_model`, `user_name_column`, `table_prefix`
-- `queue.connection`, `queue.name`, `queue.max_attempts`, `queue.timeout`, `queue.orphan_threshold`
-- `schedule.logical_backup_*`, `schedule.health_check_enabled`, `schedule.recover_orphans_enabled`, `schedule.prune_enabled`
+- `queue.connection`, `queue.name`, `queue.max_attempts`, `queue.retry_after`, `queue.timeout`, `queue.unique_for`, `queue.lock_store`, `queue.orphan_threshold`
+- `schedule.logical_backup_*`, `schedule.health_check_enabled`, `schedule.recover_orphans_enabled`, `schedule.prune_enabled`, `schedule.without_overlapping`, `schedule.overlap_expires_at`, `schedule.on_one_server`
 - `driver`, `drivers.shell.*`
 - `log_channel`
 - `custom_operations`
@@ -38,7 +38,10 @@ Common environment variables:
 
 ```env
 DB_OPS_QUEUE_NAME=db-ops
+DB_OPS_QUEUE_RETRY_AFTER=3660
 DB_OPS_QUEUE_TIMEOUT=3600
+DB_OPS_QUEUE_UNIQUE_FOR=3660
+DB_OPS_QUEUE_LOCK_STORE=redis
 DB_OPS_QUEUE_ORPHAN_THRESHOLD=10
 DB_OPS_LOG_CHANNEL=stack
 
@@ -52,6 +55,43 @@ DB_OPS_CMD_PGBACKREST_INFO=
 ```
 
 Command templates are configured as space-delimited argv-style strings and are parsed into Symfony Process argument arrays. User input is validated before it reaches the driver.
+
+### Production Queue And Locking Guidance
+
+For production, the package assumes long-running jobs and shared infrastructure.
+
+- `DB_OPS_QUEUE_RETRY_AFTER` must be greater than `DB_OPS_QUEUE_TIMEOUT`
+- `DB_OPS_QUEUE_UNIQUE_FOR` must be greater than or equal to `DB_OPS_QUEUE_RETRY_AFTER`
+- `DB_OPS_QUEUE_LOCK_STORE` should point at a shared lock backend, typically `redis`
+- scheduled commands are configured to use `withoutOverlapping()` and `onOneServer()` by default
+
+Recommended production values:
+
+```env
+DB_OPS_QUEUE_TIMEOUT=3600
+DB_OPS_QUEUE_RETRY_AFTER=3660
+DB_OPS_QUEUE_UNIQUE_FOR=3660
+DB_OPS_QUEUE_LOCK_STORE=redis
+DB_OPS_SCHEDULE_WITHOUT_OVERLAPPING=true
+DB_OPS_SCHEDULE_OVERLAP_EXPIRES_AT=180
+DB_OPS_SCHEDULE_ON_ONE_SERVER=true
+```
+
+Worker alignment matters:
+
+- the Laravel queue worker `--timeout` should be a few seconds shorter than `DB_OPS_QUEUE_RETRY_AFTER`
+- this package validates the config contract, but your worker process must still be started with a compatible timeout
+
+Example worker command:
+
+```bash
+php artisan queue:work --queue=db-ops --timeout=3600
+```
+
+Recommended production cache config:
+
+- use Redis for queue uniqueness and scheduler overlap locks
+- avoid local-only cache drivers for multi-node deployments, because they cannot coordinate uniqueness or `onOneServer()` safely across hosts
 
 ## Usage
 
@@ -162,6 +202,12 @@ In this repository, PHP and Composer commands are run through DDEV:
 ```bash
 ddev exec vendor/bin/pest
 ddev exec vendor/bin/phpstan analyse
+```
+
+For coverage in DDEV:
+
+```bash
+ddev exec env XDEBUG_MODE=coverage vendor/bin/pest --coverage
 ```
 
 ## Changelog
