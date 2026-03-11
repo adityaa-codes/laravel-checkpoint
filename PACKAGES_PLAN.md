@@ -849,8 +849,8 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 56 complete
-- `[-]` 2 partial
+- `[x]` 57 complete
+- `[-]` 1 partial
 - `[ ]` 28 not started
 
 Audit summary:
@@ -948,7 +948,7 @@ Audit summary:
 
 | Status | ID | Title | Description | Depends On |
 |---|---|---|---|---|
-| [-] | C53 | Architecture tests (Pest arch) | tests/ArchTest.php: no App\ refs, Contracts are interfaces, Events are readonly, Jobs implement ShouldQueue, Drivers implement BackupDriver | C01 |
+| [x] | C53 | Architecture tests (Pest arch) | tests/ArchTest.php: no App\ refs, Contracts are interfaces, Events are readonly, Jobs implement ShouldQueue, Drivers implement BackupDriver | C01 |
 
 #### Phase 8 — Feature/Unit Tests
 
