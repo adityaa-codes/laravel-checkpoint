@@ -43,8 +43,15 @@ final class DoctorCommand extends Command
         $rows[] = ['Config: driver', $this->statusWord('pass'), (string) $this->config->get('checkpoint.driver')];
         $rows[] = ['Config: queue.name', $this->statusWord('pass'), (string) $this->config->get('checkpoint.queue.name', 'db-ops')];
         $rows[] = ['Config: log_channel', $this->statusWord('pass'), (string) $this->config->get('checkpoint.log_channel', 'stack')];
+        $rows[] = ['Config: pgbackrest.stanza', $this->statusWord('pass'), (string) $this->config->get('checkpoint.drivers.pgbackrest.stanza', 'main')];
+        $rows[] = ['Config: pgbackrest.repo', $this->statusWord('pass'), (string) $this->config->get('checkpoint.drivers.pgbackrest.repo', 1)];
+        $rows[] = ['Config: pgbackrest.process_max', $this->statusWord('pass'), (string) $this->config->get('checkpoint.drivers.pgbackrest.process_max', 1)];
         $rows[] = $this->binaryRow('pg_dump');
-        $rows[] = $this->binaryRow('pgbackrest');
+        $rows[] = $this->configuredBinaryRow(
+            'pgBackRest',
+            (string) $this->config->get('checkpoint.drivers.pgbackrest.binary', 'pgbackrest'),
+            (string) $this->config->get('checkpoint.driver', '') === 'pgbackrest',
+        );
         $rows[] = $this->binaryRow('gzip');
         $rows[] = $this->tableRow('command_runs', (new CommandRun)->getTable());
         $rows[] = $this->tableRow('backup_drill_runs', (new BackupDrillRun)->getTable());
@@ -61,13 +68,27 @@ final class DoctorCommand extends Command
      */
     private function binaryRow(string $binary): array
     {
-        $path = (new ExecutableFinder)->find($binary);
+        return $this->configuredBinaryRow($binary, $binary, false);
+    }
 
-        if ($path === null) {
-            return ['Binary: '.$binary, $this->statusWord('warn'), 'Not found on PATH'];
+    /**
+     * @return array{0:string,1:string,2:string}
+     */
+    private function configuredBinaryRow(string $label, string $binary, bool $required): array
+    {
+        $trimmedBinary = trim($binary);
+
+        if ($trimmedBinary === '') {
+            return ['Binary: '.$label, $this->statusWord($required ? 'fail' : 'warn'), 'Binary is empty'];
         }
 
-        return ['Binary: '.$binary, $this->statusWord('pass'), $path];
+        $path = (new ExecutableFinder)->find($trimmedBinary);
+
+        if ($path === null) {
+            return ['Binary: '.$label, $this->statusWord($required ? 'fail' : 'warn'), sprintf('%s not found on PATH', $trimmedBinary)];
+        }
+
+        return ['Binary: '.$label, $this->statusWord('pass'), $path];
     }
 
     /**

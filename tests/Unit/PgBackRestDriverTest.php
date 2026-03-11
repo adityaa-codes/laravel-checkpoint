@@ -3,8 +3,13 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
+use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupCompleted;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use Illuminate\Support\Facades\Event;
 use Symfony\Component\Process\Process;
 
 it('builds typed pgbackrest backup commands from structured config', function (): void {
@@ -36,6 +41,20 @@ it('builds typed pgbackrest backup commands from structured config', function ()
         ->and($process->getCommandLine())->toContain('--backup-standby')
         ->and($process->getCommandLine())->toContain('--checksum-page')
         ->and($process->getCommandLine())->toContain('--buffer-size=4MiB');
+});
+
+it('requests json output for pgbackrest info operations', function (): void {
+    config()->set('checkpoint.drivers.pgbackrest.binary', 'pgbackrest');
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'pgbackrest_info',
+    ]);
+
+    $process = buildPgBackRestProcess(new PgBackRestDriver, $run);
+
+    expect($process->getCommandLine())
+        ->toContain('info')
+        ->and($process->getCommandLine())->toContain('--output=json');
 });
 
 it('adds restore options from structured config and the optional backup set argument', function (): void {
@@ -80,6 +99,77 @@ it('rejects unsupported pgbackrest operations', function (): void {
         ->toThrow(ConfigurationException::class, 'Unsupported pgBackRest operation [logical_backup].');
 });
 
+it('stores a structured summary for pgbackrest info runs', function (): void {
+    Event::fake([
+        BackupStarted::class,
+        BackupCompleted::class,
+        BackupFailed::class,
+    ]);
+
+    config()->set('checkpoint.drivers.pgbackrest.binary', fakePgBackRestScript(<<<'SH'
+#!/bin/sh
+printf '%s' '[{"name":"main","status":{"code":0,"message":"ok"},"backup":[{"label":"20260312-010101F","type":"full","timestamp":{"stop":1710200000},"info":{"repository":{"size":1048576}}}]}]'
+SH));
+
+    $run = CommandRun::query()->create([
+        'operation' => 'pgbackrest_info',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new PgBackRestDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+        ->and($run->exit_code)->toBe(0)
+        ->and($run->command_line)->toContain('--output=json')
+        ->and($run->command_output)->toContain('[checkpoint-summary]')
+        ->and($run->command_output)->toContain('"format": "pgbackrest-info-v1"')
+        ->and($run->command_output)->toContain('"label": "20260312-010101F"')
+        ->and($run->command_output)->toContain('[raw-output]');
+
+    Event::assertDispatched(BackupCompleted::class);
+    Event::assertNotDispatched(BackupFailed::class);
+});
+
+it('stores a structured summary when pgbackrest check fails', function (): void {
+    Event::fake([
+        BackupStarted::class,
+        BackupCompleted::class,
+        BackupFailed::class,
+    ]);
+
+    config()->set('checkpoint.drivers.pgbackrest.binary', fakePgBackRestScript(<<<'SH'
+#!/bin/sh
+echo 'P00   INFO: check command begin 2.57'
+echo 'WARN: stanza main archive command exceeded 60 seconds'
+echo 'ERROR: [082]: WAL segment 000000010000000000000001 was not archived before the 60000ms timeout'
+exit 25
+SH));
+
+    $run = CommandRun::query()->create([
+        'operation' => 'pgbackrest_check',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new PgBackRestDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Failed)
+        ->and($run->exit_code)->toBe(25)
+        ->and($run->command_output)->toContain('"format": "pgbackrest-check-v1"')
+        ->and($run->command_output)->toContain('"warning_count": 1')
+        ->and($run->command_output)->toContain('"error_count": 1')
+        ->and($run->command_output)->toContain('"stanza": "main"')
+        ->and($run->command_output)->toContain('WAL segment 000000010000000000000001');
+
+    Event::assertDispatched(BackupFailed::class);
+    Event::assertNotDispatched(BackupCompleted::class);
+});
+
 function buildPgBackRestProcess(PgBackRestDriver $driver, CommandRun $run): Process
 {
     $method = new ReflectionMethod($driver, 'buildProcess');
@@ -88,4 +178,18 @@ function buildPgBackRestProcess(PgBackRestDriver $driver, CommandRun $run): Proc
     $process = $method->invoke($driver, $run);
 
     return $process;
+}
+
+function fakePgBackRestScript(string $contents): string
+{
+    $path = tempnam(sys_get_temp_dir(), 'pgbackrest-test-');
+
+    if ($path === false) {
+        throw new RuntimeException('Unable to allocate a temporary pgBackRest test script.');
+    }
+
+    file_put_contents($path, $contents."\n");
+    chmod($path, 0755);
+
+    return $path;
 }

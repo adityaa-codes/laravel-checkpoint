@@ -43,6 +43,20 @@ it('rejects a missing configured user model', function (): void {
         ->toThrow(ConfigurationException::class, 'User model class App\\Missing\\User does not exist.');
 });
 
+it('rejects an empty pgbackrest stanza', function (): void {
+    config()->set('checkpoint.drivers.pgbackrest.stanza', '');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.stanza must be a non-empty string.');
+});
+
+it('rejects non-array pgbackrest extra args', function (): void {
+    config()->set('checkpoint.drivers.pgbackrest.extra_args.info', '--output=json');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.extra_args.info must be an array.');
+});
+
 it('rejects a queue timeout that is not lower than retry_after', function (): void {
     config()->set('checkpoint.queue.timeout', 3600);
     config()->set('checkpoint.queue.retry_after', 3600);

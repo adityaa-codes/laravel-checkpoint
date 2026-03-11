@@ -40,16 +40,21 @@ final class PgBackRestDriver implements BackupDriver
 
             $output = $this->combinedOutput($process);
             $exitCode = $process->getExitCode() ?? -1;
+            $normalizedOutput = $this->normalizeOutput(
+                $run->operation,
+                $output,
+                $exitCode,
+            );
 
             $run->forceFill([
-                'command_output' => $output,
+                'command_output' => $normalizedOutput,
                 'exit_code' => $exitCode,
             ])->save();
 
             if ($exitCode === 0) {
-                $run->markAsSucceeded($exitCode, $output);
+                $run->markAsSucceeded($exitCode, $normalizedOutput);
 
-                event(new BackupCompleted($run, $exitCode, $output));
+                event(new BackupCompleted($run, $exitCode, $normalizedOutput));
 
                 $this->logger()->info('Completed pgBackRest operation', [
                     'run_id' => $run->getKey(),
@@ -60,8 +65,8 @@ final class PgBackRestDriver implements BackupDriver
                 return;
             }
 
-            $run->markAsFailed($exitCode, $output);
-            event(new BackupFailed($run, $exitCode, $output));
+            $run->markAsFailed($exitCode, $normalizedOutput);
+            event(new BackupFailed($run, $exitCode, $normalizedOutput));
 
             $this->logger()->error('pgBackRest operation failed', [
                 'run_id' => $run->getKey(),
@@ -146,7 +151,7 @@ final class PgBackRestDriver implements BackupDriver
             ],
             'pgbackrest_info' => [
                 'command' => 'info',
-                'options' => [],
+                'options' => ['--output=json'],
                 'extra_args_key' => 'info',
             ],
             default => throw new ConfigurationException(
@@ -251,6 +256,137 @@ final class PgBackRestDriver implements BackupDriver
     private function combinedOutput(Process $process): string
     {
         return trim($process->getOutput()."\n".$process->getErrorOutput());
+    }
+
+    private function normalizeOutput(string $operation, string $rawOutput, int $exitCode): string
+    {
+        $summary = match ($operation) {
+            'pgbackrest_info' => $this->parseInfoSummary($rawOutput),
+            'pgbackrest_check' => $this->parseCheckSummary($rawOutput, $exitCode),
+            default => null,
+        };
+
+        if ($summary === null) {
+            return $rawOutput;
+        }
+
+        $encodedSummary = json_encode(
+            $summary,
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES,
+        );
+
+        if (! is_string($encodedSummary)) {
+            return $rawOutput;
+        }
+
+        $trimmedOutput = trim($rawOutput);
+
+        if ($trimmedOutput === '') {
+            return "[checkpoint-summary]\n".$encodedSummary;
+        }
+
+        return "[checkpoint-summary]\n".$encodedSummary."\n\n[raw-output]\n".$trimmedOutput;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function parseInfoSummary(string $output): ?array
+    {
+        $decoded = json_decode($output, true);
+
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        $stanzas = [];
+
+        foreach (array_values($decoded) as $entry) {
+            if (! is_array($entry)) {
+                continue;
+            }
+
+            $backupEntries = array_values(array_filter(
+                $entry['backup'] ?? [],
+                is_array(...),
+            ));
+            $latestBackup = $backupEntries === [] ? null : $backupEntries[array_key_last($backupEntries)];
+            $summary = [
+                'name' => is_string($entry['name'] ?? null) ? $entry['name'] : 'unknown',
+                'status_code' => is_int($entry['status']['code'] ?? null) ? $entry['status']['code'] : null,
+                'status_message' => is_string($entry['status']['message'] ?? null) ? $entry['status']['message'] : null,
+                'backup_count' => count($backupEntries),
+            ];
+
+            if (is_array($latestBackup)) {
+                $summary['latest_backup'] = array_filter([
+                    'label' => is_string($latestBackup['label'] ?? null) ? $latestBackup['label'] : null,
+                    'type' => is_string($latestBackup['type'] ?? null) ? $latestBackup['type'] : null,
+                    'repository_size' => is_int($latestBackup['info']['repository']['size'] ?? null)
+                        ? $latestBackup['info']['repository']['size']
+                        : null,
+                    'timestamp_stop' => is_int($latestBackup['timestamp']['stop'] ?? null)
+                        ? $latestBackup['timestamp']['stop']
+                        : null,
+                ], static fn (mixed $value): bool => $value !== null);
+            }
+
+            $stanzas[] = $summary;
+        }
+
+        return [
+            'format' => 'pgbackrest-info-v1',
+            'stanza_count' => count($stanzas),
+            'stanzas' => $stanzas,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function parseCheckSummary(string $output, int $exitCode): ?array
+    {
+        $lines = array_values(array_filter(
+            preg_split('/\R/u', trim($output)) ?: [],
+            static fn (string $line): bool => $line !== '',
+        ));
+
+        if ($lines === []) {
+            return null;
+        }
+
+        $stanza = null;
+        $infoCount = 0;
+        $warningCount = 0;
+        $errorCount = 0;
+
+        foreach ($lines as $line) {
+            if (preg_match('/\bINFO\b/', $line) === 1) {
+                $infoCount++;
+            }
+
+            if (preg_match('/\bWARN(?:ING)?\b/', $line) === 1) {
+                $warningCount++;
+            }
+
+            if (preg_match('/\bERROR\b/', $line) === 1) {
+                $errorCount++;
+            }
+
+            if ($stanza === null && preg_match('/stanza[^a-z0-9_-]*([a-z0-9_-]+)/i', $line, $matches) === 1) {
+                $stanza = $matches[1];
+            }
+        }
+
+        return [
+            'format' => 'pgbackrest-check-v1',
+            'ok' => $exitCode === 0 && $errorCount === 0,
+            'line_count' => count($lines),
+            'info_count' => $infoCount,
+            'warning_count' => $warningCount,
+            'error_count' => $errorCount,
+            'stanza' => $stanza,
+        ];
     }
 
     private function logger(): LoggerInterface

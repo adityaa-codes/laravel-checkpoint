@@ -9,6 +9,8 @@ it('renders the doctor health table', function (): void {
     checkpoint_artisan('db-ops:doctor')
         ->expectsOutputToContain('Config: driver')
         ->expectsOutputToContain('Config: queue.name')
+        ->expectsOutputToContain('Config: pgbackrest.stanza')
+        ->expectsOutputToContain('Binary: pgBackRest')
         ->expectsOutputToContain('DB: command_runs table')
         ->expectsOutputToContain('DB: backup_drill_runs table')
         ->expectsOutputToContain('Orphaned runs')
@@ -29,4 +31,13 @@ it('fails doctor when queue timeout settings are unsafe', function (): void {
     checkpoint_artisan('db-ops:doctor')
         ->expectsOutputToContain('Config validation')
         ->assertFailed();
+});
+
+it('shows the configured pgbackrest binary when it is missing from path', function (): void {
+    config()->set('checkpoint.driver', 'pgbackrest');
+    config()->set('checkpoint.drivers.pgbackrest.binary', 'missing-pgbackrest-binary');
+
+    checkpoint_artisan('db-ops:doctor')
+        ->expectsOutputToContain('Binary: pgBackRest')
+        ->assertSuccessful();
 });

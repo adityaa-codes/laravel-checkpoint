@@ -18,6 +18,7 @@ final readonly class ConfigValidator
     public function validate(): void
     {
         $this->validateDriver();
+        $this->validatePgBackRestConfig();
         $this->validateQueueSettings();
         $this->validateLogChannel();
         $this->validateUserModel();
@@ -59,6 +60,55 @@ final readonly class ConfigValidator
             throw new ConfigurationException(
                 (string) __('messages.errors.config_log_missing', ['channel' => $channel]),
             );
+        }
+    }
+
+    private function validatePgBackRestConfig(): void
+    {
+        $config = $this->config->get('checkpoint.drivers.pgbackrest', []);
+
+        if (! is_array($config)) {
+            throw new ConfigurationException('checkpoint.drivers.pgbackrest must be an array.');
+        }
+
+        $binary = $config['binary'] ?? null;
+        $stanza = $config['stanza'] ?? null;
+        $repo = $config['repo'] ?? null;
+        $processMax = $config['process_max'] ?? null;
+        $timeout = $config['command_timeout_seconds'] ?? null;
+
+        if (! is_string($binary) || trim($binary) === '') {
+            throw new ConfigurationException('checkpoint.drivers.pgbackrest.binary must be a non-empty string.');
+        }
+
+        if (! is_string($stanza) || trim($stanza) === '') {
+            throw new ConfigurationException('checkpoint.drivers.pgbackrest.stanza must be a non-empty string.');
+        }
+
+        if (! is_int($repo) || $repo < 1) {
+            throw new ConfigurationException('checkpoint.drivers.pgbackrest.repo must be an integer greater than zero.');
+        }
+
+        if (! is_int($processMax) || $processMax < 1) {
+            throw new ConfigurationException('checkpoint.drivers.pgbackrest.process_max must be an integer greater than zero.');
+        }
+
+        if (! is_int($timeout) || $timeout < 1) {
+            throw new ConfigurationException('checkpoint.drivers.pgbackrest.command_timeout_seconds must be greater than zero.');
+        }
+
+        $extraArgs = $config['extra_args'] ?? [];
+
+        if (! is_array($extraArgs)) {
+            throw new ConfigurationException('checkpoint.drivers.pgbackrest.extra_args must be an array.');
+        }
+
+        foreach (['backup', 'restore', 'verify', 'check', 'info'] as $key) {
+            if (! array_key_exists($key, $extraArgs) || ! is_array($extraArgs[$key])) {
+                throw new ConfigurationException(
+                    sprintf('checkpoint.drivers.pgbackrest.extra_args.%s must be an array.', $key),
+                );
+            }
         }
     }
 
