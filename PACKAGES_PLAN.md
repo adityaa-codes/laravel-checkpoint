@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 32 complete
+- `[x]` 34 complete
 - `[-]` 5 partial
-- `[ ]` 49 not started
+- `[ ]` 47 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -923,7 +923,7 @@ Audit summary:
 | [x] | C22 | ProcessCommandRunJob | ShouldQueue + ShouldBeUnique. uniqueId() exclusive for destructive ops. tries() forced to 1 for destructive ops. failed() marks run + fires BackupFailed + logs ERROR. | C19, C21 |
 | [x] | C43 | Destructive op: force max_attempts=1 | tries() checks catalog.isDestructive(); logs WARNING if config attempts > 1 for destructive op | C22, C13 |
 | [x] | C47 | Queue mutex per operation type | uniqueId() returns 'db-ops-exclusive:{operation}' for destructive+backup ops; 'db-ops-run:{id}' for info/check ops | C22, C13 |
-| [ ] | C23 | EnqueueLogicalBackupCommand | artisan db-ops:enqueue-backup, success/failure output, uses EnqueueCommandRunAction | C21 |
+| [x] | C23 | EnqueueLogicalBackupCommand | artisan db-ops:enqueue-backup, success/failure output, uses EnqueueCommandRunAction | C21 |
 | [ ] | C24 | EnqueueCommand (generic) | artisan db-ops:enqueue {operation} {--argument=}, interactive select if omitted | C21 |
 | [ ] | C25 | StatusCommand | artisan db-ops:status {--limit=10}, table output with colored status | C07 |
 | [ ] | C25b | RecordDrillRunCommand | artisan db-ops:record-drill with all --options. Creates BackupDrillRun, fires BackupDrillCompleted. | C08, C28 |
@@ -957,7 +957,7 @@ Audit summary:
 | [ ] | C32 | Test: CommandRunCatalogTest | validate, extend, isDestructive, isExclusive, custom_operations merge, exception cases | C13 |
 | [x] | C33 | Test: EnqueueCommandRunActionTest | creates CommandRun, dispatches job afterCommit, fires BackupQueued, argument validation, DB transaction | C21 |
 | [x] | C34 | Test: ProcessCommandRunJobTest | driver called, status transitions, events fired, tries()=1 for destructive, failed() callback | C22, C43, C47 |
-| [ ] | C35 | Test: EnqueueLogicalBackupCommandTest | schedule timing, artisan exit codes | C23 |
+| [x] | C35 | Test: EnqueueLogicalBackupCommandTest | schedule timing, artisan exit codes | C23 |
 | [x] | C36 | Test: ShellCommandDriverTest (unit) | argv array construction, placeholder substitution, no shell strings, pre-restore snapshot trigger | C41 |
 | [ ] | C37 | Test: BackupDrillRunTest | scopes, isPassing(), factory states | C08 |
 | [ ] | C38 | Test: CommandRunModelTest | scopes, markAs* helpers, MassPrunable, polymorphic relation | C07 |
