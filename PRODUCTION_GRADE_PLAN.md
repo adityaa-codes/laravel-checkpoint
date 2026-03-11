@@ -233,30 +233,30 @@ Goal:
 Replace free-form PostgreSQL production backup handling with structured pgBackRest behavior.
 
 Status:
-- `[ ]` not started
+- `[-]` in progress
 
 Tasks:
 
-- `[ ]` add `PgBackRestDriver`
-- `[ ]` define typed config for:
-  - `[ ]` stanza
-  - `[ ]` repo
-  - `[ ]` backup type: full/diff/incr
-  - `[ ]` `process-max`
-  - `[ ]` `resume`
-  - `[ ]` `start-fast`
-  - `[ ]` `backup-standby`
-  - `[ ]` `checksum-page`
-  - `[ ]` verify/check/info options
-- `[ ]` add operations to catalog for:
-  - `[ ]` `pgbackrest_backup_full`
-  - `[ ]` `pgbackrest_backup_diff`
-  - `[ ]` `pgbackrest_backup_incr`
-  - `[ ]` `pgbackrest_restore`
-  - `[ ]` `pgbackrest_verify`
-  - `[ ]` `pgbackrest_check`
-  - `[ ]` `pgbackrest_info`
-- `[ ]` add typed placeholder-free command building
+- `[x]` add `PgBackRestDriver`
+- `[x]` define typed config for:
+  - `[x]` stanza
+  - `[x]` repo
+  - `[x]` backup type: full/diff/incr
+  - `[x]` `process-max`
+  - `[x]` `resume`
+  - `[x]` `start-fast`
+  - `[x]` `backup-standby`
+  - `[x]` `checksum-page`
+  - `[x]` verify/check/info options
+- `[x]` add operations to catalog for:
+  - `[x]` `pgbackrest_backup_full`
+  - `[x]` `pgbackrest_backup_diff`
+  - `[x]` `pgbackrest_backup_incr`
+  - `[x]` `pgbackrest_restore`
+  - `[x]` `pgbackrest_verify`
+  - `[x]` `pgbackrest_check`
+  - `[x]` `pgbackrest_info`
+- `[x]` add typed placeholder-free command building
 - `[ ]` add structured parsing for `info` and `check` output where possible
 - `[ ]` add tests for command construction, backup type selection, and failure behavior
 - `[ ]` add doctor checks for pgBackRest binary presence and config completeness
