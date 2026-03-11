@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 35 complete
+- `[x]` 36 complete
 - `[-]` 5 partial
-- `[ ]` 46 not started
+- `[ ]` 45 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -925,7 +925,7 @@ Audit summary:
 | [x] | C47 | Queue mutex per operation type | uniqueId() returns 'db-ops-exclusive:{operation}' for destructive+backup ops; 'db-ops-run:{id}' for info/check ops | C22, C13 |
 | [x] | C23 | EnqueueLogicalBackupCommand | artisan db-ops:enqueue-backup, success/failure output, uses EnqueueCommandRunAction | C21 |
 | [x] | C24 | EnqueueCommand (generic) | artisan db-ops:enqueue {operation} {--argument=}, interactive select if omitted | C21 |
-| [ ] | C25 | StatusCommand | artisan db-ops:status {--limit=10}, table output with colored status | C07 |
+| [x] | C25 | StatusCommand | artisan db-ops:status {--limit=10}, table output with colored status | C07 |
 | [ ] | C25b | RecordDrillRunCommand | artisan db-ops:record-drill with all --options. Creates BackupDrillRun, fires BackupDrillCompleted. | C08, C28 |
 | [ ] | C45 | HealthCheckCommand | artisan db-ops:health-check. Marks Running runs as Failed if started_at older than queue.timeout. Logs ERROR per recovery. Scheduled every 5 min. | C07, C28 |
 | [ ] | C42 | RecoverOrphansCommand | artisan db-ops:recover-orphans. Re-dispatches Pending runs with no active job older than orphan_threshold (10 min). Logs WARNING per re-dispatch. Scheduled every 10 min. | C21, C22 |
