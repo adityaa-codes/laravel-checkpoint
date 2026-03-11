@@ -32,7 +32,7 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             $app->make(EnqueueCommandRunAction::class),
         ));
 
-        $this->app->bind(BackupDriver::class, function ($app): BackupDriver {
+        $this->app->bind(function ($app): BackupDriver {
             $driver = (string) $app['config']->get('checkpoint.driver', 'shell');
             $class = $app['config']->get("checkpoint.drivers.{$driver}.class");
 

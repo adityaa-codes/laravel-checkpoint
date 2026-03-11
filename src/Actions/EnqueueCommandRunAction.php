@@ -31,7 +31,7 @@ class EnqueueCommandRunAction
             'requested_by_id' => $requestedBy?->getKey(),
         ]));
 
-        ProcessCommandRunJob::dispatch($run)
+        dispatch(new ProcessCommandRunJob($run))
             ->onQueue(config('checkpoint.queue.name', 'db-ops'))
             ->afterCommit();
 

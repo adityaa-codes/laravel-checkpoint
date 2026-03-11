@@ -5,7 +5,7 @@ declare(strict_types=1);
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 
@@ -25,14 +25,14 @@ it('marks timed-out running runs as failed and leaves recent runs untouched', fu
         'operation' => 'logical_backup',
         'status' => CommandRunStatus::Running,
         'attempts' => 0,
-        'started_at' => Carbon::now()->subMinutes(10),
+        'started_at' => Date::now()->subMinutes(10),
     ]);
 
     $healthyRun = CommandRun::query()->create([
         'operation' => 'pgbackrest_info',
         'status' => CommandRunStatus::Running,
         'attempts' => 0,
-        'started_at' => Carbon::now()->subMinutes(2),
+        'started_at' => Date::now()->subMinutes(2),
     ]);
 
     checkpoint_artisan('db-ops:health-check')
@@ -47,7 +47,7 @@ it('marks timed-out running runs as failed and leaves recent runs untouched', fu
         ->and($timedOutRun->exit_code)->toBe(-1)
         ->and($healthyRun->status)->toBe(CommandRunStatus::Running);
 
-    Event::assertDispatched(BackupFailed::class, fn (BackupFailed $event): bool => $event->run->is($timedOutRun)
+    Event::assertDispatched(fn (BackupFailed $event): bool => $event->run->is($timedOutRun)
         && $event->output === 'Timed out by health check'
         && $event->exitCode === -1);
 });

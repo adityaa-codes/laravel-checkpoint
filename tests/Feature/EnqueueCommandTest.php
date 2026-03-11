@@ -21,8 +21,8 @@ it('queues the provided operation from the generic command', function (): void {
     expect($run->operation)->toBe('pgbackrest_info')
         ->and($run->argument_text)->toBeNull();
 
-    Bus::assertDispatched(ProcessCommandRunJob::class, fn (ProcessCommandRunJob $job): bool => $job->run->is($run));
-    Event::assertDispatched(BackupQueued::class, fn (BackupQueued $event): bool => $event->run->is($run));
+    Bus::assertDispatched(fn (ProcessCommandRunJob $job): bool => $job->run->is($run));
+    Event::assertDispatched(fn (BackupQueued $event): bool => $event->run->is($run));
 });
 
 it('prompts for the operation and argument when needed', function (): void {

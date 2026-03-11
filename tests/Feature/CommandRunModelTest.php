@@ -6,7 +6,7 @@ use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Foundation\Auth\User;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
 it('filters command runs through the status scopes', function (): void {
     $pendingRun = CommandRun::factory()->pending()->create();
@@ -27,7 +27,7 @@ it('filters command runs through the status scopes', function (): void {
 });
 
 it('updates status metadata through markAs helper methods', function (): void {
-    Carbon::setTestNow('2026-03-11 12:00:00');
+    Date::setTestNow('2026-03-11 12:00:00');
 
     $run = CommandRun::factory()->pending()->create();
 
@@ -37,7 +37,7 @@ it('updates status metadata through markAs helper methods', function (): void {
     expect($run->status)->toBe(CommandRunStatus::Running)
         ->and($run->started_at?->toDateTimeString())->toBe('2026-03-11 12:00:00');
 
-    Carbon::setTestNow('2026-03-11 12:05:00');
+    Date::setTestNow('2026-03-11 12:05:00');
 
     $run->markAsSucceeded(0, 'done');
     $run->refresh();
@@ -47,7 +47,7 @@ it('updates status metadata through markAs helper methods', function (): void {
         ->and($run->command_output)->toBe('done')
         ->and($run->finished_at?->toDateTimeString())->toBe('2026-03-11 12:05:00');
 
-    Carbon::setTestNow('2026-03-11 12:10:00');
+    Date::setTestNow('2026-03-11 12:10:00');
 
     $run->markAsFailed(2, 'broken');
     $run->refresh();
@@ -57,7 +57,7 @@ it('updates status metadata through markAs helper methods', function (): void {
         ->and($run->command_output)->toBe('broken')
         ->and($run->finished_at?->toDateTimeString())->toBe('2026-03-11 12:10:00');
 
-    Carbon::setTestNow();
+    Date::setTestNow();
 });
 
 it('selects prunable records using the configured retention windows', function (): void {
@@ -65,18 +65,18 @@ it('selects prunable records using the configured retention windows', function (
     config()->set('checkpoint.schedule.prune_keep_failed_days', 365);
 
     $prunableSucceeded = CommandRun::factory()->succeeded()->create([
-        'created_at' => Carbon::now()->subDays(45),
-        'updated_at' => Carbon::now()->subDays(45),
+        'created_at' => Date::now()->subDays(45),
+        'updated_at' => Date::now()->subDays(45),
     ]);
 
     $retainedFailed = CommandRun::factory()->failed()->create([
-        'created_at' => Carbon::now()->subDays(100),
-        'updated_at' => Carbon::now()->subDays(100),
+        'created_at' => Date::now()->subDays(100),
+        'updated_at' => Date::now()->subDays(100),
     ]);
 
     $prunableFailed = CommandRun::factory()->failed()->create([
-        'created_at' => Carbon::now()->subDays(400),
-        'updated_at' => Carbon::now()->subDays(400),
+        'created_at' => Date::now()->subDays(400),
+        'updated_at' => Date::now()->subDays(400),
     ]);
 
     $prunableIds = (new CommandRun)->prunable()->pluck('id')->all();

@@ -115,7 +115,7 @@ it('marks the run failed and emits the failure event in the failed callback', fu
         ->and($run->exit_code)->toBe(-1)
         ->and($run->command_output)->toBe('boom');
 
-    Event::assertDispatched(BackupFailed::class, fn (BackupFailed $event): bool => $event->run->is($run)
+    Event::assertDispatched(fn (BackupFailed $event): bool => $event->run->is($run)
         && $event->exitCode === -1
         && $event->output === 'boom'
         && $event->exception instanceof RuntimeException);

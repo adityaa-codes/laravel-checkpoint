@@ -24,7 +24,7 @@ final class RecoverOrphansCommand extends Command
             ->pending()
             ->where('created_at', '<', $threshold)
             ->each(function (CommandRun $run): void {
-                ProcessCommandRunJob::dispatch($run)
+                dispatch(new ProcessCommandRunJob($run))
                     ->onQueue(config('checkpoint.queue.name', 'db-ops'));
 
                 Log::channel(config('checkpoint.log_channel', 'stack'))

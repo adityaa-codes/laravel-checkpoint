@@ -7,7 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillCompleted;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use Illuminate\Console\Command;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -95,7 +95,7 @@ final class RecordDrillRunCommand extends Command
             'executed_at' => ['required', 'date'],
         ])->validate();
 
-        $validated['executed_at'] = Carbon::parse((string) $validated['executed_at']);
+        $validated['executed_at'] = Date::parse((string) $validated['executed_at']);
 
         return $validated;
     }

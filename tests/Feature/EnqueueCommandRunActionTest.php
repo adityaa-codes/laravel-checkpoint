@@ -15,7 +15,7 @@ it('creates a pending command run and dispatches processing after commit', funct
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    $run = app(EnqueueCommandRunAction::class)->execute('logical_restore_file', ' nightly.sql ');
+    $run = resolve(EnqueueCommandRunAction::class)->execute('logical_restore_file', ' nightly.sql ');
 
     expect($run->exists)->toBeTrue()
         ->and($run->status)->toBe(CommandRunStatus::Pending)
@@ -28,18 +28,18 @@ it('creates a pending command run and dispatches processing after commit', funct
     expect($storedRun)->not->toBeNull();
     expect($storedRun?->argument_text)->toBe('nightly.sql');
 
-    Bus::assertDispatched(ProcessCommandRunJob::class, fn (ProcessCommandRunJob $job): bool => $job->run->is($run)
+    Bus::assertDispatched(fn (ProcessCommandRunJob $job): bool => $job->run->is($run)
         && $job->queue === 'db-ops'
         && $job->afterCommit === true);
 
-    Event::assertDispatched(BackupQueued::class, fn (BackupQueued $event): bool => $event->run->is($run));
+    Event::assertDispatched(fn (BackupQueued $event): bool => $event->run->is($run));
 });
 
 it('rejects invalid arguments without creating a run or dispatching a job', function (): void {
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    expect(fn () => app(EnqueueCommandRunAction::class)->execute('logical_restore_file'))
+    expect(fn () => resolve(EnqueueCommandRunAction::class)->execute('logical_restore_file'))
         ->toThrow(InvalidArgumentException::class);
 
     expect(CommandRun::query()->count())->toBe(0);

@@ -3,15 +3,15 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
 it('orders drill runs by executed_at descending via the recent scope', function (): void {
     $oldRun = BackupDrillRun::factory()->create([
-        'executed_at' => Carbon::parse('2026-03-10 08:00:00'),
+        'executed_at' => Date::parse('2026-03-10 08:00:00'),
     ]);
 
     $newRun = BackupDrillRun::factory()->create([
-        'executed_at' => Carbon::parse('2026-03-11 08:00:00'),
+        'executed_at' => Date::parse('2026-03-11 08:00:00'),
     ]);
 
     expect(BackupDrillRun::query()->recent()->pluck('id')->all())

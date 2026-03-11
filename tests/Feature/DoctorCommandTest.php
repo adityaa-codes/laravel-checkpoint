@@ -18,6 +18,6 @@ it('renders the doctor health table', function (): void {
 it('throws a configuration exception for invalid config in non-production', function (): void {
     config()->set('checkpoint.table_prefix', '');
 
-    expect(fn () => app(ConfigValidator::class)->validate())
+    expect(fn () => resolve(ConfigValidator::class)->validate())
         ->toThrow(ConfigurationException::class, 'checkpoint.table_prefix must be a non-empty string.');
 });

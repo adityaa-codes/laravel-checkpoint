@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
 it('prunes old runs while retaining recent failed runs per retention policy', function (): void {
     config()->set('checkpoint.schedule.prune_keep_days', 30);
@@ -14,24 +14,24 @@ it('prunes old runs while retaining recent failed runs per retention policy', fu
         'operation' => 'logical_backup',
         'status' => CommandRunStatus::Succeeded,
         'attempts' => 0,
-        'created_at' => Carbon::now()->subDays(45),
-        'updated_at' => Carbon::now()->subDays(45),
+        'created_at' => Date::now()->subDays(45),
+        'updated_at' => Date::now()->subDays(45),
     ]);
 
     $retainedFailed = CommandRun::query()->create([
         'operation' => 'logical_restore_file',
         'status' => CommandRunStatus::Failed,
         'attempts' => 0,
-        'created_at' => Carbon::now()->subDays(100),
-        'updated_at' => Carbon::now()->subDays(100),
+        'created_at' => Date::now()->subDays(100),
+        'updated_at' => Date::now()->subDays(100),
     ]);
 
     $freshPending = CommandRun::query()->create([
         'operation' => 'pgbackrest_info',
         'status' => CommandRunStatus::Pending,
         'attempts' => 0,
-        'created_at' => Carbon::now()->subDays(5),
-        'updated_at' => Carbon::now()->subDays(5),
+        'created_at' => Date::now()->subDays(5),
+        'updated_at' => Date::now()->subDays(5),
     ]);
 
     checkpoint_artisan('db-ops:prune')

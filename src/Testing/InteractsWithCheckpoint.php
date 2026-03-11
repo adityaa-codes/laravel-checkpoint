@@ -36,7 +36,7 @@ trait InteractsWithCheckpoint
 
     public function assertBackupQueued(string $operation, ?string $argument = null): static
     {
-        Event::assertDispatched(BackupQueued::class, function (BackupQueued $event) use ($operation, $argument): bool {
+        Event::assertDispatched(function (BackupQueued $event) use ($operation, $argument): bool {
             if ($event->run->operation !== $operation) {
                 return false;
             }
@@ -67,7 +67,7 @@ trait InteractsWithCheckpoint
 
     public function assertBackupFailed(string $operation): static
     {
-        Event::assertDispatched(BackupFailed::class, fn (BackupFailed $event): bool => $event->run->operation === $operation);
+        Event::assertDispatched(fn (BackupFailed $event): bool => $event->run->operation === $operation);
 
         return $this;
     }

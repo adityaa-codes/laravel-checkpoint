@@ -38,7 +38,7 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
 
     public function uniqueId(): string
     {
-        $catalog = app(CommandRunCatalog::class);
+        $catalog = resolve(CommandRunCatalog::class);
 
         if ($catalog->isExclusive($this->run->operation)) {
             return sprintf('db-ops-exclusive:%s', $this->run->operation);
@@ -50,7 +50,7 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
     public function tries(): int
     {
         $configuredAttempts = (int) config('checkpoint.queue.max_attempts', 1);
-        $catalog = app(CommandRunCatalog::class);
+        $catalog = resolve(CommandRunCatalog::class);
 
         if ($catalog->isDestructive($this->run->operation)) {
             if ($configuredAttempts > 1) {
@@ -97,7 +97,7 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
             );
         }
 
-        $resolved = app($class);
+        $resolved = resolve($class);
 
         if (! $resolved instanceof BackupDriver) {
             throw new ConfigurationException(

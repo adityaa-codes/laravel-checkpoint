@@ -36,7 +36,7 @@ it('records a backup drill run and fires the completion event', function (): voi
         ->and($run->overall_result)->toBe('pass')
         ->and($run->executed_by)->toBe('ci-pipeline');
 
-    Event::assertDispatched(BackupDrillCompleted::class, fn (BackupDrillCompleted $event): bool => $event->run->is($run));
+    Event::assertDispatched(fn (BackupDrillCompleted $event): bool => $event->run->is($run));
 });
 
 it('fails validation when required drill fields are missing', function (): void {
