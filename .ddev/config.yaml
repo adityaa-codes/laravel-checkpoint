@@ -1,0 +1,6 @@
+name: laravel-checkpoint
+type: php
+php_version: "8.4"
+composer_version: "2"
+composer_root: "."
+webserver_type: generic
