@@ -8,6 +8,7 @@ use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use Illuminate\Contracts\Config\Repository;
 
+/** @internal */
 class ConfigValidator
 {
     public function __construct(

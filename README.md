@@ -54,9 +54,25 @@ php artisan vendor:publish --tag="laravel-checkpoint-views"
 ## Usage
 
 ```php
-$laravelCheckpoint = new AdityaaCodes\LaravelCheckpoint();
-echo $laravelCheckpoint->echoPhrase('Hello, AdityaaCodes!');
+use AdityaaCodes\LaravelCheckpoint\Facades\LaravelCheckpoint;
+
+$run = LaravelCheckpoint::execute('logical_backup');
 ```
+
+## Extending
+
+Public API surface:
+
+- `AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver`
+- `AdityaaCodes\LaravelCheckpoint\Models\CommandRun`
+- `AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun`
+- `AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus`
+- `AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog`
+- `AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction`
+- `AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint`
+- All event classes under `AdityaaCodes\LaravelCheckpoint\Events`
+
+Internal implementation details such as drivers, queue jobs, and config validation are marked `@internal` and should not be treated as extension points.
 
 ## Package Development
 

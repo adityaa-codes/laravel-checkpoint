@@ -18,6 +18,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
+/** @internal */
 class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
