@@ -4,17 +4,26 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Models;
 
+use AdityaaCodes\LaravelCheckpoint\Database\Factories\CommandRunFactory;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class CommandRun extends Model
 {
+    /** @use HasFactory<CommandRunFactory> */
+    use HasFactory;
     use MassPrunable;
 
     protected $guarded = [];
+
+    protected static function newFactory(): CommandRunFactory
+    {
+        return CommandRunFactory::new();
+    }
 
     protected function casts(): array
     {
