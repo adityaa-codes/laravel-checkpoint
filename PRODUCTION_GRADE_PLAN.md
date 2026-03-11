@@ -34,11 +34,11 @@ This plan is based on:
 ### Current Production Gaps
 
 - `[ ]` queue timeout / retry contract is now enforced in code, but production worker guidance still needs wider operator rollout
-- `[!]` backup execution is still modeled as generic shell commands instead of a first-class pgBackRest strategy
+- `[x]` backup execution now has first-class pgBackRest and pgDump drivers alongside the shell escape hatch
 - `[ ]` scheduler overlap and cluster guards are now implemented
 - `[!]` there is no structured backup state, retention state, or verification model beyond raw command output
 - `[!]` no object storage / multi-repository / encryption-first config model yet
-- `[!]` no explicit huge-database logical export strategy such as `pg_dump -Fd -j`
+- `[x]` huge-database logical export strategy now exists through the dedicated `pgdump` driver
 
 ## Key Learnings
 
@@ -272,17 +272,17 @@ Goal:
 Support logical export as a separate large-database workflow, not as the main DR system.
 
 Status:
-- `[ ]` not started
+- `[x]` complete
 
 Tasks:
 
-- `[ ]` add optional `PgDumpDriver`
-- `[ ]` support directory format export configuration
-- `[ ]` support parallel job count for logical dumps
-- `[ ]` support compression and output target rules
-- `[ ]` add explicit operator guidance that logical dumps are not the primary DR strategy
-- `[ ]` add catalog operations for logical export/import where appropriate
-- `[ ]` add tests for large-export command building
+- `[x]` add optional `PgDumpDriver`
+- `[x]` support directory format export configuration
+- `[x]` support parallel job count for logical dumps
+- `[x]` support compression and output target rules
+- `[x]` add explicit operator guidance that logical dumps are not the primary DR strategy
+- `[x]` add catalog operations for logical export/import where appropriate
+- `[x]` add tests for large-export command building
 
 Acceptance:
 

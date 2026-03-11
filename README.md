@@ -30,7 +30,7 @@ Important config groups in `config/checkpoint.php`:
 - `user_model`, `user_name_column`, `table_prefix`
 - `queue.connection`, `queue.name`, `queue.max_attempts`, `queue.retry_after`, `queue.timeout`, `queue.unique_for`, `queue.lock_store`, `queue.orphan_threshold`
 - `schedule.logical_backup_*`, `schedule.health_check_enabled`, `schedule.recover_orphans_enabled`, `schedule.prune_enabled`, `schedule.without_overlapping`, `schedule.overlap_expires_at`, `schedule.on_one_server`
-- `driver`, `drivers.shell.*`
+- `driver`, `drivers.shell.*`, `drivers.pgbackrest.*`, `drivers.pgdump.*`
 - `log_channel`
 - `custom_operations`
 
@@ -52,6 +52,15 @@ DB_OPS_CMD_PITR_RESTORE=
 DB_OPS_CMD_BACKUP_DRILL=
 DB_OPS_CMD_PGBACKREST_CHECK=
 DB_OPS_CMD_PGBACKREST_INFO=
+
+DB_OPS_PGBACKREST_BINARY=pgbackrest
+DB_OPS_PGBACKREST_STANZA=main
+DB_OPS_PGDUMP_BINARY=pg_dump
+DB_OPS_PGRESTORE_BINARY=pg_restore
+DB_OPS_PGDUMP_FORMAT=directory
+DB_OPS_PGDUMP_JOBS=4
+DB_OPS_PGDUMP_COMPRESS_LEVEL=6
+DB_OPS_PGDUMP_OUTPUT_DIR=/var/app/checkpoint/logical-exports
 ```
 
 Command templates are configured as space-delimited argv-style strings and are parsed into Symfony Process argument arrays. User input is validated before it reaches the driver.
@@ -135,6 +144,40 @@ DB_OPS_CMD_LOGICAL_BACKUP="mysqldump --single-transaction {db}"
 ```
 
 If you need a custom implementation, bind `AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver` to your own driver class and point `checkpoint.driver` / `checkpoint.drivers` at it.
+
+### PostgreSQL Driver Strategy
+
+For PostgreSQL production environments, use the drivers with different roles:
+
+- `pgbackrest`: primary disaster-recovery and PITR workflow
+- `pgdump`: optional logical export workflow for large databases, schema export, selective restore preparation, and migration/archive use cases
+- `shell`: escape hatch for legacy or custom commands
+
+Logical exports are not the primary DR strategy for huge PostgreSQL systems. The recommended production path is:
+
+1. use `pgbackrest` for regular backup, restore, and verification
+2. use `pgdump` only when you specifically need a logical export artifact
+
+### pgDump Large-Export Configuration
+
+The bundled `pgdump` driver defaults to PostgreSQL directory format so large exports use parallel dump jobs:
+
+```env
+DB_OPS_DRIVER=pgdump
+DB_OPS_PGDUMP_FORMAT=directory
+DB_OPS_PGDUMP_JOBS=8
+DB_OPS_PGDUMP_COMPRESS_LEVEL=3
+DB_OPS_PGDUMP_OUTPUT_DIR=/var/app/checkpoint/logical-exports
+DB_OPS_PGDUMP_OUTPUT_PREFIX=huge-export
+```
+
+Behavior notes:
+
+- directory format exports use `pg_dump --format=directory --jobs=<n>`
+- parallel dump jobs are only valid for directory format
+- restore commands use `pg_restore`
+- `logical_restore_latest` resolves the newest export in the configured output directory
+- `logical_restore_file` resolves relative export names inside the configured output directory
 
 ## Extending The Catalog
 
