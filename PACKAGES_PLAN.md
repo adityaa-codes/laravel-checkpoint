@@ -849,9 +849,9 @@ Status legend:
 - `[ ]` not started
 
 Current totals for the **original 86 tasks**:
-- `[x]` 34 complete
+- `[x]` 35 complete
 - `[-]` 5 partial
-- `[ ]` 47 not started
+- `[ ]` 46 not started
 
 Audit summary:
 - The repository has the Spatie package skeleton in place, so the initial scaffold exists.
@@ -924,7 +924,7 @@ Audit summary:
 | [x] | C43 | Destructive op: force max_attempts=1 | tries() checks catalog.isDestructive(); logs WARNING if config attempts > 1 for destructive op | C22, C13 |
 | [x] | C47 | Queue mutex per operation type | uniqueId() returns 'db-ops-exclusive:{operation}' for destructive+backup ops; 'db-ops-run:{id}' for info/check ops | C22, C13 |
 | [x] | C23 | EnqueueLogicalBackupCommand | artisan db-ops:enqueue-backup, success/failure output, uses EnqueueCommandRunAction | C21 |
-| [ ] | C24 | EnqueueCommand (generic) | artisan db-ops:enqueue {operation} {--argument=}, interactive select if omitted | C21 |
+| [x] | C24 | EnqueueCommand (generic) | artisan db-ops:enqueue {operation} {--argument=}, interactive select if omitted | C21 |
 | [ ] | C25 | StatusCommand | artisan db-ops:status {--limit=10}, table output with colored status | C07 |
 | [ ] | C25b | RecordDrillRunCommand | artisan db-ops:record-drill with all --options. Creates BackupDrillRun, fires BackupDrillCompleted. | C08, C28 |
 | [ ] | C45 | HealthCheckCommand | artisan db-ops:health-check. Marks Running runs as Failed if started_at older than queue.timeout. Logs ERROR per recovery. Scheduled every 5 min. | C07, C28 |
