@@ -11,6 +11,7 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Gate;
 use Spatie\LaravelPackageTools\Package;
 
@@ -44,6 +45,10 @@ it('registers the default scheduled checkpoint commands', function (): void {
             ->and($event->expiresAt)->toBe(180)
             ->and($event->onOneServer)->toBeTrue();
     });
+});
+
+it('registers the public report command', function (): void {
+    expect(Artisan::all())->toHaveKey('db-ops:report');
 });
 
 it('registers published migrations in dependency order', function (): void {

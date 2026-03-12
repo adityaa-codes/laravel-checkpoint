@@ -10,6 +10,7 @@ use AdityaaCodes\LaravelCheckpoint\Console\HealthCheckCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecordDrillRunCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecoverOrphansCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\ReportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\StatusCommand;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\FakeDriver;
@@ -48,6 +49,7 @@ it('keeps package internals final by default with explicit seams', function (): 
         PruneCommand::class,
         RecordDrillRunCommand::class,
         RecoverOrphansCommand::class,
+        ReportCommand::class,
         StatusCommand::class,
         FakeDriver::class,
         ShellCommandDriver::class,
