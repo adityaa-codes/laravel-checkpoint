@@ -55,6 +55,8 @@ final readonly class OperationalReportBuilder
     {
         $restoreOperations = ['logical_restore_file', 'logical_restore_latest', 'pitr_restore', 'pgbackrest_restore'];
         $drillWindowDays = $this->backupDrillWindowDays();
+        $commandRunCounts = $this->commandRunSummaryCounts();
+        $drillSummary = $this->backupDrillSummary(now()->subDays($drillWindowDays));
 
         $lastKnownGood = CommandRun::query()
             ->whereNotNull('last_known_good_at')
@@ -77,21 +79,16 @@ final readonly class OperationalReportBuilder
             ->latest('started_at')
             ->latest('id')
             ->first();
-        $latestDrillRun = BackupDrillRun::query()->recent()->first();
-        $latestFailedDrillRun = BackupDrillRun::query()->where('overall_result', 'fail')->recent()->first();
-        $drillWindowStart = now()->subDays($drillWindowDays);
-        $recentDrillCount = BackupDrillRun::query()->where('executed_at', '>=', $drillWindowStart)->count();
-        $passingDrillCount = BackupDrillRun::query()->where('executed_at', '>=', $drillWindowStart)->where('overall_result', 'pass')->count();
 
         $summary = [
-            'pending_runs' => CommandRun::query()->pending()->count(),
-            'running_runs' => CommandRun::query()->running()->count(),
-            'failed_runs_24h' => CommandRun::query()->failed()->where('created_at', '>=', now()->subDay())->count(),
+            'pending_runs' => $commandRunCounts['pending_runs'],
+            'running_runs' => $commandRunCounts['running_runs'],
+            'failed_runs_24h' => $commandRunCounts['failed_runs_24h'],
             'last_known_good_backup' => $this->summarySignalPayload($lastKnownGood, 'last_known_good_at'),
             'latest_verified_backup' => $this->summarySignalPayload($latestVerified, 'verified_at'),
-            'latest_backup_drill' => $this->drillPayload($latestDrillRun),
-            'latest_failed_backup_drill' => $this->drillPayload($latestFailedDrillRun),
-            'backup_drill_pass_rate' => $this->drillPassRatePayload($recentDrillCount, $passingDrillCount, $drillWindowDays),
+            'latest_backup_drill' => $this->drillPayload($drillSummary['latest']),
+            'latest_failed_backup_drill' => $this->drillPayload($drillSummary['latest_failed']),
+            'backup_drill_pass_rate' => $this->drillPassRatePayload($drillSummary['total'], $drillSummary['passing'], $drillWindowDays),
             'latest_restore_run' => $this->restoreRunPayload($latestRestoreRun),
             'latest_restore_failure' => $this->restoreFailurePayload($latestRestoreFailure),
         ];
@@ -100,6 +97,42 @@ final readonly class OperationalReportBuilder
         $summary['backup_drill_pass_rate_30d'] = $summary['backup_drill_pass_rate'];
 
         return $summary;
+    }
+
+    /**
+     * @return array{pending_runs:int,running_runs:int,failed_runs_24h:int}
+     */
+    private function commandRunSummaryCounts(): array
+    {
+        return [
+            'pending_runs' => CommandRun::query()->pending()->count(),
+            'running_runs' => CommandRun::query()->running()->count(),
+            'failed_runs_24h' => CommandRun::query()->failed()->where('created_at', '>=', now()->subDay())->count(),
+        ];
+    }
+
+    /**
+     * @return array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int}
+     */
+    private function backupDrillSummary(Carbon $windowStart): array
+    {
+        $latest = BackupDrillRun::query()->recent()->first();
+        $latestFailed = BackupDrillRun::query()->where('overall_result', 'fail')->recent()->first();
+        $counts = BackupDrillRun::query()
+            ->where('executed_at', '>=', $windowStart)
+            ->selectRaw(
+                'COUNT(*) as total,
+                 SUM(CASE WHEN overall_result = ? THEN 1 ELSE 0 END) as passing',
+                ['pass'],
+            )
+            ->first();
+
+        return [
+            'latest' => $latest instanceof BackupDrillRun ? $latest : null,
+            'latest_failed' => $latestFailed instanceof BackupDrillRun ? $latestFailed : null,
+            'total' => (int) ($counts?->total ?? 0),
+            'passing' => (int) ($counts?->passing ?? 0),
+        ];
     }
 
     /**
@@ -164,8 +197,9 @@ final readonly class OperationalReportBuilder
         );
         $rows[] = $this->lastKnownGoodCheck();
         $rows[] = $this->backupDurationAnomalyCheck();
-        $rows[] = $this->backupDrillFreshnessCheck();
-        $rows[] = $this->backupDrillPassRateCheck();
+        $backupDrillSummary = $this->backupDrillSummary(now()->subDays($this->backupDrillWindowDays()));
+        $rows[] = $this->backupDrillFreshnessCheck($backupDrillSummary['latest']);
+        $rows[] = $this->backupDrillPassRateCheck($backupDrillSummary);
 
         return $rows;
     }
@@ -465,10 +499,9 @@ final readonly class OperationalReportBuilder
     /**
      * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
      */
-    private function backupDrillFreshnessCheck(): array
+    private function backupDrillFreshnessCheck(?BackupDrillRun $latest): array
     {
         $thresholdDays = max(1, (int) $this->config->get('checkpoint.observability.max_backup_drill_age_days', 30));
-        $latest = BackupDrillRun::query()->recent()->first();
 
         if (! $latest instanceof BackupDrillRun) {
             event(new BackupDrillFreshnessAlarmTriggered(null, 'missing', null, $thresholdDays));
@@ -507,15 +540,16 @@ final readonly class OperationalReportBuilder
     /**
      * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
      */
-    private function backupDrillPassRateCheck(): array
+    /**
+     * @param  array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int}  $summary
+     */
+    private function backupDrillPassRateCheck(array $summary): array
     {
         $windowDays = $this->backupDrillWindowDays();
         $thresholdPercent = max(0.0, min(100.0, (float) $this->config->get('checkpoint.observability.backup_drill_min_pass_rate', 100.0)));
-        $windowStart = now()->subDays($windowDays);
-        $total = BackupDrillRun::query()
-            ->where('executed_at', '>=', $windowStart)
-            ->count();
-        $latest = BackupDrillRun::query()->recent()->first();
+        $total = $summary['total'];
+        $passing = $summary['passing'];
+        $latest = $summary['latest'];
 
         if ($total < 1) {
             event(new BackupDrillPassRateAlarmTriggered($windowDays, 0, 0, 0.0, $thresholdPercent, $latest));
@@ -531,10 +565,6 @@ final readonly class OperationalReportBuilder
             ]);
         }
 
-        $passing = BackupDrillRun::query()
-            ->where('executed_at', '>=', $windowStart)
-            ->where('overall_result', 'pass')
-            ->count();
         $percent = round(($passing / $total) * 100, 1);
         $isBelowThreshold = $percent < $thresholdPercent;
 

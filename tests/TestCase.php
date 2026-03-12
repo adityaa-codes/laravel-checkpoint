@@ -203,6 +203,11 @@ class TestCase extends Orchestra
             $migration = require __DIR__.'/../database/migrations/create_checkpoint_backup_drill_runs_table.php.stub';
             $migration->up();
         }
+
+        if (! $this->hasIndex('db_ops_command_runs', 'db_ops_command_runs_verified_at_lookup_index')) {
+            $migration = require __DIR__.'/../database/migrations/add_reporting_indexes_to_checkpoint_tables.php.stub';
+            $migration->up();
+        }
     }
 
     /**
@@ -215,5 +220,13 @@ class TestCase extends Orchestra
         $factoryClass = 'AdityaaCodes\\LaravelCheckpoint\\Database\\Factories\\'.class_basename($modelName).'Factory';
 
         return $factoryClass;
+    }
+
+    private function hasIndex(string $table, string $indexName): bool
+    {
+        /** @var list<object{name:string}> $indexes */
+        $indexes = \Illuminate\Support\Facades\DB::select(sprintf("PRAGMA index_list('%s')", $table));
+
+        return collect($indexes)->contains(fn (object $index): bool => (string) $index->name === $indexName);
     }
 }

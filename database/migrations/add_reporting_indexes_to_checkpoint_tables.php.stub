@@ -1,0 +1,128 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        $commandRuns = $this->commandRunsTable();
+        $backupDrillRuns = $this->backupDrillRunsTable();
+
+        if (Schema::hasTable($commandRuns)) {
+            Schema::table($commandRuns, function (Blueprint $table) use ($commandRuns): void {
+                if (! $this->hasIndex($commandRuns, $this->verifiedAtIndexName())) {
+                    $table->index(['verification_state', 'verified_at', 'id'], $this->verifiedAtIndexName());
+                }
+
+                if (! $this->hasIndex($commandRuns, $this->statusCreatedAtIndexName())) {
+                    $table->index(['status', 'created_at'], $this->statusCreatedAtIndexName());
+                }
+
+                if (! $this->hasIndex($commandRuns, $this->restoreFinishedIndexName())) {
+                    $table->index(['operation', 'status', 'finished_at', 'id'], $this->restoreFinishedIndexName());
+                }
+
+                if (! $this->hasIndex($commandRuns, $this->restoreActivityIndexName())) {
+                    $table->index(['operation', 'finished_at', 'started_at', 'id'], $this->restoreActivityIndexName());
+                }
+
+            });
+        }
+
+        if (Schema::hasTable($backupDrillRuns)) {
+            Schema::table($backupDrillRuns, function (Blueprint $table) use ($backupDrillRuns): void {
+                if (! $this->hasIndex($backupDrillRuns, $this->drillExecutedAtIndexName())) {
+                    $table->index(['executed_at', 'overall_result'], $this->drillExecutedAtIndexName());
+                }
+
+                if (! $this->hasIndex($backupDrillRuns, $this->drillResultExecutedAtIndexName())) {
+                    $table->index(['overall_result', 'executed_at'], $this->drillResultExecutedAtIndexName());
+                }
+            });
+        }
+    }
+
+    public function down(): void
+    {
+        $commandRuns = $this->commandRunsTable();
+        $backupDrillRuns = $this->backupDrillRunsTable();
+
+        if (Schema::hasTable($commandRuns)) {
+            Schema::table($commandRuns, function (Blueprint $table): void {
+                $table->dropIndex($this->verifiedAtIndexName());
+                $table->dropIndex($this->statusCreatedAtIndexName());
+                $table->dropIndex($this->restoreFinishedIndexName());
+                $table->dropIndex($this->restoreActivityIndexName());
+            });
+        }
+
+        if (Schema::hasTable($backupDrillRuns)) {
+            Schema::table($backupDrillRuns, function (Blueprint $table): void {
+                $table->dropIndex($this->drillExecutedAtIndexName());
+                $table->dropIndex($this->drillResultExecutedAtIndexName());
+            });
+        }
+    }
+
+    private function hasIndex(string $table, string $indexName): bool
+    {
+        $connection = DB::connection();
+        $driver = $connection->getDriverName();
+
+        return match ($driver) {
+            'sqlite' => collect($connection->select(sprintf("PRAGMA index_list('%s')", $table)))
+                ->contains(fn (object $index): bool => (string) $index->name === $indexName),
+            'mysql' => collect($connection->select(sprintf('SHOW INDEX FROM `%s`', $table)))
+                ->contains(fn (object $index): bool => (string) ($index->Key_name ?? '') === $indexName),
+            'pgsql' => collect($connection->select(
+                'SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND tablename = ?',
+                [$table],
+            ))->contains(fn (object $index): bool => (string) ($index->indexname ?? '') === $indexName),
+            default => false,
+        };
+    }
+
+    private function commandRunsTable(): string
+    {
+        return sprintf('%scommand_runs', config('checkpoint.table_prefix', 'db_ops_'));
+    }
+
+    private function backupDrillRunsTable(): string
+    {
+        return sprintf('%sbackup_drill_runs', config('checkpoint.table_prefix', 'db_ops_'));
+    }
+
+    private function verifiedAtIndexName(): string
+    {
+        return $this->commandRunsTable().'_verified_at_lookup_index';
+    }
+
+    private function statusCreatedAtIndexName(): string
+    {
+        return $this->commandRunsTable().'_status_created_at_index';
+    }
+
+    private function restoreFinishedIndexName(): string
+    {
+        return $this->commandRunsTable().'_restore_finished_lookup_index';
+    }
+
+    private function restoreActivityIndexName(): string
+    {
+        return $this->commandRunsTable().'_restore_activity_lookup_index';
+    }
+
+    private function drillExecutedAtIndexName(): string
+    {
+        return $this->backupDrillRunsTable().'_executed_at_result_index';
+    }
+
+    private function drillResultExecutedAtIndexName(): string
+    {
+        return $this->backupDrillRunsTable().'_result_executed_at_index';
+    }
+};

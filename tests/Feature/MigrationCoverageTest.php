@@ -13,11 +13,19 @@ it('applies the command run migrations on a fresh install', function (): void {
     freshCommandRunMigration()->up();
     metadataCommandRunMigration()->up();
     orphanClaimMigration()->up();
+    backupDrillRunMigration()->up();
+    reportingIndexesMigration()->up();
 
     expect(Schema::hasTable('db_ops_command_runs'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'backup_type'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'orphan_recovery_claimed_at'))->toBeTrue()
-        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_orphan_recovery_index');
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_orphan_recovery_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_verified_at_lookup_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_status_created_at_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_restore_finished_lookup_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_restore_activity_lookup_index')
+        ->and(backupDrillRunIndexNames())->toContain('db_ops_backup_drill_runs_executed_at_result_index')
+        ->and(backupDrillRunIndexNames())->toContain('db_ops_backup_drill_runs_result_executed_at_index');
 });
 
 it('adds the orphan recovery claim column and index on upgrade installs', function (): void {
@@ -60,9 +68,15 @@ it('adds the orphan recovery claim column and index on upgrade installs', functi
 
     orphanClaimMigration()->up();
     orphanClaimMigration()->up();
+    reportingIndexesMigration()->up();
+    reportingIndexesMigration()->up();
 
     expect(Schema::hasColumn('db_ops_command_runs', 'orphan_recovery_claimed_at'))->toBeTrue()
-        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_orphan_recovery_index');
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_orphan_recovery_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_verified_at_lookup_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_status_created_at_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_restore_finished_lookup_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_restore_activity_lookup_index');
 });
 
 /**
@@ -99,6 +113,28 @@ function orphanClaimMigration(): object
 }
 
 /**
+ * @return object{up: callable():void}
+ */
+function reportingIndexesMigration(): object
+{
+    /** @var object{up: callable():void} $migration */
+    $migration = require __DIR__.'/../../database/migrations/add_reporting_indexes_to_checkpoint_tables.php.stub';
+
+    return $migration;
+}
+
+/**
+ * @return object{up: callable():void}
+ */
+function backupDrillRunMigration(): object
+{
+    /** @var object{up: callable():void} $migration */
+    $migration = require __DIR__.'/../../database/migrations/create_checkpoint_backup_drill_runs_table.php.stub';
+
+    return $migration;
+}
+
+/**
  * @return list<string>
  */
 function commandRunIndexNames(): array
@@ -106,5 +142,16 @@ function commandRunIndexNames(): array
     return array_map(
         static fn (object $index): string => (string) $index->name,
         DB::select("PRAGMA index_list('db_ops_command_runs')"),
+    );
+}
+
+/**
+ * @return list<string>
+ */
+function backupDrillRunIndexNames(): array
+{
+    return array_map(
+        static fn (object $index): string => (string) $index->name,
+        DB::select("PRAGMA index_list('db_ops_backup_drill_runs')"),
     );
 }
