@@ -156,6 +156,7 @@ php artisan db-ops:recover-orphans
 php artisan db-ops:prune
 php artisan db-ops:doctor
 php artisan db-ops:doctor --format=json
+php artisan db-ops:report --limit=10
 ```
 
 ## Driver Customization
@@ -262,6 +263,7 @@ Behavior notes:
 
 Operational surfaces now include:
 
+- `db-ops:report` for one combined machine-readable operational snapshot
 - `db-ops:doctor --format=json` for machine-readable health checks
 - `db-ops:doctor` freshness warnings for stale last-known-good backups
 - `db-ops:doctor` duration anomaly warnings for unusually slow backup runs
@@ -280,6 +282,19 @@ Operational surfaces now include:
 - `latest_backup_drill` and `latest_failed_backup_drill` identify the most recent drill outcomes
 - `backup_drill_pass_rate_30d` summarizes recent drill reliability for automation consumers
 - the table summary mirrors those signals for operators without requiring JSON parsing
+
+`db-ops:report` is the preferred automation surface when you want one payload
+instead of stitching together multiple commands. It combines:
+
+- `recent_runs`
+- `summary`
+- `health.ok` plus `health.checks`
+- a top-level `version`, `generated_at`, and active `driver`
+
+Report notes:
+
+- `health.ok` is only `true` when every emitted health check is `pass`
+- `summary.backup_drill_pass_rate.window_days` follows the same configurable drill pass-rate window as `db-ops:doctor`
 
 Backup drill observability thresholds are configurable:
 
