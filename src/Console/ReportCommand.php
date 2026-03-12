@@ -41,9 +41,13 @@ final class ReportCommand extends Command
             $health = [
                 'ok' => false,
                 'checks' => [[
+                    'code' => 'config.validation',
                     'check' => 'Config validation',
                     'status' => 'fail',
                     'notes' => $exception->getMessage(),
+                    'data' => [
+                        'exception' => $exception::class,
+                    ],
                 ]],
             ];
             $exitCode = self::FAILURE;

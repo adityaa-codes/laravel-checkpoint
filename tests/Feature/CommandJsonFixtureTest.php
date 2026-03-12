@@ -50,6 +50,21 @@ it('matches the doctor json fixture', function (): void {
     CommandJsonFixtureSupport::resetTime();
 });
 
+it('matches the failed doctor json fixture', function (): void {
+    CommandJsonFixtureSupport::freezeTime();
+    config()->set('checkpoint.queue.timeout', 3600);
+    config()->set('checkpoint.queue.retry_after', 300);
+
+    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+
+    checkpoint_assert_matches_fixture(
+        json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR),
+        'command-json/doctor-failure.json',
+    );
+
+    CommandJsonFixtureSupport::resetTime();
+});
+
 it('matches the operational report json fixture', function (): void {
     CommandJsonFixtureSupport::freezeTime();
     config()->set('checkpoint.observability.backup_drill_pass_rate_window_days', 14);
@@ -62,6 +77,21 @@ it('matches the operational report json fixture', function (): void {
     checkpoint_assert_matches_fixture(
         json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR),
         'command-json/report.json',
+    );
+
+    CommandJsonFixtureSupport::resetTime();
+});
+
+it('matches the failed operational report json fixture', function (): void {
+    CommandJsonFixtureSupport::freezeTime();
+    config()->set('checkpoint.queue.timeout', 3600);
+    config()->set('checkpoint.queue.retry_after', 300);
+
+    Artisan::call('db-ops:report', ['--limit' => 2]);
+
+    checkpoint_assert_matches_fixture(
+        json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR),
+        'command-json/report-failure.json',
     );
 
     CommandJsonFixtureSupport::resetTime();

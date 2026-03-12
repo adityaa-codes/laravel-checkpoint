@@ -1,222 +1,346 @@
 {
-  "generated_at": "2026-03-11T12:00:00+00:00",
   "driver": "shell",
-  "recent_runs": [
-    {
-      "id": 3,
-      "operation": "logical_restore_file",
-      "status": "failed",
-      "exit_code": 1,
-      "backup": "-",
-      "verification_state": "failed",
-      "restore_target": "nightly.sql",
-      "restore_audit": {
-        "environment": "testing",
-        "database": ":memory:",
-        "target": "nightly.sql",
-        "confirmation_required": true,
-        "confirmation_satisfied_via": "token",
-        "verified_backup_required": true,
-        "verified_signal_run_id": 2
-      },
-      "last_known_good_at": null,
-      "started_at": null,
-      "finished_at": "2026-03-11 11:42:00"
-    },
-    {
-      "id": 2,
-      "operation": "pgbackrest_backup_full",
-      "status": "succeeded",
-      "exit_code": 0,
-      "backup": "full:20260311-010101F",
-      "verification_state": "verified",
-      "restore_target": null,
-      "restore_audit": null,
-      "last_known_good_at": "2026-03-11 11:50:00",
-      "started_at": null,
-      "finished_at": null
-    }
-  ],
-  "summary": {
-    "pending_runs": 1,
-    "running_runs": 0,
-    "failed_runs_24h": 1,
-    "last_known_good_backup": {
-      "label": "full:20260311-010101F at 2026-03-11 11:50:00",
-      "timestamp": "2026-03-11 11:50:00",
-      "operation": "pgbackrest_backup_full"
-    },
-    "latest_verified_backup": {
-      "label": "full:20260311-010101F at 2026-03-11 11:55:00",
-      "timestamp": "2026-03-11 11:55:00",
-      "operation": "pgbackrest_backup_full"
-    },
-    "latest_backup_drill": {
-      "label": "drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00",
-      "timestamp": "2026-03-11 09:00:00",
-      "run_uuid": "drill-fail-001",
-      "overall_result": "fail",
-      "executed_by": "ops-user"
-    },
-    "latest_failed_backup_drill": {
-      "label": "drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00",
-      "timestamp": "2026-03-11 09:00:00",
-      "run_uuid": "drill-fail-001",
-      "overall_result": "fail",
-      "executed_by": "ops-user"
-    },
-    "backup_drill_pass_rate": {
-      "label": "0/1 (0.0%)",
-      "window_days": 14,
-      "total": 1,
-      "passing": 0,
-      "pass_rate_percent": 0
-    },
-    "latest_restore_run": {
-      "label": "logical_restore_file [failed] (nightly.sql) {confirm=token, verified_run=2} at 2026-03-11 11:42:00",
-      "timestamp": "2026-03-11 11:42:00",
-      "operation": "logical_restore_file",
-      "status": "failed",
-      "target": "nightly.sql",
-      "audit": {
-        "environment": "testing",
-        "database": ":memory:",
-        "target": "nightly.sql",
-        "confirmation_required": true,
-        "confirmation_satisfied_via": "token",
-        "verified_backup_required": true,
-        "verified_signal_run_id": 2
-      }
-    },
-    "latest_restore_failure": {
-      "label": "logical_restore_file (nightly.sql) at 2026-03-11 11:42:00",
-      "timestamp": "2026-03-11 11:42:00",
-      "operation": "logical_restore_file",
-      "target": "nightly.sql"
-    },
-    "backup_drill_pass_rate_30d": {
-      "label": "0/1 (0.0%)",
-      "window_days": 14,
-      "total": 1,
-      "passing": 0,
-      "pass_rate_percent": 0
-    }
-  },
+  "generated_at": "2026-03-11T12:00:00+00:00",
   "health": {
-    "ok": false,
     "checks": [
       {
         "check": "Config: driver",
-        "status": "pass",
-        "notes": "shell"
+        "code": "config.driver",
+        "data": {
+          "driver": "shell"
+        },
+        "notes": "shell",
+        "status": "pass"
       },
       {
         "check": "Config: queue.name",
-        "status": "pass",
-        "notes": "db-ops"
+        "code": "config.queue_name",
+        "data": {
+          "queue_name": "db-ops"
+        },
+        "notes": "db-ops",
+        "status": "pass"
       },
       {
         "check": "Config: log_channel",
-        "status": "pass",
-        "notes": "stack"
+        "code": "config.log_channel",
+        "data": {
+          "log_channel": "stack"
+        },
+        "notes": "stack",
+        "status": "pass"
       },
       {
         "check": "Config: pgbackrest.stanza",
-        "status": "pass",
-        "notes": "main"
+        "code": "config.pgbackrest_stanza",
+        "data": {
+          "stanza": "main"
+        },
+        "notes": "main",
+        "status": "pass"
       },
       {
         "check": "Config: pgbackrest.repo",
-        "status": "pass",
-        "notes": "1"
+        "code": "config.pgbackrest_repo",
+        "data": {
+          "repository": 1
+        },
+        "notes": "1",
+        "status": "pass"
       },
       {
         "check": "Config: pgbackrest.repositories",
-        "status": "pass",
-        "notes": "1"
+        "code": "config.pgbackrest_repositories",
+        "data": {
+          "repository_count": 1
+        },
+        "notes": "1",
+        "status": "pass"
       },
       {
         "check": "Config: pgbackrest.process_max",
-        "status": "pass",
-        "notes": "2"
+        "code": "config.pgbackrest_process_max",
+        "data": {
+          "process_max": 2
+        },
+        "notes": "2",
+        "status": "pass"
       },
       {
         "check": "Repo: pgbackrest.active",
-        "status": "pass",
-        "notes": "repo1 (posix)"
+        "code": "repo.pgbackrest_active",
+        "data": {
+          "repository": 1,
+          "type": "posix"
+        },
+        "notes": "repo1 (posix)",
+        "status": "pass"
       },
       {
         "check": "Repo: pgbackrest.target",
-        "status": "pass",
-        "notes": "/tmp/checkpoint-pgbackrest-repo1"
+        "code": "repo.pgbackrest_target",
+        "data": {
+          "path": "/tmp/checkpoint-pgbackrest-repo1",
+          "type": "posix"
+        },
+        "notes": "/tmp/checkpoint-pgbackrest-repo1",
+        "status": "pass"
       },
       {
         "check": "Repo: pgbackrest.tls",
-        "status": "pass",
-        "notes": "verify enabled"
+        "code": "repo.pgbackrest_tls",
+        "data": {
+          "ca_file": null,
+          "verify": true
+        },
+        "notes": "verify enabled",
+        "status": "pass"
       },
       {
         "check": "Repo: pgbackrest.encryption",
-        "status": "warn",
-        "notes": "disabled"
+        "code": "repo.pgbackrest_encryption",
+        "data": {
+          "cipher_type": "aes-256-cbc",
+          "enabled": false
+        },
+        "notes": "disabled",
+        "status": "warn"
       },
       {
         "check": "Binary: pg_dump",
-        "status": "warn",
-        "notes": "pg_dump not found on PATH"
+        "code": "binary.pg_dump",
+        "data": {
+          "binary": "pg_dump",
+          "found": false,
+          "path": null,
+          "reason": "not_found",
+          "required": false
+        },
+        "notes": "pg_dump not found on PATH",
+        "status": "warn"
       },
       {
         "check": "Binary: pgBackRest",
-        "status": "warn",
-        "notes": "pgbackrest not found on PATH"
+        "code": "binary.pgbackrest",
+        "data": {
+          "binary": "pgbackrest",
+          "found": false,
+          "path": null,
+          "reason": "not_found",
+          "required": false
+        },
+        "notes": "pgbackrest not found on PATH",
+        "status": "warn"
       },
       {
         "check": "Binary: gzip",
-        "status": "warn",
-        "notes": "gzip not found on PATH"
+        "code": "binary.gzip",
+        "data": {
+          "binary": "gzip",
+          "found": false,
+          "path": null,
+          "reason": "not_found",
+          "required": false
+        },
+        "notes": "gzip not found on PATH",
+        "status": "warn"
       },
       {
         "check": "DB: command_runs table",
-        "status": "pass",
-        "notes": "3 rows"
+        "code": "db.command_runs_table",
+        "data": {
+          "exists": true,
+          "row_count": 3,
+          "table": "db_ops_command_runs"
+        },
+        "notes": "3 rows",
+        "status": "pass"
       },
       {
         "check": "DB: backup_drill_runs table",
-        "status": "pass",
-        "notes": "1 rows"
+        "code": "db.backup_drill_runs_table",
+        "data": {
+          "exists": true,
+          "row_count": 1,
+          "table": "db_ops_backup_drill_runs"
+        },
+        "notes": "1 rows",
+        "status": "pass"
       },
       {
         "check": "Queue: db-ops",
-        "status": "warn",
-        "notes": "Cannot verify queue without running worker"
+        "code": "queue.worker_visibility",
+        "data": {
+          "queue_name": "db-ops"
+        },
+        "notes": "Cannot verify queue without running worker",
+        "status": "warn"
       },
       {
         "check": "Orphaned runs",
-        "status": "pass",
-        "notes": "0 pending runs beyond threshold"
+        "code": "queue.orphaned_runs",
+        "data": {
+          "orphaned_run_count": 0,
+          "threshold_minutes": 10
+        },
+        "notes": "0 pending runs beyond threshold",
+        "status": "pass"
       },
       {
         "check": "Backups: last known good",
-        "status": "pass",
-        "notes": "1 hours old (threshold: 24)"
+        "code": "backup.last_known_good",
+        "data": {
+          "age_hours": 1,
+          "reason": "fresh",
+          "threshold_hours": 24
+        },
+        "notes": "1 hours old (threshold: 24)",
+        "status": "pass"
       },
       {
         "check": "Backups: duration anomaly",
-        "status": "warn",
-        "notes": "Not enough successful backup samples"
+        "code": "backup.duration_anomaly",
+        "data": {
+          "factor": 2,
+          "min_samples": 3,
+          "reason": "insufficient_samples",
+          "sample_count": 0
+        },
+        "notes": "Not enough successful backup samples",
+        "status": "warn"
       },
       {
         "check": "Backup drills: latest run",
-        "status": "pass",
-        "notes": "FAIL 1 days old (drill-fail-001)"
+        "code": "backup_drill.latest_run",
+        "data": {
+          "age_days": 1,
+          "overall_result": "fail",
+          "reason": "fresh",
+          "run_uuid": "drill-fail-001",
+          "threshold_days": 30
+        },
+        "notes": "FAIL 1 days old (drill-fail-001)",
+        "status": "pass"
       },
       {
         "check": "Backup drills: pass rate",
-        "status": "warn",
-        "notes": "0/1 passed in the last 14 days (0.0%, threshold: 100.0%)"
+        "code": "backup_drill.pass_rate",
+        "data": {
+          "latest_run_uuid": "drill-fail-001",
+          "pass_rate_percent": 0,
+          "passing": 0,
+          "reason": "below_threshold",
+          "threshold_percent": 100,
+          "total": 1,
+          "window_days": 14
+        },
+        "notes": "0/1 passed in the last 14 days (0.0%, threshold: 100.0%)",
+        "status": "warn"
       }
-    ]
+    ],
+    "ok": false
   },
-  "version": 1,
-  "surface": "report"
+  "recent_runs": [
+    {
+      "backup": "-",
+      "exit_code": 1,
+      "finished_at": "2026-03-11 11:42:00",
+      "id": 3,
+      "last_known_good_at": null,
+      "operation": "logical_restore_file",
+      "restore_audit": {
+        "confirmation_required": true,
+        "confirmation_satisfied_via": "token",
+        "database": ":memory:",
+        "environment": "testing",
+        "target": "nightly.sql",
+        "verified_backup_required": true,
+        "verified_signal_run_id": 2
+      },
+      "restore_target": "nightly.sql",
+      "started_at": null,
+      "status": "failed",
+      "verification_state": "failed"
+    },
+    {
+      "backup": "full:20260311-010101F",
+      "exit_code": 0,
+      "finished_at": null,
+      "id": 2,
+      "last_known_good_at": "2026-03-11 11:50:00",
+      "operation": "pgbackrest_backup_full",
+      "restore_audit": null,
+      "restore_target": null,
+      "started_at": null,
+      "status": "succeeded",
+      "verification_state": "verified"
+    }
+  ],
+  "summary": {
+    "backup_drill_pass_rate": {
+      "label": "0/1 (0.0%)",
+      "pass_rate_percent": 0,
+      "passing": 0,
+      "total": 1,
+      "window_days": 14
+    },
+    "backup_drill_pass_rate_30d": {
+      "label": "0/1 (0.0%)",
+      "pass_rate_percent": 0,
+      "passing": 0,
+      "total": 1,
+      "window_days": 14
+    },
+    "failed_runs_24h": 1,
+    "last_known_good_backup": {
+      "label": "full:20260311-010101F at 2026-03-11 11:50:00",
+      "operation": "pgbackrest_backup_full",
+      "timestamp": "2026-03-11 11:50:00"
+    },
+    "latest_backup_drill": {
+      "executed_by": "ops-user",
+      "label": "drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00",
+      "overall_result": "fail",
+      "run_uuid": "drill-fail-001",
+      "timestamp": "2026-03-11 09:00:00"
+    },
+    "latest_failed_backup_drill": {
+      "executed_by": "ops-user",
+      "label": "drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00",
+      "overall_result": "fail",
+      "run_uuid": "drill-fail-001",
+      "timestamp": "2026-03-11 09:00:00"
+    },
+    "latest_restore_failure": {
+      "label": "logical_restore_file (nightly.sql) at 2026-03-11 11:42:00",
+      "operation": "logical_restore_file",
+      "target": "nightly.sql",
+      "timestamp": "2026-03-11 11:42:00"
+    },
+    "latest_restore_run": {
+      "audit": {
+        "confirmation_required": true,
+        "confirmation_satisfied_via": "token",
+        "database": ":memory:",
+        "environment": "testing",
+        "target": "nightly.sql",
+        "verified_backup_required": true,
+        "verified_signal_run_id": 2
+      },
+      "label": "logical_restore_file [failed] (nightly.sql) {confirm=token, verified_run=2} at 2026-03-11 11:42:00",
+      "operation": "logical_restore_file",
+      "status": "failed",
+      "target": "nightly.sql",
+      "timestamp": "2026-03-11 11:42:00"
+    },
+    "latest_verified_backup": {
+      "label": "full:20260311-010101F at 2026-03-11 11:55:00",
+      "operation": "pgbackrest_backup_full",
+      "timestamp": "2026-03-11 11:55:00"
+    },
+    "pending_runs": 1,
+    "running_runs": 0
+  },
+  "surface": "report",
+  "version": 2
 }

@@ -1,0 +1,78 @@
+{
+  "driver": "shell",
+  "generated_at": "2026-03-11T12:00:00+00:00",
+  "health": {
+    "checks": [
+      {
+        "check": "Config validation",
+        "code": "config.validation",
+        "data": {
+          "exception": "AdityaaCodes\\LaravelCheckpoint\\Exceptions\\ConfigurationException"
+        },
+        "notes": "checkpoint.queue.retry_after must be greater than checkpoint.queue.timeout to avoid duplicate job processing.",
+        "status": "fail"
+      }
+    ],
+    "ok": false
+  },
+  "recent_runs": [],
+  "summary": {
+    "backup_drill_pass_rate": {
+      "label": "-",
+      "pass_rate_percent": null,
+      "passing": 0,
+      "total": 0,
+      "window_days": 30
+    },
+    "backup_drill_pass_rate_30d": {
+      "label": "-",
+      "pass_rate_percent": null,
+      "passing": 0,
+      "total": 0,
+      "window_days": 30
+    },
+    "failed_runs_24h": 0,
+    "last_known_good_backup": {
+      "label": "-",
+      "operation": null,
+      "timestamp": null
+    },
+    "latest_backup_drill": {
+      "executed_by": null,
+      "label": "-",
+      "overall_result": null,
+      "run_uuid": null,
+      "timestamp": null
+    },
+    "latest_failed_backup_drill": {
+      "executed_by": null,
+      "label": "-",
+      "overall_result": null,
+      "run_uuid": null,
+      "timestamp": null
+    },
+    "latest_restore_failure": {
+      "label": "-",
+      "operation": null,
+      "target": null,
+      "timestamp": null
+    },
+    "latest_restore_run": {
+      "audit": null,
+      "label": "-",
+      "operation": null,
+      "status": null,
+      "target": null,
+      "timestamp": null
+    },
+    "latest_verified_backup": {
+      "label": "-",
+      "operation": null,
+      "timestamp": null
+    },
+    "pending_runs": 0,
+    "running_runs": 0
+  },
+  "surface": "report",
+  "version": 2
+}

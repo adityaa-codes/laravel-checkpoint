@@ -99,12 +99,14 @@ it('renders a machine-readable json report', function (): void {
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
-        ->and($report['version'])->toBe(2)
+        ->and($report['version'])->toBe(3)
         ->and($report['surface'])->toBe('doctor')
         ->and($report['ok'])->toBeFalse()
         ->and($report['driver'])->toBe('shell')
         ->and(collect($report['checks'])->contains(
-            fn (array $check): bool => $check['check'] === 'Config: driver' && $check['status'] === 'pass',
+            fn (array $check): bool => $check['code'] === 'config.driver'
+                && $check['status'] === 'pass'
+                && $check['data']['driver'] === 'shell',
         ))->toBeTrue();
 });
 
@@ -118,14 +120,19 @@ it('reports drill freshness and pass rate in machine-readable json', function ()
 
     expect($report)->toBeArray()
         ->and(collect($report['checks'])->contains(
-            fn (array $check): bool => $check['check'] === 'Backup drills: latest run'
+            fn (array $check): bool => $check['code'] === 'backup_drill.latest_run'
                 && $check['status'] === 'pass'
-                && str_contains($check['notes'], 'FAIL 2 days old (drill-fail-001)'),
+                && $check['data']['run_uuid'] === 'drill-fail-001'
+                && $check['data']['age_days'] === 2,
         ))->toBeTrue()
         ->and(collect($report['checks'])->contains(
-            fn (array $check): bool => $check['check'] === 'Backup drills: pass rate'
+            fn (array $check): bool => $check['code'] === 'backup_drill.pass_rate'
                 && $check['status'] === 'warn'
-                && $check['notes'] === '1/2 passed in the last 30 days (50.0%, threshold: 100.0%)',
+                && $check['data']['window_days'] === 30
+                && $check['data']['total'] === 2
+                && $check['data']['passing'] === 1
+                && (float) $check['data']['pass_rate_percent'] === 50.0
+                && (float) $check['data']['threshold_percent'] === 100.0,
         ))->toBeTrue();
 
     DoctorCommandTestSupport::resetTime();
@@ -189,11 +196,12 @@ it('returns a failed machine-readable json report for invalid config', function 
 
     expect($exitCode)->toBe(1)
         ->and($report)->toBeArray()
-        ->and($report['version'])->toBe(2)
+        ->and($report['version'])->toBe(3)
         ->and($report['surface'])->toBe('doctor')
         ->and($report['ok'])->toBeFalse()
         ->and(collect($report['checks'])->contains(
-            fn (array $check): bool => $check['check'] === 'Config validation' && $check['status'] === 'fail',
+            fn (array $check): bool => $check['code'] === 'config.validation'
+                && $check['status'] === 'fail',
         ))->toBeTrue();
 });
 
@@ -210,12 +218,12 @@ it('warns when the last known good backup is stale and the latest run is anomalo
 
     expect($report)->toBeArray()
         ->and(collect($report['checks'])->contains(
-            fn (array $check): bool => $check['check'] === 'Backups: last known good'
-                && str_contains($check['notes'], 'threshold: 12'),
+            fn (array $check): bool => $check['code'] === 'backup.last_known_good'
+                && $check['data']['threshold_hours'] === 12,
         ))->toBeTrue()
         ->and(collect($report['checks'])->contains(
-            fn (array $check): bool => $check['check'] === 'Backups: duration anomaly'
-                && str_contains($check['notes'], 'factor: 2.0'),
+            fn (array $check): bool => $check['code'] === 'backup.duration_anomaly'
+                && (float) $check['data']['factor'] === 2.0,
         ))->toBeTrue();
 
 });
@@ -275,9 +283,10 @@ it('counts pending rows by their last worker heartbeat rather than claim timesta
 
     expect($report)->toBeArray()
         ->and(collect($report['checks'])->contains(
-            fn (array $check): bool => $check['check'] === 'Orphaned runs'
+            fn (array $check): bool => $check['code'] === 'queue.orphaned_runs'
                 && $check['status'] === 'warn'
-                && $check['notes'] === '1 pending runs beyond threshold',
+                && $check['data']['orphaned_run_count'] === 1
+                && $check['data']['threshold_minutes'] === 10,
         ))->toBeTrue();
 });
 
@@ -298,8 +307,9 @@ it('warns when stale orphaned runs remain beyond the threshold', function (): vo
 
     expect($report)->toBeArray()
         ->and(collect($report['checks'])->contains(
-            fn (array $check): bool => $check['check'] === 'Orphaned runs'
+            fn (array $check): bool => $check['code'] === 'queue.orphaned_runs'
                 && $check['status'] === 'warn'
-                && $check['notes'] === '1 pending runs beyond threshold',
+                && $check['data']['orphaned_run_count'] === 1
+                && $check['data']['threshold_minutes'] === 10,
         ))->toBeTrue();
 });

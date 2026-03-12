@@ -25,10 +25,10 @@ it('tracks versions independently per command surface', function (): void {
         'version' => 1,
         'surface' => 'status',
     ])->and($contract->envelope('doctor', []))->toMatchArray([
-        'version' => 2,
+        'version' => 3,
         'surface' => 'doctor',
     ])->and($contract->envelope('report', []))->toMatchArray([
-        'version' => 1,
+        'version' => 2,
         'surface' => 'report',
     ]);
 });

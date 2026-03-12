@@ -35,9 +35,13 @@ final class DoctorCommand extends Command
             $checks = $this->reportBuilder->healthChecks();
         } catch (\Throwable $exception) {
             $checks = [[
+                'code' => 'config.validation',
                 'check' => 'Config validation',
                 'status' => 'fail',
                 'notes' => $exception->getMessage(),
+                'data' => [
+                    'exception' => $exception::class,
+                ],
             ]];
 
             if ($outputMode === 'json') {
@@ -77,17 +81,8 @@ final class DoctorCommand extends Command
         };
     }
 
-    private function statusLevel(string $statusWord): string
-    {
-        return match ($statusWord) {
-            (string) __('messages.cli.doctor_pass'), 'messages.cli.doctor_pass' => 'pass',
-            (string) __('messages.cli.doctor_warn'), 'messages.cli.doctor_warn' => 'warn',
-            default => 'fail',
-        };
-    }
-
     /**
-     * @param  list<array{check:string,status:string,notes:string}>  $checks
+     * @param  list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>  $checks
      */
     private function jsonReport(array $checks): string
     {
@@ -96,16 +91,16 @@ final class DoctorCommand extends Command
             'driver' => (string) $this->config->get('checkpoint.driver'),
             'generated_at' => now()->toIso8601String(),
             'checks' => array_map(fn (array $check): array => [
+                'code' => $check['code'],
                 'check' => $check['check'],
-                'status' => $this->statusLevel($this->statusWord((string) $check['status'])),
+                'status' => $check['status'],
                 'notes' => $check['notes'],
+                'data' => $check['data'],
             ], $checks),
         ];
 
         $report = $this->jsonContract->envelope('doctor', $report);
 
-        $json = json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-
-        return is_string($json) ? $json : '{"ok":false,"checks":[]}';
+        return json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     }
 }

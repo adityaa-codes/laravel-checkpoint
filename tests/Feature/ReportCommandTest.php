@@ -15,7 +15,7 @@ it('renders a machine-readable operational report', function (): void {
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
-        ->and($report['version'])->toBe(1)
+        ->and($report['version'])->toBe(2)
         ->and($report['surface'])->toBe('report')
         ->and($report['driver'])->toBe('shell')
         ->and($report['recent_runs'])->toHaveCount(2)
@@ -44,7 +44,7 @@ it('renders a machine-readable operational report', function (): void {
         ])
         ->and($report['health']['ok'])->toBeFalse()
         ->and(collect($report['health']['checks'])->contains(
-            fn (array $check): bool => $check['check'] === 'Backup drills: pass rate'
+            fn (array $check): bool => $check['code'] === 'backup_drill.pass_rate'
                 && $check['status'] === 'warn',
         ))->toBeTrue();
 
@@ -60,7 +60,7 @@ it('returns a failed report when config validation fails', function (): void {
 
     expect($exitCode)->toBe(1)
         ->and($report)->toBeArray()
-        ->and($report['version'])->toBe(1)
+        ->and($report['version'])->toBe(2)
         ->and($report['surface'])->toBe('report')
         ->and($report)->toHaveKeys(['generated_at', 'driver', 'recent_runs', 'summary', 'health'])
         ->and($report['recent_runs'])->toBeArray()
@@ -68,6 +68,7 @@ it('returns a failed report when config validation fails', function (): void {
         ->and($report['health']['ok'])->toBeFalse()
         ->and($report['health']['checks'])->toHaveCount(1)
         ->and($report['health']['checks'][0])->toMatchArray([
+            'code' => 'config.validation',
             'check' => 'Config validation',
             'status' => 'fail',
         ]);

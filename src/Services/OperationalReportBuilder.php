@@ -103,18 +103,32 @@ final readonly class OperationalReportBuilder
     }
 
     /**
-     * @return list<array{check:string,status:string,notes:string}>
+     * @return list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>
      */
     public function healthChecks(): array
     {
         $rows = [
-            ['check' => 'Config: driver', 'status' => 'pass', 'notes' => (string) $this->config->get('checkpoint.driver')],
-            ['check' => 'Config: queue.name', 'status' => 'pass', 'notes' => (string) $this->config->get('checkpoint.queue.name', 'db-ops')],
-            ['check' => 'Config: log_channel', 'status' => 'pass', 'notes' => (string) $this->config->get('checkpoint.log_channel', 'stack')],
-            ['check' => 'Config: pgbackrest.stanza', 'status' => 'pass', 'notes' => (string) $this->config->get('checkpoint.drivers.pgbackrest.stanza', 'main')],
-            ['check' => 'Config: pgbackrest.repo', 'status' => 'pass', 'notes' => (string) $this->config->get('checkpoint.drivers.pgbackrest.repo', 1)],
-            ['check' => 'Config: pgbackrest.repositories', 'status' => 'pass', 'notes' => (string) count($this->pgBackRestRepositories())],
-            ['check' => 'Config: pgbackrest.process_max', 'status' => 'pass', 'notes' => (string) $this->config->get('checkpoint.drivers.pgbackrest.process_max', 1)],
+            $this->checkRow('config.driver', 'Config: driver', 'pass', (string) $this->config->get('checkpoint.driver'), [
+                'driver' => (string) $this->config->get('checkpoint.driver'),
+            ]),
+            $this->checkRow('config.queue_name', 'Config: queue.name', 'pass', (string) $this->config->get('checkpoint.queue.name', 'db-ops'), [
+                'queue_name' => (string) $this->config->get('checkpoint.queue.name', 'db-ops'),
+            ]),
+            $this->checkRow('config.log_channel', 'Config: log_channel', 'pass', (string) $this->config->get('checkpoint.log_channel', 'stack'), [
+                'log_channel' => (string) $this->config->get('checkpoint.log_channel', 'stack'),
+            ]),
+            $this->checkRow('config.pgbackrest_stanza', 'Config: pgbackrest.stanza', 'pass', (string) $this->config->get('checkpoint.drivers.pgbackrest.stanza', 'main'), [
+                'stanza' => (string) $this->config->get('checkpoint.drivers.pgbackrest.stanza', 'main'),
+            ]),
+            $this->checkRow('config.pgbackrest_repo', 'Config: pgbackrest.repo', 'pass', (string) $this->config->get('checkpoint.drivers.pgbackrest.repo', 1), [
+                'repository' => (int) $this->config->get('checkpoint.drivers.pgbackrest.repo', 1),
+            ]),
+            $this->checkRow('config.pgbackrest_repositories', 'Config: pgbackrest.repositories', 'pass', (string) count($this->pgBackRestRepositories()), [
+                'repository_count' => count($this->pgBackRestRepositories()),
+            ]),
+            $this->checkRow('config.pgbackrest_process_max', 'Config: pgbackrest.process_max', 'pass', (string) $this->config->get('checkpoint.drivers.pgbackrest.process_max', 1), [
+                'process_max' => (int) $this->config->get('checkpoint.drivers.pgbackrest.process_max', 1),
+            ]),
             $this->selectedPgBackRestRepositoryRow(),
             $this->selectedPgBackRestTargetRow(),
             $this->selectedPgBackRestTlsRow(),
@@ -128,15 +142,26 @@ final readonly class OperationalReportBuilder
             $this->configuredBinaryRow('gzip', 'gzip', false),
             $this->tableRow('command_runs', (new CommandRun)->getTable()),
             $this->tableRow('backup_drill_runs', (new BackupDrillRun)->getTable()),
-            ['check' => 'Queue: '.$this->config->get('checkpoint.queue.name', 'db-ops'), 'status' => 'warn', 'notes' => 'Cannot verify queue without running worker'],
+            $this->checkRow(
+                'queue.worker_visibility',
+                'Queue: '.$this->config->get('checkpoint.queue.name', 'db-ops'),
+                'warn',
+                'Cannot verify queue without running worker',
+                ['queue_name' => (string) $this->config->get('checkpoint.queue.name', 'db-ops')]
+            ),
         ];
 
         $orphanedRunsCount = $this->orphanedRunsCount();
-        $rows[] = [
-            'check' => 'Orphaned runs',
-            'status' => $orphanedRunsCount > 0 ? 'warn' : 'pass',
-            'notes' => sprintf('%d pending runs beyond threshold', $orphanedRunsCount),
-        ];
+        $rows[] = $this->checkRow(
+            'queue.orphaned_runs',
+            'Orphaned runs',
+            $orphanedRunsCount > 0 ? 'warn' : 'pass',
+            sprintf('%d pending runs beyond threshold', $orphanedRunsCount),
+            [
+                'orphaned_run_count' => $orphanedRunsCount,
+                'threshold_minutes' => max(1, (int) $this->config->get('checkpoint.queue.orphan_threshold', 10)),
+            ],
+        );
         $rows[] = $this->lastKnownGoodCheck();
         $rows[] = $this->backupDurationAnomalyCheck();
         $rows[] = $this->backupDrillFreshnessCheck();
@@ -146,7 +171,7 @@ final readonly class OperationalReportBuilder
     }
 
     /**
-     * @param  list<array{check:string,status:string,notes:string}>  $checks
+     * @param  list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>  $checks
      */
     public function healthOk(array $checks): bool
     {
@@ -340,7 +365,7 @@ final readonly class OperationalReportBuilder
     }
 
     /**
-     * @return array{check:string,status:string,notes:string}
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
      */
     private function lastKnownGoodCheck(): array
     {
@@ -353,7 +378,11 @@ final readonly class OperationalReportBuilder
         if (! $latest instanceof CommandRun || $latest->last_known_good_at === null) {
             event(new BackupFreshnessAlarmTriggered(null, 'missing', null, $maxAgeHours));
 
-            return ['check' => 'Backups: last known good', 'status' => 'warn', 'notes' => 'No last-known-good backup recorded'];
+            return $this->checkRow('backup.last_known_good', 'Backups: last known good', 'warn', 'No last-known-good backup recorded', [
+                'age_hours' => null,
+                'threshold_hours' => $maxAgeHours,
+                'reason' => 'missing',
+            ]);
         }
 
         $ageHours = max(0, (int) ceil($latest->last_known_good_at->diffInMinutes(now()) / 60));
@@ -363,15 +392,21 @@ final readonly class OperationalReportBuilder
             event(new BackupFreshnessAlarmTriggered($latest, 'stale', $ageHours, $maxAgeHours));
         }
 
-        return [
-            'check' => 'Backups: last known good',
-            'status' => $isStale ? 'warn' : 'pass',
-            'notes' => sprintf('%d hours old (threshold: %d)', $ageHours, $maxAgeHours),
-        ];
+        return $this->checkRow(
+            'backup.last_known_good',
+            'Backups: last known good',
+            $isStale ? 'warn' : 'pass',
+            sprintf('%d hours old (threshold: %d)', $ageHours, $maxAgeHours),
+            [
+                'age_hours' => $ageHours,
+                'threshold_hours' => $maxAgeHours,
+                'reason' => $isStale ? 'stale' : 'fresh',
+            ],
+        );
     }
 
     /**
-     * @return array{check:string,status:string,notes:string}
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
      */
     private function backupDurationAnomalyCheck(): array
     {
@@ -386,28 +421,49 @@ final readonly class OperationalReportBuilder
             ->get();
 
         if ($runs->count() < $minSamples) {
-            return ['check' => 'Backups: duration anomaly', 'status' => 'warn', 'notes' => 'Not enough successful backup samples'];
+            return $this->checkRow('backup.duration_anomaly', 'Backups: duration anomaly', 'warn', 'Not enough successful backup samples', [
+                'factor' => $factor,
+                'min_samples' => $minSamples,
+                'sample_count' => $runs->count(),
+                'reason' => 'insufficient_samples',
+            ]);
         }
 
         $latest = $runs->first();
         $baseline = $runs->slice(1)->pluck('duration_seconds')->filter()->sort()->values();
 
         if (! $latest instanceof CommandRun || $baseline->isEmpty()) {
-            return ['check' => 'Backups: duration anomaly', 'status' => 'warn', 'notes' => 'Not enough successful backup samples'];
+            return $this->checkRow('backup.duration_anomaly', 'Backups: duration anomaly', 'warn', 'Not enough successful backup samples', [
+                'factor' => $factor,
+                'min_samples' => $minSamples,
+                'sample_count' => $runs->count(),
+                'reason' => 'insufficient_samples',
+            ]);
         }
 
         $medianSeconds = (int) $baseline->get((int) floor(($baseline->count() - 1) / 2));
         $latestSeconds = (int) $latest->duration_seconds;
 
-        return [
-            'check' => 'Backups: duration anomaly',
-            'status' => $latestSeconds > (int) ceil($medianSeconds * $factor) ? 'warn' : 'pass',
-            'notes' => sprintf('latest %ds vs median %ds (factor: %.1f)', $latestSeconds, $medianSeconds, $factor),
-        ];
+        $isAnomalous = $latestSeconds > (int) ceil($medianSeconds * $factor);
+
+        return $this->checkRow(
+            'backup.duration_anomaly',
+            'Backups: duration anomaly',
+            $isAnomalous ? 'warn' : 'pass',
+            sprintf('latest %ds vs median %ds (factor: %.1f)', $latestSeconds, $medianSeconds, $factor),
+            [
+                'latest_seconds' => $latestSeconds,
+                'median_seconds' => $medianSeconds,
+                'factor' => $factor,
+                'min_samples' => $minSamples,
+                'sample_count' => $runs->count(),
+                'reason' => $isAnomalous ? 'anomalous' : 'normal',
+            ],
+        );
     }
 
     /**
-     * @return array{check:string,status:string,notes:string}
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
      */
     private function backupDrillFreshnessCheck(): array
     {
@@ -417,7 +473,13 @@ final readonly class OperationalReportBuilder
         if (! $latest instanceof BackupDrillRun) {
             event(new BackupDrillFreshnessAlarmTriggered(null, 'missing', null, $thresholdDays));
 
-            return ['check' => 'Backup drills: latest run', 'status' => 'warn', 'notes' => 'No backup drill recorded'];
+            return $this->checkRow('backup_drill.latest_run', 'Backup drills: latest run', 'warn', 'No backup drill recorded', [
+                'run_uuid' => null,
+                'overall_result' => null,
+                'age_days' => null,
+                'threshold_days' => $thresholdDays,
+                'reason' => 'missing',
+            ]);
         }
 
         $ageDays = max(0, (int) ceil($latest->executed_at->diffInHours(now()) / 24));
@@ -427,15 +489,23 @@ final readonly class OperationalReportBuilder
             event(new BackupDrillFreshnessAlarmTriggered($latest, 'stale', $ageDays, $thresholdDays));
         }
 
-        return [
-            'check' => 'Backup drills: latest run',
-            'status' => $isStale ? 'warn' : 'pass',
-            'notes' => sprintf('%s %d days old (%s)', strtoupper((string) $latest->overall_result), $ageDays, $latest->run_uuid),
-        ];
+        return $this->checkRow(
+            'backup_drill.latest_run',
+            'Backup drills: latest run',
+            $isStale ? 'warn' : 'pass',
+            sprintf('%s %d days old (%s)', strtoupper((string) $latest->overall_result), $ageDays, $latest->run_uuid),
+            [
+                'run_uuid' => $latest->run_uuid,
+                'overall_result' => $latest->overall_result,
+                'age_days' => $ageDays,
+                'threshold_days' => $thresholdDays,
+                'reason' => $isStale ? 'stale' : 'fresh',
+            ],
+        );
     }
 
     /**
-     * @return array{check:string,status:string,notes:string}
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
      */
     private function backupDrillPassRateCheck(): array
     {
@@ -450,7 +520,15 @@ final readonly class OperationalReportBuilder
         if ($total < 1) {
             event(new BackupDrillPassRateAlarmTriggered($windowDays, 0, 0, 0.0, $thresholdPercent, $latest));
 
-            return ['check' => 'Backup drills: pass rate', 'status' => 'warn', 'notes' => sprintf('No backup drills in the last %d days', $windowDays)];
+            return $this->checkRow('backup_drill.pass_rate', 'Backup drills: pass rate', 'warn', sprintf('No backup drills in the last %d days', $windowDays), [
+                'window_days' => $windowDays,
+                'total' => 0,
+                'passing' => 0,
+                'pass_rate_percent' => 0.0,
+                'threshold_percent' => $thresholdPercent,
+                'latest_run_uuid' => $latest?->run_uuid,
+                'reason' => 'missing',
+            ]);
         }
 
         $passing = BackupDrillRun::query()
@@ -464,11 +542,21 @@ final readonly class OperationalReportBuilder
             event(new BackupDrillPassRateAlarmTriggered($windowDays, $passing, $total, $percent, $thresholdPercent, $latest));
         }
 
-        return [
-            'check' => 'Backup drills: pass rate',
-            'status' => $isBelowThreshold ? 'warn' : 'pass',
-            'notes' => sprintf('%d/%d passed in the last %d days (%.1f%%, threshold: %.1f%%)', $passing, $total, $windowDays, $percent, $thresholdPercent),
-        ];
+        return $this->checkRow(
+            'backup_drill.pass_rate',
+            'Backup drills: pass rate',
+            $isBelowThreshold ? 'warn' : 'pass',
+            sprintf('%d/%d passed in the last %d days (%.1f%%, threshold: %.1f%%)', $passing, $total, $windowDays, $percent, $thresholdPercent),
+            [
+                'window_days' => $windowDays,
+                'total' => $total,
+                'passing' => $passing,
+                'pass_rate_percent' => $percent,
+                'threshold_percent' => $thresholdPercent,
+                'latest_run_uuid' => $latest?->run_uuid,
+                'reason' => $isBelowThreshold ? 'below_threshold' : 'healthy',
+            ],
+        );
     }
 
     /**
@@ -494,18 +582,21 @@ final readonly class OperationalReportBuilder
     }
 
     /**
-     * @return array{check:string,status:string,notes:string}
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
      */
     private function selectedPgBackRestRepositoryRow(): array
     {
         $repoId = (int) $this->config->get('checkpoint.drivers.pgbackrest.repo', 1);
         $type = (string) ($this->selectedPgBackRestRepository()['type'] ?? 'unknown');
 
-        return ['check' => 'Repo: pgbackrest.active', 'status' => 'pass', 'notes' => sprintf('repo%d (%s)', $repoId, $type)];
+        return $this->checkRow('repo.pgbackrest_active', 'Repo: pgbackrest.active', 'pass', sprintf('repo%d (%s)', $repoId, $type), [
+            'repository' => $repoId,
+            'type' => $type,
+        ]);
     }
 
     /**
-     * @return array{check:string,status:string,notes:string}
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
      */
     private function selectedPgBackRestTargetRow(): array
     {
@@ -515,14 +606,21 @@ final readonly class OperationalReportBuilder
         if ($type === 's3') {
             $s3 = is_array($repository['s3'] ?? null) ? $repository['s3'] : [];
 
-            return ['check' => 'Repo: pgbackrest.target', 'status' => 'pass', 'notes' => sprintf('s3://%s via %s', (string) ($s3['bucket'] ?? '-'), (string) ($s3['endpoint'] ?? '-'))];
+            return $this->checkRow('repo.pgbackrest_target', 'Repo: pgbackrest.target', 'pass', sprintf('s3://%s via %s', (string) ($s3['bucket'] ?? '-'), (string) ($s3['endpoint'] ?? '-')), [
+                'type' => 's3',
+                'bucket' => (string) ($s3['bucket'] ?? '-'),
+                'endpoint' => (string) ($s3['endpoint'] ?? '-'),
+            ]);
         }
 
-        return ['check' => 'Repo: pgbackrest.target', 'status' => 'pass', 'notes' => (string) ($repository['path'] ?? '-')];
+        return $this->checkRow('repo.pgbackrest_target', 'Repo: pgbackrest.target', 'pass', (string) ($repository['path'] ?? '-'), [
+            'type' => $type,
+            'path' => (string) ($repository['path'] ?? '-'),
+        ]);
     }
 
     /**
-     * @return array{check:string,status:string,notes:string}
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
      */
     private function selectedPgBackRestTlsRow(): array
     {
@@ -536,11 +634,14 @@ final readonly class OperationalReportBuilder
             $notes .= sprintf(' (ca: %s)', $caFile);
         }
 
-        return ['check' => 'Repo: pgbackrest.tls', 'status' => $verify ? 'pass' : 'warn', 'notes' => $notes];
+        return $this->checkRow('repo.pgbackrest_tls', 'Repo: pgbackrest.tls', $verify ? 'pass' : 'warn', $notes, [
+            'verify' => $verify,
+            'ca_file' => is_string($caFile) && trim($caFile) !== '' ? $caFile : null,
+        ]);
     }
 
     /**
-     * @return array{check:string,status:string,notes:string}
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
      */
     private function selectedPgBackRestEncryptionRow(): array
     {
@@ -549,38 +650,63 @@ final readonly class OperationalReportBuilder
         $enabled = (bool) ($encryption['enabled'] ?? false);
         $cipherType = (string) ($encryption['cipher_type'] ?? 'unknown');
 
-        return ['check' => 'Repo: pgbackrest.encryption', 'status' => $enabled ? 'pass' : 'warn', 'notes' => $enabled ? sprintf('enabled (%s)', $cipherType) : 'disabled'];
+        return $this->checkRow('repo.pgbackrest_encryption', 'Repo: pgbackrest.encryption', $enabled ? 'pass' : 'warn', $enabled ? sprintf('enabled (%s)', $cipherType) : 'disabled', [
+            'enabled' => $enabled,
+            'cipher_type' => $cipherType,
+        ]);
     }
 
     /**
-     * @return array{check:string,status:string,notes:string}
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
      */
     private function configuredBinaryRow(string $label, string $binary, bool $required): array
     {
         $trimmedBinary = trim($binary);
 
         if ($trimmedBinary === '') {
-            return ['check' => 'Binary: '.$label, 'status' => $required ? 'fail' : 'warn', 'notes' => 'Binary is empty'];
+            return $this->checkRow('binary.'.strtolower($label), 'Binary: '.$label, $required ? 'fail' : 'warn', 'Binary is empty', [
+                'binary' => $trimmedBinary,
+                'required' => $required,
+                'found' => false,
+                'path' => null,
+                'reason' => 'empty',
+            ]);
         }
 
         $path = (new ExecutableFinder)->find($trimmedBinary);
 
         if ($path === null) {
-            return ['check' => 'Binary: '.$label, 'status' => $required ? 'fail' : 'warn', 'notes' => sprintf('%s not found on PATH', $trimmedBinary)];
+            return $this->checkRow('binary.'.strtolower($label), 'Binary: '.$label, $required ? 'fail' : 'warn', sprintf('%s not found on PATH', $trimmedBinary), [
+                'binary' => $trimmedBinary,
+                'required' => $required,
+                'found' => false,
+                'path' => null,
+                'reason' => 'not_found',
+            ]);
         }
 
-        return ['check' => 'Binary: '.$label, 'status' => 'pass', 'notes' => $path];
+        return $this->checkRow('binary.'.strtolower($label), 'Binary: '.$label, 'pass', $path, [
+            'binary' => $trimmedBinary,
+            'required' => $required,
+            'found' => true,
+            'path' => $path,
+            'reason' => 'found',
+        ]);
     }
 
     /**
-     * @return array{check:string,status:string,notes:string}
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
      */
     private function tableRow(string $label, string $table): array
     {
         $connection = $this->database->connection();
 
         if (! $connection->getSchemaBuilder()->hasTable($table)) {
-            return ['check' => 'DB: '.$label.' table', 'status' => 'fail', 'notes' => 'Table not found'];
+            return $this->checkRow('db.'.$label.'_table', 'DB: '.$label.' table', 'fail', 'Table not found', [
+                'table' => $table,
+                'exists' => false,
+                'row_count' => null,
+            ]);
         }
 
         try {
@@ -589,6 +715,25 @@ final readonly class OperationalReportBuilder
             $count = 0;
         }
 
-        return ['check' => 'DB: '.$label.' table', 'status' => 'pass', 'notes' => sprintf('%d rows', $count)];
+        return $this->checkRow('db.'.$label.'_table', 'DB: '.$label.' table', 'pass', sprintf('%d rows', $count), [
+            'table' => $table,
+            'exists' => true,
+            'row_count' => $count,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
+     */
+    private function checkRow(string $code, string $check, string $status, string $notes, array $data = []): array
+    {
+        return [
+            'code' => $code,
+            'check' => $check,
+            'status' => $status,
+            'notes' => $notes,
+            'data' => $data,
+        ];
     }
 }
