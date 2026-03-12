@@ -57,6 +57,54 @@ it('rejects non-array pgbackrest extra args', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.extra_args.info must be an array.');
 });
 
+it('rejects a pgbackrest config without repositories', function (): void {
+    config()->set('checkpoint.drivers.pgbackrest.repositories', []);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.repositories must be a non-empty array.');
+});
+
+it('rejects a selected pgbackrest repo that is not configured', function (): void {
+    config()->set('checkpoint.drivers.pgbackrest.repo', 2);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.repositories must define selected repo [2].');
+});
+
+it('rejects an s3 pgbackrest repo without required remote settings', function (): void {
+    config()->set('checkpoint.drivers.pgbackrest.repositories.1', [
+        'type' => 's3',
+        's3' => [
+            'bucket' => 'checkpoint-backups',
+            'endpoint' => '',
+            'region' => 'ap-south-1',
+            'key' => 'key-id',
+            'secret' => 'top-secret',
+            'uri_style' => 'host',
+        ],
+        'tls' => [
+            'verify' => true,
+            'ca_file' => null,
+        ],
+        'encryption' => [
+            'enabled' => false,
+            'cipher_type' => 'aes-256-cbc',
+            'passphrase' => null,
+        ],
+    ]);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.repositories.1.s3.endpoint must be a non-empty string.');
+});
+
+it('rejects an encrypted pgbackrest repo without a passphrase', function (): void {
+    config()->set('checkpoint.drivers.pgbackrest.repositories.1.encryption.enabled', true);
+    config()->set('checkpoint.drivers.pgbackrest.repositories.1.encryption.passphrase', '');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.repositories.1.encryption.passphrase must be a non-empty string when encryption is enabled.');
+});
+
 it('rejects pgdump parallel jobs for non-directory formats', function (): void {
     config()->set('checkpoint.drivers.pgdump.format', 'custom');
     config()->set('checkpoint.drivers.pgdump.jobs', 4);

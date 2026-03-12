@@ -104,6 +104,7 @@ final class PgBackRestDriver implements BackupDriver
             $binary,
             $definition['command'],
             ...$this->commonOptions($run->operation),
+            ...$this->repositoryOptions(),
             ...$definition['options'],
             ...$this->restoreOptions($run),
             ...$this->extraArgs($definition['extra_args_key']),
@@ -169,8 +170,8 @@ final class PgBackRestDriver implements BackupDriver
     {
         $options = [];
         $stanza = (string) config('checkpoint.drivers.pgbackrest.stanza', 'main');
-        $repo = config('checkpoint.drivers.pgbackrest.repo');
         $processMax = (int) config('checkpoint.drivers.pgbackrest.process_max', 1);
+        $repo = $this->selectedRepositoryId();
 
         if ($stanza !== '') {
             $options[] = '--stanza='.$stanza;
@@ -200,6 +201,49 @@ final class PgBackRestDriver implements BackupDriver
             if ((bool) config('checkpoint.drivers.pgbackrest.checksum_page', false)) {
                 $options[] = '--checksum-page';
             }
+        }
+
+        return $options;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function repositoryOptions(): array
+    {
+        $repoId = $this->selectedRepositoryId();
+        $repository = $this->selectedRepositoryConfig();
+        $options = [
+            sprintf('--repo%d-type=%s', $repoId, $repository['type']),
+        ];
+
+        if ($repository['type'] === 'posix') {
+            $options[] = sprintf('--repo%d-path=%s', $repoId, (string) $repository['path']);
+        }
+
+        if ($repository['type'] === 's3') {
+            $s3 = is_array($repository['s3'] ?? null) ? $repository['s3'] : [];
+
+            $options[] = sprintf('--repo%d-s3-bucket=%s', $repoId, (string) $s3['bucket']);
+            $options[] = sprintf('--repo%d-s3-endpoint=%s', $repoId, (string) $s3['endpoint']);
+            $options[] = sprintf('--repo%d-s3-region=%s', $repoId, (string) $s3['region']);
+            $options[] = sprintf('--repo%d-s3-key=%s', $repoId, (string) $s3['key']);
+            $options[] = sprintf('--repo%d-s3-key-secret=%s', $repoId, (string) $s3['secret']);
+            $options[] = sprintf('--repo%d-s3-uri-style=%s', $repoId, (string) ($s3['uri_style'] ?? 'host'));
+        }
+
+        $tls = is_array($repository['tls'] ?? null) ? $repository['tls'] : [];
+        $options[] = sprintf('--repo%d-storage-verify-tls=%s', $repoId, ($tls['verify'] ?? true) ? 'y' : 'n');
+
+        if (is_string($tls['ca_file'] ?? null) && trim((string) $tls['ca_file']) !== '') {
+            $options[] = sprintf('--repo%d-storage-ca-file=%s', $repoId, (string) $tls['ca_file']);
+        }
+
+        $encryption = is_array($repository['encryption'] ?? null) ? $repository['encryption'] : [];
+
+        if (($encryption['enabled'] ?? false) === true) {
+            $options[] = sprintf('--repo%d-cipher-type=%s', $repoId, (string) $encryption['cipher_type']);
+            $options[] = sprintf('--repo%d-cipher-pass=%s', $repoId, (string) $encryption['passphrase']);
         }
 
         return $options;
@@ -405,11 +449,14 @@ final class PgBackRestDriver implements BackupDriver
      */
     private function plannedMetadata(CommandRun $run): array
     {
+        $repoId = $this->selectedRepositoryId();
+        $repository = $this->selectedRepositoryConfig();
         $metadata = [
             'stanza' => (string) config('checkpoint.drivers.pgbackrest.stanza', 'main'),
-            'repository' => (int) config('checkpoint.drivers.pgbackrest.repo', 1),
+            'repository' => $repoId,
             'metadata' => [
                 'driver' => 'pgbackrest',
+                'repository_type' => $repository['type'],
             ],
         ];
 
@@ -491,5 +538,27 @@ final class PgBackRestDriver implements BackupDriver
     private function logger(): LoggerInterface
     {
         return Log::channel(config('checkpoint.log_channel', 'stack'));
+    }
+
+    private function selectedRepositoryId(): int
+    {
+        return max(1, (int) config('checkpoint.drivers.pgbackrest.repo', 1));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function selectedRepositoryConfig(): array
+    {
+        $repoId = $this->selectedRepositoryId();
+        $repositories = config('checkpoint.drivers.pgbackrest.repositories', []);
+
+        if (! is_array($repositories) || ! is_array($repositories[$repoId] ?? null)) {
+            throw new ConfigurationException(
+                sprintf('checkpoint.drivers.pgbackrest.repositories must define selected repo [%d].', $repoId),
+            );
+        }
+
+        return $repositories[$repoId];
     }
 }

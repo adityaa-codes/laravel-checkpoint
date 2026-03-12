@@ -64,6 +64,29 @@ return [
             'binary' => $env('DB_OPS_PGBACKREST_BINARY', 'pgbackrest'),
             'stanza' => $env('DB_OPS_PGBACKREST_STANZA', 'main'),
             'repo' => (int) $env('DB_OPS_PGBACKREST_REPO', 1),
+            'repositories' => [
+                1 => [
+                    'type' => $env('DB_OPS_PGBACKREST_REPO1_TYPE', 'posix'),
+                    'path' => $env('DB_OPS_PGBACKREST_REPO1_PATH', storage_path('app/checkpoint/pgbackrest/repo1')),
+                    's3' => [
+                        'bucket' => $env('DB_OPS_PGBACKREST_REPO1_S3_BUCKET'),
+                        'endpoint' => $env('DB_OPS_PGBACKREST_REPO1_S3_ENDPOINT'),
+                        'region' => $env('DB_OPS_PGBACKREST_REPO1_S3_REGION'),
+                        'key' => $env('DB_OPS_PGBACKREST_REPO1_S3_KEY'),
+                        'secret' => $env('DB_OPS_PGBACKREST_REPO1_S3_SECRET'),
+                        'uri_style' => $env('DB_OPS_PGBACKREST_REPO1_S3_URI_STYLE', 'host'),
+                    ],
+                    'tls' => [
+                        'verify' => (bool) $env('DB_OPS_PGBACKREST_REPO1_TLS_VERIFY', true),
+                        'ca_file' => $env('DB_OPS_PGBACKREST_REPO1_TLS_CA_FILE'),
+                    ],
+                    'encryption' => [
+                        'enabled' => (bool) $env('DB_OPS_PGBACKREST_REPO1_ENCRYPTION_ENABLED', false),
+                        'cipher_type' => $env('DB_OPS_PGBACKREST_REPO1_ENCRYPTION_CIPHER', 'aes-256-cbc'),
+                        'passphrase' => $env('DB_OPS_PGBACKREST_REPO1_ENCRYPTION_PASSPHRASE'),
+                    ],
+                ],
+            ],
             'process_max' => (int) $env('DB_OPS_PGBACKREST_PROCESS_MAX', 2),
             'resume' => (bool) $env('DB_OPS_PGBACKREST_RESUME', true),
             'start_fast' => (bool) $env('DB_OPS_PGBACKREST_START_FAST', true),

@@ -75,6 +75,7 @@ final readonly class ConfigValidator
         $binary = $config['binary'] ?? null;
         $stanza = $config['stanza'] ?? null;
         $repo = $config['repo'] ?? null;
+        $repositories = $config['repositories'] ?? [];
         $processMax = $config['process_max'] ?? null;
         $timeout = $config['command_timeout_seconds'] ?? null;
 
@@ -88,6 +89,20 @@ final readonly class ConfigValidator
 
         if (! is_int($repo) || $repo < 1) {
             throw new ConfigurationException('checkpoint.drivers.pgbackrest.repo must be an integer greater than zero.');
+        }
+
+        if (! is_array($repositories) || $repositories === []) {
+            throw new ConfigurationException('checkpoint.drivers.pgbackrest.repositories must be a non-empty array.');
+        }
+
+        if (! array_key_exists($repo, $repositories) || ! is_array($repositories[$repo])) {
+            throw new ConfigurationException(
+                sprintf('checkpoint.drivers.pgbackrest.repositories must define selected repo [%d].', $repo),
+            );
+        }
+
+        foreach ($repositories as $repositoryId => $repositoryConfig) {
+            $this->validatePgBackRestRepositoryConfig($repositoryId, $repositoryConfig);
         }
 
         if (! is_int($processMax) || $processMax < 1) {
@@ -110,6 +125,96 @@ final readonly class ConfigValidator
                     sprintf('checkpoint.drivers.pgbackrest.extra_args.%s must be an array.', $key),
                 );
             }
+        }
+    }
+
+    private function validatePgBackRestRepositoryConfig(int|string $repositoryId, mixed $repositoryConfig): void
+    {
+        $repoId = is_int($repositoryId) ? $repositoryId : (int) $repositoryId;
+        $prefix = sprintf('checkpoint.drivers.pgbackrest.repositories.%s', (string) $repositoryId);
+
+        if ($repoId < 1 || ! is_array($repositoryConfig)) {
+            throw new ConfigurationException(sprintf('%s must be an array keyed by a positive repo id.', $prefix));
+        }
+
+        $type = $repositoryConfig['type'] ?? null;
+
+        if (! is_string($type) || ! in_array($type, ['posix', 's3'], true)) {
+            throw new ConfigurationException(sprintf('%s.type must be posix or s3.', $prefix));
+        }
+
+        if ($type === 'posix') {
+            $path = $repositoryConfig['path'] ?? null;
+
+            if (! is_string($path) || trim($path) === '') {
+                throw new ConfigurationException(sprintf('%s.path must be a non-empty string for posix repositories.', $prefix));
+            }
+        }
+
+        if ($type === 's3') {
+            $s3 = $repositoryConfig['s3'] ?? null;
+
+            if (! is_array($s3)) {
+                throw new ConfigurationException(sprintf('%s.s3 must be an array for s3 repositories.', $prefix));
+            }
+
+            foreach (['bucket', 'endpoint', 'region', 'key', 'secret'] as $field) {
+                $value = $s3[$field] ?? null;
+
+                if (! is_string($value) || trim($value) === '') {
+                    throw new ConfigurationException(sprintf('%s.s3.%s must be a non-empty string.', $prefix, $field));
+                }
+            }
+
+            $uriStyle = $s3['uri_style'] ?? 'host';
+
+            if (! is_string($uriStyle) || ! in_array($uriStyle, ['host', 'path'], true)) {
+                throw new ConfigurationException(sprintf('%s.s3.uri_style must be host or path.', $prefix));
+            }
+        }
+
+        $tls = $repositoryConfig['tls'] ?? [];
+
+        if (! is_array($tls)) {
+            throw new ConfigurationException(sprintf('%s.tls must be an array.', $prefix));
+        }
+
+        if (! array_key_exists('verify', $tls) || ! is_bool($tls['verify'])) {
+            throw new ConfigurationException(sprintf('%s.tls.verify must be a boolean.', $prefix));
+        }
+
+        $caFile = $tls['ca_file'] ?? null;
+
+        if ($caFile !== null && (! is_string($caFile) || trim($caFile) === '')) {
+            throw new ConfigurationException(sprintf('%s.tls.ca_file must be null or a non-empty string.', $prefix));
+        }
+
+        $encryption = $repositoryConfig['encryption'] ?? [];
+
+        if (! is_array($encryption)) {
+            throw new ConfigurationException(sprintf('%s.encryption must be an array.', $prefix));
+        }
+
+        $enabled = $encryption['enabled'] ?? false;
+
+        if (! is_bool($enabled)) {
+            throw new ConfigurationException(sprintf('%s.encryption.enabled must be a boolean.', $prefix));
+        }
+
+        $cipherType = $encryption['cipher_type'] ?? null;
+
+        if (! is_string($cipherType) || trim($cipherType) === '') {
+            throw new ConfigurationException(sprintf('%s.encryption.cipher_type must be a non-empty string.', $prefix));
+        }
+
+        $passphrase = $encryption['passphrase'] ?? null;
+
+        if ($enabled && (! is_string($passphrase) || trim($passphrase) === '')) {
+            throw new ConfigurationException(sprintf('%s.encryption.passphrase must be a non-empty string when encryption is enabled.', $prefix));
+        }
+
+        if (! $enabled && $passphrase !== null && (! is_string($passphrase) || trim($passphrase) === '')) {
+            throw new ConfigurationException(sprintf('%s.encryption.passphrase must be null or a non-empty string.', $prefix));
         }
     }
 

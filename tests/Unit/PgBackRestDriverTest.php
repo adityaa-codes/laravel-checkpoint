@@ -16,6 +16,50 @@ it('builds typed pgbackrest backup commands from structured config', function ()
     config()->set('checkpoint.drivers.pgbackrest.binary', 'pgbackrest');
     config()->set('checkpoint.drivers.pgbackrest.stanza', 'main');
     config()->set('checkpoint.drivers.pgbackrest.repo', 2);
+    config()->set('checkpoint.drivers.pgbackrest.repositories', [
+        1 => [
+            'type' => 'posix',
+            'path' => '/var/lib/pgbackrest/repo1',
+            's3' => [
+                'bucket' => null,
+                'endpoint' => null,
+                'region' => null,
+                'key' => null,
+                'secret' => null,
+                'uri_style' => 'host',
+            ],
+            'tls' => [
+                'verify' => true,
+                'ca_file' => null,
+            ],
+            'encryption' => [
+                'enabled' => false,
+                'cipher_type' => 'aes-256-cbc',
+                'passphrase' => null,
+            ],
+        ],
+        2 => [
+            'type' => 's3',
+            'path' => null,
+            's3' => [
+                'bucket' => 'checkpoint-backups',
+                'endpoint' => 's3.example.com',
+                'region' => 'ap-south-1',
+                'key' => 'repo-key',
+                'secret' => 'repo-secret',
+                'uri_style' => 'path',
+            ],
+            'tls' => [
+                'verify' => true,
+                'ca_file' => '/etc/ssl/checkpoint.pem',
+            ],
+            'encryption' => [
+                'enabled' => true,
+                'cipher_type' => 'aes-256-cbc',
+                'passphrase' => 'cipher-passphrase',
+            ],
+        ],
+    ]);
     config()->set('checkpoint.drivers.pgbackrest.process_max', 4);
     config()->set('checkpoint.drivers.pgbackrest.resume', true);
     config()->set('checkpoint.drivers.pgbackrest.start_fast', true);
@@ -35,6 +79,15 @@ it('builds typed pgbackrest backup commands from structured config', function ()
         ->and($process->getCommandLine())->toContain('--type=full')
         ->and($process->getCommandLine())->toContain('--stanza=main')
         ->and($process->getCommandLine())->toContain('--repo=2')
+        ->and($process->getCommandLine())->toContain('--repo2-type=s3')
+        ->and($process->getCommandLine())->toContain('--repo2-s3-bucket=checkpoint-backups')
+        ->and($process->getCommandLine())->toContain('--repo2-s3-endpoint=s3.example.com')
+        ->and($process->getCommandLine())->toContain('--repo2-s3-region=ap-south-1')
+        ->and($process->getCommandLine())->toContain('--repo2-s3-uri-style=path')
+        ->and($process->getCommandLine())->toContain('--repo2-storage-verify-tls=y')
+        ->and($process->getCommandLine())->toContain('--repo2-storage-ca-file=/etc/ssl/checkpoint.pem')
+        ->and($process->getCommandLine())->toContain('--repo2-cipher-type=aes-256-cbc')
+        ->and($process->getCommandLine())->toContain('--repo2-cipher-pass=cipher-passphrase')
         ->and($process->getCommandLine())->toContain('--process-max=4')
         ->and($process->getCommandLine())->toContain('--resume')
         ->and($process->getCommandLine())->toContain('--start-fast')

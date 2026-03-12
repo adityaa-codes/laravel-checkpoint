@@ -78,6 +78,29 @@ class TestCase extends Orchestra
                     'binary' => 'pgbackrest',
                     'stanza' => 'main',
                     'repo' => 1,
+                    'repositories' => [
+                        1 => [
+                            'type' => 'posix',
+                            'path' => sys_get_temp_dir().'/checkpoint-pgbackrest-repo1',
+                            's3' => [
+                                'bucket' => null,
+                                'endpoint' => null,
+                                'region' => null,
+                                'key' => null,
+                                'secret' => null,
+                                'uri_style' => 'host',
+                            ],
+                            'tls' => [
+                                'verify' => true,
+                                'ca_file' => null,
+                            ],
+                            'encryption' => [
+                                'enabled' => false,
+                                'cipher_type' => 'aes-256-cbc',
+                                'passphrase' => null,
+                            ],
+                        ],
+                    ],
                     'process_max' => 2,
                     'resume' => true,
                     'start_fast' => true,
