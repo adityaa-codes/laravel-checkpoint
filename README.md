@@ -28,7 +28,7 @@ php artisan migrate
 Important config groups in `config/checkpoint.php`:
 
 - `user_model`, `user_name_column`, `table_prefix`
-- `queue.connection`, `queue.name`, `queue.max_attempts`, `queue.retry_after`, `queue.timeout`, `queue.unique_for`, `queue.lock_store`, `queue.orphan_threshold`, `queue.orphan_claim_timeout`, `queue.orphan_batch_size`
+- `queue.connection`, `queue.name`, `queue.max_attempts`, `queue.retry_after`, `queue.timeout`, `queue.unique_for`, `queue.lock_store`, `queue.orphan_threshold`, `queue.orphan_claim_timeout`, `queue.orphan_batch_size`, `queue.orphan_event_max_ids`
 - `schedule.logical_backup_*`, `schedule.health_check_enabled`, `schedule.recover_orphans_enabled`, `schedule.prune_enabled`, `schedule.without_overlapping`, `schedule.overlap_expires_at`, `schedule.on_one_server`
 - `driver`, `drivers.shell.*`, `drivers.pgbackrest.*`, `drivers.pgdump.*`
 - `log_channel`
@@ -45,6 +45,7 @@ DB_OPS_QUEUE_LOCK_STORE=redis
 DB_OPS_QUEUE_ORPHAN_THRESHOLD=10
 DB_OPS_QUEUE_ORPHAN_CLAIM_TIMEOUT=61
 DB_OPS_QUEUE_ORPHAN_BATCH_SIZE=100
+DB_OPS_QUEUE_ORPHAN_EVENT_MAX_IDS=50
 DB_OPS_LOG_CHANNEL=stack
 
 DB_OPS_CMD_LOGICAL_BACKUP=
@@ -98,6 +99,7 @@ DB_OPS_QUEUE_UNIQUE_FOR=3660
 DB_OPS_QUEUE_ORPHAN_THRESHOLD=10
 DB_OPS_QUEUE_ORPHAN_CLAIM_TIMEOUT=61
 DB_OPS_QUEUE_ORPHAN_BATCH_SIZE=100
+DB_OPS_QUEUE_ORPHAN_EVENT_MAX_IDS=50
 DB_OPS_QUEUE_LOCK_STORE=redis
 DB_OPS_SCHEDULE_WITHOUT_OVERLAPPING=true
 DB_OPS_SCHEDULE_OVERLAP_EXPIRES_AT=180
@@ -269,13 +271,16 @@ values are known for the current run.
 Event hooks now include:
 
 - `BackupFreshnessAlarmTriggered` when `db-ops:doctor` detects a missing or stale last-known-good backup
-- `QueueLagDetected` when `db-ops:recover-orphans` finds stale pending work, including oldest stale age and affected run ids
+- `QueueLagDetected` when `db-ops:recover-orphans` finds stale pending work, including oldest stale age, total claimed backlog count, and a bounded sample of affected run ids
 - `OrphanRunRedispatched` for each stale pending run that gets re-queued, including queue and stale age context
 
 For orphan recovery, "stale age" is based on the run's last pending heartbeat
 (`updated_at`), not raw row creation time. Redispatch coordination uses a
 separate `orphan_recovery_claimed_at` lease so operator diagnostics and lag
 events continue to reflect stuck pending work instead of lease timestamps.
+`QueueLagDetected::staleRunIds` is intentionally capped by
+`DB_OPS_QUEUE_ORPHAN_EVENT_MAX_IDS`; use `staleRunCount` as the authoritative
+total and treat the ids array as a sample for debugging.
 
 Wire these events to your application listeners, metrics pipeline, or alerting
 provider to turn them into actual pages, notifications, or dashboards.
