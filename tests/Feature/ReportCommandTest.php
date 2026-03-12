@@ -73,6 +73,7 @@ it('renders a machine-readable operational report', function (): void {
 
     expect($report)->toBeArray()
         ->and($report['version'])->toBe(1)
+        ->and($report['surface'])->toBe('report')
         ->and($report['driver'])->toBe('shell')
         ->and($report['recent_runs'])->toHaveCount(2)
         ->and($report['recent_runs'][0])->toMatchArray([
@@ -117,6 +118,7 @@ it('returns a failed report when config validation fails', function (): void {
     expect($exitCode)->toBe(1)
         ->and($report)->toBeArray()
         ->and($report['version'])->toBe(1)
+        ->and($report['surface'])->toBe('report')
         ->and($report)->toHaveKeys(['generated_at', 'driver', 'recent_runs', 'summary', 'health'])
         ->and($report['recent_runs'])->toBeArray()
         ->and($report['summary'])->toBeArray()

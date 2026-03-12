@@ -172,6 +172,8 @@ it('renders recent runs as machine-readable json', function (): void {
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
+        ->and($report['version'])->toBe(1)
+        ->and($report['surface'])->toBe('status')
         ->and($report['mode'])->toBe('runs')
         ->and($report['limit'])->toBe(1)
         ->and($report['runs'])->toHaveCount(1)
@@ -259,6 +261,8 @@ it('renders summary signals as machine-readable json', function (): void {
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
+        ->and($report['version'])->toBe(1)
+        ->and($report['surface'])->toBe('status')
         ->and($report['mode'])->toBe('summary')
         ->and($report['summary'])->toMatchArray([
             'pending_runs' => 1,

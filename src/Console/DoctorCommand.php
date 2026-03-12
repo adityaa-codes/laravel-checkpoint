@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
@@ -19,6 +20,7 @@ final class DoctorCommand extends Command
         private readonly ConfigValidator $validator,
         private readonly Repository $config,
         private readonly OperationalReportBuilder $reportBuilder,
+        private readonly CommandJsonContract $jsonContract,
     ) {
         parent::__construct();
     }
@@ -99,6 +101,8 @@ final class DoctorCommand extends Command
                 'notes' => $check['notes'],
             ], $checks),
         ];
+
+        $report = $this->jsonContract->envelope('doctor', $report);
 
         $json = json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 

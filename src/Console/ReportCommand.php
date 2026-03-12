@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
@@ -19,6 +20,7 @@ final class ReportCommand extends Command
         private readonly ConfigValidator $validator,
         private readonly Repository $config,
         private readonly OperationalReportBuilder $reportBuilder,
+        private readonly CommandJsonContract $jsonContract,
     ) {
         parent::__construct();
     }
@@ -47,14 +49,13 @@ final class ReportCommand extends Command
             $exitCode = self::FAILURE;
         }
 
-        $this->line(json_encode([
-            'version' => 1,
+        $this->line(json_encode($this->jsonContract->envelope('report', [
             'generated_at' => now()->toIso8601String(),
             'driver' => (string) $this->config->get('checkpoint.driver'),
             'recent_runs' => $this->reportBuilder->recentRuns($limit),
             'summary' => $this->reportBuilder->summary(),
             'health' => $health,
-        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 
         return $exitCode;
     }

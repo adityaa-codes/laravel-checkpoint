@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use Illuminate\Console\Command;
 
 final class StatusCommand extends Command
@@ -15,6 +16,7 @@ final class StatusCommand extends Command
 
     public function __construct(
         private readonly OperationalReportBuilder $reportBuilder,
+        private readonly CommandJsonContract $jsonContract,
     ) {
         parent::__construct();
     }
@@ -39,11 +41,11 @@ final class StatusCommand extends Command
         $runs = $this->reportBuilder->recentRuns($limit);
 
         if ($format === 'json') {
-            $this->line(json_encode([
+            $this->line(json_encode($this->jsonContract->envelope('status', [
                 'mode' => 'runs',
                 'limit' => $limit,
                 'runs' => $runs,
-            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 
             return self::SUCCESS;
         }
@@ -70,10 +72,10 @@ final class StatusCommand extends Command
         $summary = $this->reportBuilder->summary();
 
         if ($format === 'json') {
-            $this->line(json_encode([
+            $this->line(json_encode($this->jsonContract->envelope('status', [
                 'mode' => 'summary',
                 'summary' => $summary,
-            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 
             return;
         }

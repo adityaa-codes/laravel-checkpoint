@@ -99,6 +99,8 @@ it('renders a machine-readable json report', function (): void {
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
+        ->and($report['version'])->toBe(1)
+        ->and($report['surface'])->toBe('doctor')
         ->and($report['ok'])->toBeTrue()
         ->and($report['driver'])->toBe('shell')
         ->and(collect($report['checks'])->contains(
@@ -208,6 +210,8 @@ it('returns a failed machine-readable json report for invalid config', function 
 
     expect($exitCode)->toBe(1)
         ->and($report)->toBeArray()
+        ->and($report['version'])->toBe(1)
+        ->and($report['surface'])->toBe('doctor')
         ->and($report['ok'])->toBeFalse()
         ->and(collect($report['checks'])->contains(
             fn (array $check): bool => $check['check'] === 'Config validation' && $check['status'] === 'fail',
