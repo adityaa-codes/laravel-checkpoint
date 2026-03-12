@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
+use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -93,12 +94,33 @@ final class StatusCommand extends Command
             ->latest('id')
             ->first();
 
+        $latestDrillRun = BackupDrillRun::query()
+            ->recent()
+            ->first();
+
+        $latestFailedDrillRun = BackupDrillRun::query()
+            ->where('overall_result', 'fail')
+            ->recent()
+            ->first();
+
+        $drillWindowStart = now()->subDays(30);
+        $recentDrillCount = BackupDrillRun::query()
+            ->where('executed_at', '>=', $drillWindowStart)
+            ->count();
+        $passingDrillCount = BackupDrillRun::query()
+            ->where('executed_at', '>=', $drillWindowStart)
+            ->where('overall_result', 'pass')
+            ->count();
+
         $summary = [
             'pending_runs' => CommandRun::query()->pending()->count(),
             'running_runs' => CommandRun::query()->running()->count(),
             'failed_runs_24h' => CommandRun::query()->failed()->where('created_at', '>=', now()->subDay())->count(),
             'last_known_good_backup' => $this->summarySignalPayload($lastKnownGood, 'last_known_good_at'),
             'latest_verified_backup' => $this->summarySignalPayload($latestVerified, 'verified_at'),
+            'latest_backup_drill' => $this->drillPayload($latestDrillRun),
+            'latest_failed_backup_drill' => $this->drillPayload($latestFailedDrillRun),
+            'backup_drill_pass_rate_30d' => $this->drillPassRatePayload($recentDrillCount, $passingDrillCount),
             'latest_restore_run' => $this->restoreRunPayload($latestRestoreRun),
             'latest_restore_failure' => $this->restoreFailurePayload($latestRestoreFailure),
         ];
@@ -118,6 +140,9 @@ final class StatusCommand extends Command
             ['Failed runs (24h)', (string) $summary['failed_runs_24h']],
             ['Last known good backup', $this->summaryRunValue($lastKnownGood, 'last_known_good_at')],
             ['Latest verified backup', $this->summaryRunValue($latestVerified, 'verified_at')],
+            ['Latest backup drill', $this->drillSummary($latestDrillRun)],
+            ['Latest failed drill', $this->drillSummary($latestFailedDrillRun)],
+            ['Backup drill pass rate (30d)', $summary['backup_drill_pass_rate_30d']['label']],
             ['Latest restore run', $this->restoreRunSummary($latestRestoreRun)],
             ['Latest restore failure', $this->restoreFailureSummary($latestRestoreFailure)],
         ]);
@@ -245,6 +270,25 @@ final class StatusCommand extends Command
         return sprintf('%s at %s', $summary, $timestamp->format('Y-m-d H:i:s'));
     }
 
+    private function drillSummary(?BackupDrillRun $run): string
+    {
+        if (! $run instanceof BackupDrillRun) {
+            return '-';
+        }
+
+        $summary = sprintf(
+            '%s [%s]',
+            $run->run_uuid,
+            strtoupper((string) $run->overall_result),
+        );
+
+        if (is_string($run->executed_by) && $run->executed_by !== '') {
+            $summary .= sprintf(' by %s', $run->executed_by);
+        }
+
+        return sprintf('%s at %s', $summary, $run->executed_at->format('Y-m-d H:i:s'));
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -348,5 +392,55 @@ final class StatusCommand extends Command
         $metadata = is_array($run->metadata) ? $run->metadata : [];
 
         return is_array($metadata['restore_audit'] ?? null) ? $metadata['restore_audit'] : null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function drillPayload(?BackupDrillRun $run): array
+    {
+        if (! $run instanceof BackupDrillRun) {
+            return [
+                'label' => '-',
+                'timestamp' => null,
+                'run_uuid' => null,
+                'overall_result' => null,
+                'executed_by' => null,
+            ];
+        }
+
+        return [
+            'label' => $this->drillSummary($run),
+            'timestamp' => $run->executed_at->format('Y-m-d H:i:s'),
+            'run_uuid' => $run->run_uuid,
+            'overall_result' => $run->overall_result,
+            'executed_by' => $run->executed_by,
+        ];
+    }
+
+    /**
+     * @return array{label:string,window_days:int,total:int,passing:int,pass_rate_percent:float|null}
+     */
+    private function drillPassRatePayload(int $total, int $passing): array
+    {
+        if ($total < 1) {
+            return [
+                'label' => '-',
+                'window_days' => 30,
+                'total' => 0,
+                'passing' => 0,
+                'pass_rate_percent' => null,
+            ];
+        }
+
+        $percent = round(($passing / $total) * 100, 1);
+
+        return [
+            'label' => sprintf('%d/%d (%.1f%%)', $passing, $total, $percent),
+            'window_days' => 30,
+            'total' => $total,
+            'passing' => $passing,
+            'pass_rate_percent' => $percent,
+        ];
     }
 }

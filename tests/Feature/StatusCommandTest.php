@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
+use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Date;
@@ -108,6 +109,20 @@ it('shows an operator-facing summary of recent checkpoint health signals', funct
         'finished_at' => now()->subMinutes(18),
     ]);
 
+    BackupDrillRun::query()->create([
+        'run_uuid' => 'drill-pass-001',
+        'overall_result' => 'pass',
+        'executed_by' => 'ci-pipeline',
+        'executed_at' => now()->subHours(6),
+    ]);
+
+    BackupDrillRun::query()->create([
+        'run_uuid' => 'drill-fail-001',
+        'overall_result' => 'fail',
+        'executed_by' => 'ops-user',
+        'executed_at' => now()->subHours(3),
+    ]);
+
     checkpoint_artisan('db-ops:status --summary')
         ->expectsTable(
             ['Signal', 'Value'],
@@ -117,6 +132,9 @@ it('shows an operator-facing summary of recent checkpoint health signals', funct
                 ['Failed runs (24h)', '1'],
                 ['Last known good backup', 'full:20260311-010101F at 2026-03-11 11:50:00'],
                 ['Latest verified backup', 'full:20260311-010101F at 2026-03-11 11:55:00'],
+                ['Latest backup drill', 'drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00'],
+                ['Latest failed drill', 'drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00'],
+                ['Backup drill pass rate (30d)', '1/2 (50.0%)'],
                 ['Latest restore run', 'logical_restore_file [failed] (nightly.sql) {confirm=token, verified_run=2} at 2026-03-11 11:42:00'],
                 ['Latest restore failure', 'logical_restore_file (nightly.sql) at 2026-03-11 11:42:00'],
             ],
@@ -222,6 +240,20 @@ it('renders summary signals as machine-readable json', function (): void {
         'finished_at' => now()->subMinutes(18),
     ]);
 
+    BackupDrillRun::query()->create([
+        'run_uuid' => 'drill-pass-001',
+        'overall_result' => 'pass',
+        'executed_by' => 'ci-pipeline',
+        'executed_at' => now()->subHours(6),
+    ]);
+
+    BackupDrillRun::query()->create([
+        'run_uuid' => 'drill-fail-001',
+        'overall_result' => 'fail',
+        'executed_by' => 'ops-user',
+        'executed_at' => now()->subHours(3),
+    ]);
+
     Artisan::call('db-ops:status', ['--summary' => true, '--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
@@ -237,6 +269,27 @@ it('renders summary signals as machine-readable json', function (): void {
             'label' => 'full:20260311-010101F at 2026-03-11 11:50:00',
             'timestamp' => '2026-03-11 11:50:00',
             'operation' => 'pgbackrest_backup',
+        ])
+        ->and($report['summary']['latest_backup_drill'])->toMatchArray([
+            'label' => 'drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00',
+            'timestamp' => '2026-03-11 09:00:00',
+            'run_uuid' => 'drill-fail-001',
+            'overall_result' => 'fail',
+            'executed_by' => 'ops-user',
+        ])
+        ->and($report['summary']['latest_failed_backup_drill'])->toMatchArray([
+            'label' => 'drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00',
+            'timestamp' => '2026-03-11 09:00:00',
+            'run_uuid' => 'drill-fail-001',
+            'overall_result' => 'fail',
+            'executed_by' => 'ops-user',
+        ])
+        ->and($report['summary']['backup_drill_pass_rate_30d'])->toMatchArray([
+            'label' => '1/2 (50.0%)',
+            'window_days' => 30,
+            'total' => 2,
+            'passing' => 1,
+            'pass_rate_percent' => 50.0,
         ])
         ->and($report['summary']['latest_restore_run'])->toMatchArray([
             'label' => 'logical_restore_file [failed] (nightly.sql) {confirm=token, verified_run=2} at 2026-03-11 11:42:00',

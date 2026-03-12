@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFreshnessAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
+use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Date;
 
 it('renders the doctor health table', function (): void {
     checkpoint_artisan('db-ops:doctor')
@@ -26,6 +28,8 @@ it('renders the doctor health table', function (): void {
         ->expectsOutputToContain('Orphaned runs')
         ->expectsOutputToContain('Backups: last known good')
         ->expectsOutputToContain('Backups: duration anomaly')
+        ->expectsOutputToContain('Backup drills: latest run')
+        ->expectsOutputToContain('Backup drills: pass rate')
         ->assertSuccessful();
 });
 
@@ -98,6 +102,40 @@ it('renders a machine-readable json report', function (): void {
         ->and(collect($report['checks'])->contains(
             fn (array $check): bool => $check['check'] === 'Config: driver' && $check['status'] === 'pass',
         ))->toBeTrue();
+});
+
+it('reports drill freshness and pass rate in machine-readable json', function (): void {
+    Date::setTestNow('2026-03-11 12:00:00');
+
+    BackupDrillRun::query()->create([
+        'run_uuid' => 'drill-pass-001',
+        'overall_result' => 'pass',
+        'executed_at' => now()->subDays(5),
+    ]);
+
+    BackupDrillRun::query()->create([
+        'run_uuid' => 'drill-fail-001',
+        'overall_result' => 'fail',
+        'executed_at' => now()->subDays(2),
+    ]);
+
+    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+
+    $report = json_decode(Artisan::output(), true);
+
+    expect($report)->toBeArray()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['check'] === 'Backup drills: latest run'
+                && $check['status'] === 'pass'
+                && str_contains($check['notes'], 'FAIL 2 days old (drill-fail-001)'),
+        ))->toBeTrue()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['check'] === 'Backup drills: pass rate'
+                && $check['status'] === 'warn'
+                && $check['notes'] === '1/2 passed in the last 30 days (50.0%)',
+        ))->toBeTrue();
+
+    Date::setTestNow();
 });
 
 it('returns a failed machine-readable json report for invalid config', function (): void {

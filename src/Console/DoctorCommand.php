@@ -79,6 +79,8 @@ final class DoctorCommand extends Command
         ];
         $rows[] = $this->lastKnownGoodRow();
         $rows[] = $this->backupDurationAnomalyRow();
+        $rows[] = $this->backupDrillFreshnessRow();
+        $rows[] = $this->backupDrillPassRateRow();
 
         if ($outputMode === 'json') {
             $this->line($this->jsonReport($rows, true));
@@ -215,6 +217,57 @@ final class DoctorCommand extends Command
             'Backups: duration anomaly',
             $this->statusWord($level),
             sprintf('latest %ds vs median %ds (factor: %.1f)', $latestSeconds, $medianSeconds, $factor),
+        ];
+    }
+
+    /**
+     * @return array{0:string,1:string,2:string}
+     */
+    private function backupDrillFreshnessRow(): array
+    {
+        $latest = BackupDrillRun::query()
+            ->recent()
+            ->first();
+
+        if (! $latest instanceof BackupDrillRun) {
+            return ['Backup drills: latest run', $this->statusWord('warn'), 'No backup drill recorded'];
+        }
+
+        $ageDays = max(0, (int) ceil($latest->executed_at->diffInHours(now()) / 24));
+        $level = $latest->executed_at->lt(now()->subDays(30)) ? 'warn' : 'pass';
+
+        return [
+            'Backup drills: latest run',
+            $this->statusWord($level),
+            sprintf('%s %d days old (%s)', strtoupper((string) $latest->overall_result), $ageDays, $latest->run_uuid),
+        ];
+    }
+
+    /**
+     * @return array{0:string,1:string,2:string}
+     */
+    private function backupDrillPassRateRow(): array
+    {
+        $windowStart = now()->subDays(30);
+        $total = BackupDrillRun::query()
+            ->where('executed_at', '>=', $windowStart)
+            ->count();
+
+        if ($total < 1) {
+            return ['Backup drills: pass rate', $this->statusWord('warn'), 'No backup drills in the last 30 days'];
+        }
+
+        $passing = BackupDrillRun::query()
+            ->where('executed_at', '>=', $windowStart)
+            ->where('overall_result', 'pass')
+            ->count();
+        $percent = round(($passing / $total) * 100, 1);
+        $level = $passing === $total ? 'pass' : 'warn';
+
+        return [
+            'Backup drills: pass rate',
+            $this->statusWord($level),
+            sprintf('%d/%d passed in the last 30 days (%.1f%%)', $passing, $total, $percent),
         ];
     }
 
