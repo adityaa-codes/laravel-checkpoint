@@ -319,6 +319,10 @@ Command output storage limits are configurable:
 - `DB_OPS_OUTPUT_MAX_PERSISTED_BYTES`: env override for the same cap
 - drivers stream output through a bounded capture buffer, so large command output no longer needs to be fully materialized in PHP just to persist run diagnostics
 - truncated runs expose `metadata.output_capture` with `truncated`, `original_bytes`, `persisted_bytes`, and the configured cap
+- `output.storage=filesystem` moves the bounded command output artifact off-row while keeping an inline preview in `command_output`
+- `output.filesystem.disk`, `output.filesystem.path_prefix`, and `output.filesystem.inline_bytes` control external storage placement and preview size
+- `CommandRun::resolvedCommandOutput()` returns the externalized artifact when filesystem storage is enabled
+- backup events continue to emit the inline preview in their `output` payload; use `event->run->resolvedCommandOutput()` when listeners need the externalized artifact
 
 Backup drill observability thresholds are configurable:
 
