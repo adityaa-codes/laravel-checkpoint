@@ -300,7 +300,13 @@ Report notes:
 - `summary.backup_drill_pass_rate.window_days` follows the same configurable drill pass-rate window as `db-ops:doctor`
 - `db-ops:doctor --format=json` uses the same health semantics as `db-ops:report`: `ok` is only `true` when every emitted health check is `pass`
 - `db-ops:status` emits JSON contract version `1`, `db-ops:doctor` emits `3`, and `db-ops:report` emits `2`
+- `db-ops:report` includes both `limit_requested` and effective `limit` so automation can detect capped history responses
 - future JSON contract changes should stay additive within a version; breaking shape changes should increment the top-level `version`
+
+Reporting limits are configurable:
+
+- `reporting.max_recent_runs`: hard cap applied to `db-ops:status --format=json` and `db-ops:report`
+- `DB_OPS_REPORTING_MAX_RECENT_RUNS`: env override for the same cap
 
 Backup drill observability thresholds are configurable:
 
@@ -374,6 +380,7 @@ Behavior notes:
 - restore commands use `pg_restore`
 - `logical_restore_latest` resolves the newest export in the configured output directory
 - `logical_restore_file` resolves relative export names inside the configured output directory
+- restore targets are snapshotted and revalidated immediately before `pg_restore` argv is built so swapped files or mutated directory exports are rejected
 
 ## Extending The Catalog
 
