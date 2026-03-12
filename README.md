@@ -252,10 +252,16 @@ Operational surfaces now include:
 - `db-ops:doctor` freshness warnings for stale last-known-good backups
 - `db-ops:doctor` duration anomaly warnings for unusually slow backup runs
 - structured log context across drivers, queue job failures, and health checks
+- orphan recovery events for queue lag and redispatched stale runs
 
 Structured log fields include `run_id`, `driver`, `backup_type`,
 `restore_target`, `repository`, `stanza`, and `duration_seconds` when those
 values are known for the current run.
+
+Event hooks now include:
+
+- `QueueLagDetected` when `db-ops:recover-orphans` finds stale pending work
+- `OrphanRunRedispatched` for each stale pending run that gets re-queued
 
 ### pgDump Large-Export Configuration
 
