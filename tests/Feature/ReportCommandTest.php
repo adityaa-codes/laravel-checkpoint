@@ -2,70 +2,13 @@
 
 declare(strict_types=1);
 
-use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
-use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
-use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Tests\Support\OperatorCommandTestSupport;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Date;
 
 it('renders a machine-readable operational report', function (): void {
-    Date::setTestNow('2026-03-11 12:00:00');
+    OperatorCommandTestSupport::freezeTime();
     config()->set('checkpoint.observability.backup_drill_pass_rate_window_days', 14);
-
-    CommandRun::query()->create([
-        'operation' => 'logical_backup',
-        'backup_type' => 'logical_export',
-        'backup_label' => 'nightly-001',
-        'verification_state' => 'not_applicable',
-        'last_known_good_at' => now()->subHour(),
-        'status' => CommandRunStatus::Pending,
-        'attempts' => 0,
-    ]);
-
-    CommandRun::query()->create([
-        'operation' => 'pgbackrest_backup_full',
-        'backup_type' => 'full',
-        'backup_label' => '20260311-010101F',
-        'verification_state' => 'verified',
-        'verified_at' => now()->subMinutes(5),
-        'last_known_good_at' => now()->subMinutes(10),
-        'status' => CommandRunStatus::Succeeded,
-        'attempts' => 1,
-        'exit_code' => 0,
-        'created_at' => now()->subMinutes(15),
-        'updated_at' => now()->subMinutes(15),
-    ]);
-
-    CommandRun::query()->create([
-        'operation' => 'logical_restore_file',
-        'argument_text' => 'nightly.sql',
-        'restore_target' => 'nightly.sql',
-        'metadata' => [
-            'restore_audit' => [
-                'environment' => 'testing',
-                'database' => ':memory:',
-                'target' => 'nightly.sql',
-                'confirmation_required' => true,
-                'confirmation_satisfied_via' => 'token',
-                'verified_backup_required' => true,
-                'verified_signal_run_id' => 2,
-            ],
-        ],
-        'verification_state' => 'failed',
-        'status' => CommandRunStatus::Failed,
-        'attempts' => 1,
-        'exit_code' => 1,
-        'created_at' => now()->subMinutes(20),
-        'updated_at' => now()->subMinutes(20),
-        'finished_at' => now()->subMinutes(18),
-    ]);
-
-    BackupDrillRun::query()->create([
-        'run_uuid' => 'drill-fail-001',
-        'overall_result' => 'fail',
-        'executed_by' => 'ops-user',
-        'executed_at' => now()->subHours(3),
-    ]);
+    OperatorCommandTestSupport::seedOperatorSummaryState();
 
     Artisan::call('db-ops:report', ['--limit' => 2]);
 
@@ -93,11 +36,11 @@ it('renders a machine-readable operational report', function (): void {
             'executed_by' => 'ops-user',
         ])
         ->and($report['summary']['backup_drill_pass_rate'])->toMatchArray([
-            'label' => '0/1 (0.0%)',
+            'label' => '1/2 (50.0%)',
             'window_days' => 14,
-            'total' => 1,
-            'passing' => 0,
-            'pass_rate_percent' => 0.0,
+            'total' => 2,
+            'passing' => 1,
+            'pass_rate_percent' => 50.0,
         ])
         ->and($report['health']['ok'])->toBeFalse()
         ->and(collect($report['health']['checks'])->contains(
@@ -105,7 +48,7 @@ it('renders a machine-readable operational report', function (): void {
                 && $check['status'] === 'warn',
         ))->toBeTrue();
 
-    Date::setTestNow();
+    OperatorCommandTestSupport::resetTime();
 });
 
 it('returns a failed report when config validation fails', function (): void {

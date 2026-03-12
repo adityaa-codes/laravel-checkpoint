@@ -3,34 +3,13 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
-use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Tests\Support\OperatorCommandTestSupport;
 use Illuminate\Support\Facades\Artisan;
-use Illuminate\Support\Facades\Date;
 
 it('shows recent command runs in descending order with the requested limit', function (): void {
-    Date::setTestNow('2026-03-11 12:00:00');
-
-    CommandRun::query()->create([
-        'operation' => 'logical_backup',
-        'backup_type' => 'logical_export',
-        'backup_label' => 'nightly-001',
-        'verification_state' => 'not_applicable',
-        'last_known_good_at' => now()->subHour(),
-        'status' => CommandRunStatus::Pending,
-        'attempts' => 0,
-    ]);
-
-    CommandRun::query()->create([
-        'operation' => 'pgbackrest_info',
-        'backup_type' => 'full',
-        'backup_label' => '20260311-010101F',
-        'verification_state' => 'verified',
-        'last_known_good_at' => now()->subMinutes(10),
-        'status' => CommandRunStatus::Succeeded,
-        'attempts' => 0,
-        'exit_code' => 0,
-    ]);
+    OperatorCommandTestSupport::freezeTime();
+    OperatorCommandTestSupport::seedRecentRuns();
 
     CommandRun::query()->create([
         'operation' => 'logical_restore_file',
@@ -52,76 +31,12 @@ it('shows recent command runs in descending order with the requested limit', fun
         )
         ->assertSuccessful();
 
-    Date::setTestNow();
+    OperatorCommandTestSupport::resetTime();
 });
 
 it('shows an operator-facing summary of recent checkpoint health signals', function (): void {
-    Date::setTestNow('2026-03-11 12:00:00');
-
-    CommandRun::query()->create([
-        'operation' => 'logical_backup',
-        'backup_type' => 'logical_export',
-        'backup_label' => 'nightly-001',
-        'verification_state' => 'not_applicable',
-        'status' => CommandRunStatus::Pending,
-        'attempts' => 0,
-    ]);
-
-    CommandRun::query()->create([
-        'operation' => 'pgbackrest_backup',
-        'backup_type' => 'full',
-        'backup_label' => '20260311-010101F',
-        'verification_state' => 'verified',
-        'verified_at' => now()->subMinutes(5),
-        'last_known_good_at' => now()->subMinutes(10),
-        'status' => CommandRunStatus::Succeeded,
-        'attempts' => 1,
-        'exit_code' => 0,
-        'created_at' => now()->subMinutes(15),
-        'updated_at' => now()->subMinutes(15),
-    ]);
-
-    CommandRun::query()->create([
-        'operation' => 'pgbackrest_check',
-        'status' => CommandRunStatus::Running,
-        'attempts' => 1,
-        'created_at' => now()->subMinutes(2),
-        'updated_at' => now()->subMinutes(2),
-        'started_at' => now()->subMinute(),
-    ]);
-
-    CommandRun::query()->create([
-        'operation' => 'logical_restore_file',
-        'argument_text' => 'nightly.sql',
-        'restore_target' => 'nightly.sql',
-        'metadata' => [
-            'restore_audit' => [
-                'confirmation_satisfied_via' => 'token',
-                'verified_signal_run_id' => 2,
-            ],
-        ],
-        'verification_state' => 'failed',
-        'status' => CommandRunStatus::Failed,
-        'attempts' => 1,
-        'exit_code' => 1,
-        'created_at' => now()->subMinutes(20),
-        'updated_at' => now()->subMinutes(20),
-        'finished_at' => now()->subMinutes(18),
-    ]);
-
-    BackupDrillRun::query()->create([
-        'run_uuid' => 'drill-pass-001',
-        'overall_result' => 'pass',
-        'executed_by' => 'ci-pipeline',
-        'executed_at' => now()->subHours(6),
-    ]);
-
-    BackupDrillRun::query()->create([
-        'run_uuid' => 'drill-fail-001',
-        'overall_result' => 'fail',
-        'executed_by' => 'ops-user',
-        'executed_at' => now()->subHours(3),
-    ]);
+    OperatorCommandTestSupport::freezeTime();
+    OperatorCommandTestSupport::seedOperatorSummaryState(includeRunningRun: true);
 
     checkpoint_artisan('db-ops:status --summary')
         ->expectsTable(
@@ -141,31 +56,12 @@ it('shows an operator-facing summary of recent checkpoint health signals', funct
         )
         ->assertSuccessful();
 
-    Date::setTestNow();
+    OperatorCommandTestSupport::resetTime();
 });
 
 it('renders recent runs as machine-readable json', function (): void {
-    Date::setTestNow('2026-03-11 12:00:00');
-
-    CommandRun::query()->create([
-        'operation' => 'logical_backup',
-        'backup_type' => 'logical_export',
-        'backup_label' => 'nightly-001',
-        'verification_state' => 'not_applicable',
-        'status' => CommandRunStatus::Pending,
-        'attempts' => 0,
-    ]);
-
-    CommandRun::query()->create([
-        'operation' => 'pgbackrest_info',
-        'backup_type' => 'full',
-        'backup_label' => '20260311-010101F',
-        'verification_state' => 'verified',
-        'last_known_good_at' => now()->subMinutes(10),
-        'status' => CommandRunStatus::Succeeded,
-        'attempts' => 0,
-        'exit_code' => 0,
-    ]);
+    OperatorCommandTestSupport::freezeTime();
+    OperatorCommandTestSupport::seedRecentRuns();
 
     Artisan::call('db-ops:status', ['--limit' => 1, '--format' => 'json']);
 
@@ -189,72 +85,12 @@ it('renders recent runs as machine-readable json', function (): void {
             'last_known_good_at' => '2026-03-11 11:50:00',
         ]);
 
-    Date::setTestNow();
+    OperatorCommandTestSupport::resetTime();
 });
 
 it('renders summary signals as machine-readable json', function (): void {
-    Date::setTestNow('2026-03-11 12:00:00');
-
-    CommandRun::query()->create([
-        'operation' => 'logical_backup',
-        'backup_type' => 'logical_export',
-        'backup_label' => 'nightly-001',
-        'verification_state' => 'not_applicable',
-        'status' => CommandRunStatus::Pending,
-        'attempts' => 0,
-    ]);
-
-    CommandRun::query()->create([
-        'operation' => 'pgbackrest_backup',
-        'backup_type' => 'full',
-        'backup_label' => '20260311-010101F',
-        'verification_state' => 'verified',
-        'verified_at' => now()->subMinutes(5),
-        'last_known_good_at' => now()->subMinutes(10),
-        'status' => CommandRunStatus::Succeeded,
-        'attempts' => 1,
-        'exit_code' => 0,
-        'created_at' => now()->subMinutes(15),
-        'updated_at' => now()->subMinutes(15),
-    ]);
-
-    CommandRun::query()->create([
-        'operation' => 'logical_restore_file',
-        'argument_text' => 'nightly.sql',
-        'restore_target' => 'nightly.sql',
-        'metadata' => [
-            'restore_audit' => [
-                'environment' => 'testing',
-                'database' => ':memory:',
-                'target' => 'nightly.sql',
-                'confirmation_required' => true,
-                'confirmation_satisfied_via' => 'token',
-                'verified_backup_required' => true,
-                'verified_signal_run_id' => 2,
-            ],
-        ],
-        'verification_state' => 'failed',
-        'status' => CommandRunStatus::Failed,
-        'attempts' => 1,
-        'exit_code' => 1,
-        'created_at' => now()->subMinutes(20),
-        'updated_at' => now()->subMinutes(20),
-        'finished_at' => now()->subMinutes(18),
-    ]);
-
-    BackupDrillRun::query()->create([
-        'run_uuid' => 'drill-pass-001',
-        'overall_result' => 'pass',
-        'executed_by' => 'ci-pipeline',
-        'executed_at' => now()->subHours(6),
-    ]);
-
-    BackupDrillRun::query()->create([
-        'run_uuid' => 'drill-fail-001',
-        'overall_result' => 'fail',
-        'executed_by' => 'ops-user',
-        'executed_at' => now()->subHours(3),
-    ]);
+    OperatorCommandTestSupport::freezeTime();
+    OperatorCommandTestSupport::seedOperatorSummaryState();
 
     Artisan::call('db-ops:status', ['--summary' => true, '--format' => 'json']);
 
@@ -272,7 +108,7 @@ it('renders summary signals as machine-readable json', function (): void {
         ->and($report['summary']['last_known_good_backup'])->toMatchArray([
             'label' => 'full:20260311-010101F at 2026-03-11 11:50:00',
             'timestamp' => '2026-03-11 11:50:00',
-            'operation' => 'pgbackrest_backup',
+            'operation' => 'pgbackrest_backup_full',
         ])
         ->and($report['summary']['latest_backup_drill'])->toMatchArray([
             'label' => 'drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00',
@@ -318,7 +154,7 @@ it('renders summary signals as machine-readable json', function (): void {
             'target' => 'nightly.sql',
         ]);
 
-    Date::setTestNow();
+    OperatorCommandTestSupport::resetTime();
 });
 
 it('fails for unsupported status output formats', function (): void {
