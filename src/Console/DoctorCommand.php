@@ -41,7 +41,7 @@ final class DoctorCommand extends Command
             ]];
 
             if ($outputMode === 'json') {
-                $this->line($this->jsonReport($checks, false));
+                $this->line($this->jsonReport($checks));
 
                 return self::FAILURE;
             }
@@ -55,7 +55,7 @@ final class DoctorCommand extends Command
         }
 
         if ($outputMode === 'json') {
-            $this->line($this->jsonReport($checks, true));
+            $this->line($this->jsonReport($checks));
 
             return self::SUCCESS;
         }
@@ -89,10 +89,10 @@ final class DoctorCommand extends Command
     /**
      * @param  list<array{check:string,status:string,notes:string}>  $checks
      */
-    private function jsonReport(array $checks, bool $ok): string
+    private function jsonReport(array $checks): string
     {
         $report = [
-            'ok' => $ok,
+            'ok' => $this->reportBuilder->healthOk($checks),
             'driver' => (string) $this->config->get('checkpoint.driver'),
             'generated_at' => now()->toIso8601String(),
             'checks' => array_map(fn (array $check): array => [

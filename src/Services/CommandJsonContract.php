@@ -11,7 +11,7 @@ final class CommandJsonContract
      * @var array<string, int>
      */
     private const SURFACE_VERSIONS = [
-        'doctor' => 1,
+        'doctor' => 2,
         'report' => 1,
         'status' => 1,
     ];

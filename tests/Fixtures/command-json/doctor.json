@@ -1,5 +1,5 @@
 {
-  "ok": true,
+  "ok": false,
   "driver": "shell",
   "generated_at": "2026-03-11T12:00:00+00:00",
   "checks": [
@@ -114,6 +114,6 @@
       "notes": "0/1 passed in the last 14 days (0.0%, threshold: 100.0%)"
     }
   ],
-  "version": 1,
+  "version": 2,
   "surface": "doctor"
 }
