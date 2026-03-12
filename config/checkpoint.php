@@ -69,6 +69,9 @@ return [
         'backup_drill_pass_rate_window_days' => (int) $env('DB_OPS_BACKUP_DRILL_PASS_RATE_WINDOW_DAYS', 30),
         'backup_drill_min_pass_rate' => (float) $env('DB_OPS_BACKUP_DRILL_MIN_PASS_RATE', 100.0),
     ],
+    'reporting' => [
+        'max_recent_runs' => (int) $env('DB_OPS_REPORTING_MAX_RECENT_RUNS', 100),
+    ],
     'drivers' => [
         'shell' => [
             'class' => ShellCommandDriver::class,

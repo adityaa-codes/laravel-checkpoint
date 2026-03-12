@@ -24,6 +24,7 @@ final readonly class ConfigValidator
         $this->validateRestoreSettings();
         $this->validateScheduleSettings();
         $this->validateObservabilitySettings();
+        $this->validateReportingSettings();
         $this->validateCustomOperations();
         $this->validateLogChannel();
         $this->validateUserModel();
@@ -453,6 +454,25 @@ final readonly class ConfigValidator
 
         if ((float) $backupDrillMinPassRate < 0.0 || (float) $backupDrillMinPassRate > 100.0) {
             throw new ConfigurationException('checkpoint.observability.backup_drill_min_pass_rate must be between 0 and 100.');
+        }
+    }
+
+    private function validateReportingSettings(): void
+    {
+        $config = $this->config->get('checkpoint.reporting', []);
+
+        if (! is_array($config)) {
+            throw new ConfigurationException('checkpoint.reporting must be an array.');
+        }
+
+        $maxRecentRuns = $config['max_recent_runs'] ?? null;
+
+        if (! is_int($maxRecentRuns) || $maxRecentRuns < 1) {
+            throw new ConfigurationException('checkpoint.reporting.max_recent_runs must be greater than zero.');
+        }
+
+        if ($maxRecentRuns > 1000) {
+            throw new ConfigurationException('checkpoint.reporting.max_recent_runs must not exceed 1000.');
         }
     }
 

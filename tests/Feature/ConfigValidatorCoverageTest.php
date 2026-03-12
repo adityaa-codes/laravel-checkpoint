@@ -175,6 +175,20 @@ it('rejects a backup drill minimum pass rate outside 0 to 100', function (): voi
         ->toThrow(ConfigurationException::class, 'checkpoint.observability.backup_drill_min_pass_rate must be between 0 and 100.');
 });
 
+it('rejects a non-positive reporting recent run cap', function (): void {
+    config()->set('checkpoint.reporting.max_recent_runs', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.reporting.max_recent_runs must be greater than zero.');
+});
+
+it('rejects a reporting recent run cap that is too large', function (): void {
+    config()->set('checkpoint.reporting.max_recent_runs', 1001);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.reporting.max_recent_runs must not exceed 1000.');
+});
+
 it('rejects pgdump parallel jobs for non-directory formats', function (): void {
     config()->set('checkpoint.drivers.pgdump.format', 'custom');
     config()->set('checkpoint.drivers.pgdump.jobs', 4);

@@ -18,6 +18,8 @@ it('renders a machine-readable operational report', function (): void {
         ->and($report['version'])->toBe(2)
         ->and($report['surface'])->toBe('report')
         ->and($report['driver'])->toBe('shell')
+        ->and($report['limit_requested'])->toBe(2)
+        ->and($report['limit'])->toBe(2)
         ->and($report['recent_runs'])->toHaveCount(2)
         ->and($report['recent_runs'][0])->toMatchArray([
             'id' => 3,
@@ -72,4 +74,19 @@ it('returns a failed report when config validation fails', function (): void {
             'check' => 'Config validation',
             'status' => 'fail',
         ]);
+});
+
+it('caps operational report recent runs to the configured reporting limit', function (): void {
+    OperatorCommandTestSupport::freezeTime();
+    OperatorCommandTestSupport::seedOperatorSummaryState();
+    config()->set('checkpoint.reporting.max_recent_runs', 1);
+
+    Artisan::call('db-ops:report', ['--limit' => 50]);
+
+    $report = json_decode(Artisan::output(), true);
+
+    expect($report)->toBeArray()
+        ->and($report['recent_runs'])->toHaveCount(1);
+
+    OperatorCommandTestSupport::resetTime();
 });

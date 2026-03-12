@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
+use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use Illuminate\Console\Command;
@@ -17,6 +18,7 @@ final class StatusCommand extends Command
     public function __construct(
         private readonly OperationalReportBuilder $reportBuilder,
         private readonly CommandJsonContract $jsonContract,
+        private readonly \Illuminate\Contracts\Config\Repository $config,
     ) {
         parent::__construct();
     }
@@ -37,7 +39,7 @@ final class StatusCommand extends Command
             return self::SUCCESS;
         }
 
-        $limit = max(1, (int) $this->option('limit'));
+        $limit = $this->recentRunLimit();
         $runs = $this->reportBuilder->recentRuns($limit);
 
         if ($format === 'json') {
@@ -119,5 +121,21 @@ final class StatusCommand extends Command
         }
 
         return str($status)->title()->toString();
+    }
+
+    private function recentRunLimit(): int
+    {
+        $requestedLimit = max(1, (int) $this->option('limit'));
+        $configuredCap = (int) $this->config->get('checkpoint.reporting.max_recent_runs', 100);
+
+        if ($configuredCap < 1) {
+            throw new ConfigurationException('checkpoint.reporting.max_recent_runs must be greater than zero.');
+        }
+
+        if ($configuredCap > 1000) {
+            throw new ConfigurationException('checkpoint.reporting.max_recent_runs must not exceed 1000.');
+        }
+
+        return min($requestedLimit, $configuredCap);
     }
 }

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Tests\Support\OperatorCommandTestSupport;
 use Illuminate\Support\Facades\Artisan;
@@ -161,4 +162,27 @@ it('fails for unsupported status output formats', function (): void {
     checkpoint_artisan('db-ops:status --format=xml')
         ->expectsOutput('The --format option must be table or json.')
         ->assertFailed();
+});
+
+it('caps machine-readable recent run output to the configured reporting limit', function (): void {
+    OperatorCommandTestSupport::freezeTime();
+    OperatorCommandTestSupport::seedRecentRuns();
+    config()->set('checkpoint.reporting.max_recent_runs', 1);
+
+    Artisan::call('db-ops:status', ['--limit' => 50, '--format' => 'json']);
+
+    $report = json_decode(Artisan::output(), true);
+
+    expect($report)->toBeArray()
+        ->and($report['limit'])->toBe(1)
+        ->and($report['runs'])->toHaveCount(1);
+
+    OperatorCommandTestSupport::resetTime();
+});
+
+it('fails when the configured reporting cap is invalid', function (): void {
+    config()->set('checkpoint.reporting.max_recent_runs', 0);
+
+    expect(fn (): int => Artisan::call('db-ops:status', ['--limit' => 10, '--format' => 'json']))
+        ->toThrow(ConfigurationException::class, 'checkpoint.reporting.max_recent_runs must be greater than zero.');
 });

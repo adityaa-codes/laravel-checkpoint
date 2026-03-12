@@ -84,6 +84,9 @@ class TestCase extends Orchestra
                 'backup_drill_pass_rate_window_days' => 30,
                 'backup_drill_min_pass_rate' => 100.0,
             ],
+            'reporting' => [
+                'max_recent_runs' => 100,
+            ],
             'drivers' => [
                 'shell' => [
                     'class' => ShellCommandDriver::class,

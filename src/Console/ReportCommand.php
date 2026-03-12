@@ -27,7 +27,7 @@ final class ReportCommand extends Command
 
     public function handle(): int
     {
-        $limit = max(1, (int) $this->option('limit'));
+        ['requested' => $requestedLimit, 'effective' => $effectiveLimit] = $this->recentRunLimits();
 
         try {
             $this->validator->validate();
@@ -56,11 +56,27 @@ final class ReportCommand extends Command
         $this->line(json_encode($this->jsonContract->envelope('report', [
             'generated_at' => now()->toIso8601String(),
             'driver' => (string) $this->config->get('checkpoint.driver'),
-            'recent_runs' => $this->reportBuilder->recentRuns($limit),
+            'limit_requested' => $requestedLimit,
+            'limit' => $effectiveLimit,
+            'recent_runs' => $this->reportBuilder->recentRuns($effectiveLimit),
             'summary' => $this->reportBuilder->summary(),
             'health' => $health,
         ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 
         return $exitCode;
+    }
+
+    /**
+     * @return array{requested:int,effective:int}
+     */
+    private function recentRunLimits(): array
+    {
+        $requestedLimit = max(1, (int) $this->option('limit'));
+        $configuredCap = max(1, (int) $this->config->get('checkpoint.reporting.max_recent_runs', 100));
+
+        return [
+            'requested' => $requestedLimit,
+            'effective' => min($requestedLimit, $configuredCap),
+        ];
     }
 }
