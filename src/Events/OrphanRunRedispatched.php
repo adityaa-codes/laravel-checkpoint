@@ -10,6 +10,8 @@ final readonly class OrphanRunRedispatched
 {
     public function __construct(
         public CommandRun $run,
+        public string $queue,
         public int $thresholdMinutes,
+        public int $staleAgeMinutes,
     ) {}
 }

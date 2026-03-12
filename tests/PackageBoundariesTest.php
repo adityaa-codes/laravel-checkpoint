@@ -17,6 +17,7 @@ use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupCompleted;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillCompleted;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupFreshnessAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupQueued;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Events\OrphanRunRedispatched;
@@ -77,6 +78,7 @@ it('keeps immutable payload and service objects readonly where appropriate', fun
         BackupStarted::class,
         BackupCompleted::class,
         BackupFailed::class,
+        BackupFreshnessAlarmTriggered::class,
         BackupDrillCompleted::class,
         OrphanRunRedispatched::class,
         QueueLagDetected::class,
@@ -113,9 +115,10 @@ it('exposes public properties only for intentional payload seams', function (): 
         BackupStarted::class => ['run'],
         BackupCompleted::class => ['run', 'exitCode', 'output'],
         BackupFailed::class => ['run', 'exitCode', 'output', 'exception'],
+        BackupFreshnessAlarmTriggered::class => ['run', 'reason', 'ageHours', 'thresholdHours'],
         BackupDrillCompleted::class => ['run'],
-        OrphanRunRedispatched::class => ['run', 'thresholdMinutes'],
-        QueueLagDetected::class => ['queue', 'staleRunCount', 'thresholdMinutes'],
+        OrphanRunRedispatched::class => ['queue', 'run', 'staleAgeMinutes', 'thresholdMinutes'],
+        QueueLagDetected::class => ['oldestStaleAgeMinutes', 'queue', 'staleRunCount', 'staleRunIds', 'thresholdMinutes'],
     ];
 
     foreach ($allowedPublicProperties as $class => $allowedProperties) {

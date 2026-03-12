@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
+use AdityaaCodes\LaravelCheckpoint\Events\BackupFreshnessAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
@@ -155,11 +156,18 @@ final class DoctorCommand extends Command
             ->first();
 
         if (! $latest instanceof CommandRun || $latest->last_known_good_at === null) {
+            event(new BackupFreshnessAlarmTriggered(null, 'missing', null, $maxAgeHours));
+
             return ['Backups: last known good', $this->statusWord('warn'), 'No last-known-good backup recorded'];
         }
 
-        $ageHours = max(0, (int) ceil(now()->diffInMinutes($latest->last_known_good_at) / 60));
-        $level = $ageHours > $maxAgeHours ? 'warn' : 'pass';
+        $ageHours = max(0, (int) ceil($latest->last_known_good_at->diffInMinutes(now()) / 60));
+        $isStale = $latest->last_known_good_at->lt(now()->subHours($maxAgeHours));
+        $level = $isStale ? 'warn' : 'pass';
+
+        if ($isStale) {
+            event(new BackupFreshnessAlarmTriggered($latest, 'stale', $ageHours, $maxAgeHours));
+        }
 
         return [
             'Backups: last known good',

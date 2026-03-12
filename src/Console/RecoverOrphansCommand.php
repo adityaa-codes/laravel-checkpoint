@@ -40,21 +40,29 @@ final class RecoverOrphansCommand extends Command
             ->get();
 
         if ($staleRuns->isNotEmpty()) {
-            $this->events->dispatch(new QueueLagDetected($queue, $staleRuns->count(), $thresholdMinutes));
+            $this->events->dispatch(new QueueLagDetected(
+                $queue,
+                $staleRuns->count(),
+                $thresholdMinutes,
+                $this->oldestStaleAgeMinutes($staleRuns),
+                $staleRuns->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all(),
+            ));
         }
 
         $staleRuns->each(function (CommandRun $run) use ($queue, $thresholdMinutes): void {
                 $job = new ProcessCommandRunJob($run)
                     ->onQueue($queue);
 
+                $staleAgeMinutes = $this->staleAgeMinutes($run);
                 $this->dispatcher->dispatch($job);
-                $this->events->dispatch(new OrphanRunRedispatched($run, $thresholdMinutes));
+                $this->events->dispatch(new OrphanRunRedispatched($run, $queue, $thresholdMinutes, $staleAgeMinutes));
 
                 $this->logs->channel((string) $this->config->get('checkpoint.log_channel', 'stack'))
-                    ->warning('Recover orphans re-dispatched command run', [
-                        'run_id' => $run->getKey(),
-                        'operation' => $run->operation,
-                    ]);
+                    ->warning('Recover orphans re-dispatched command run', $this->logContext($run, [
+                        'queue' => $queue,
+                        'threshold_minutes' => $thresholdMinutes,
+                        'stale_age_minutes' => $staleAgeMinutes,
+                    ]));
 
                 $this->line($this->redispatchedMessage((int) $run->getKey()));
             });
@@ -73,5 +81,43 @@ final class RecoverOrphansCommand extends Command
         }
 
         return (string) $message;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, CommandRun>  $runs
+     */
+    private function oldestStaleAgeMinutes(\Illuminate\Support\Collection $runs): int
+    {
+        return (int) $runs
+            ->map(fn (CommandRun $run): int => $this->staleAgeMinutes($run))
+            ->max();
+    }
+
+    private function staleAgeMinutes(CommandRun $run): int
+    {
+        if ($run->created_at === null) {
+            return 0;
+        }
+
+        return max(0, (int) $run->created_at->diffInMinutes(now()));
+    }
+
+    /**
+     * @param  array<string, mixed>  $extra
+     * @return array<string, mixed>
+     */
+    private function logContext(CommandRun $run, array $extra = []): array
+    {
+        return array_filter([
+            'run_id' => $run->getKey(),
+            'operation' => $run->operation,
+            'driver' => $run->metadata['driver'] ?? config('checkpoint.driver', 'shell'),
+            'backup_type' => $run->backup_type,
+            'restore_target' => $run->restore_target ?? $run->argument_text,
+            'repository' => $run->repository,
+            'stanza' => $run->stanza,
+            'duration_seconds' => $run->duration_seconds,
+            ...$extra,
+        ], static fn (mixed $value): bool => $value !== null);
     }
 }

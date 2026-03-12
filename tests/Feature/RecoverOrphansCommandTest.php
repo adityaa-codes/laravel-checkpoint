@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 
 it('re-dispatches stale pending runs and leaves recent pending runs untouched', function (): void {
+    Date::setTestNow('2026-03-12 10:00:00');
+
     Bus::fake();
     Event::fake([QueueLagDetected::class, OrphanRunRedispatched::class]);
 
@@ -21,6 +23,10 @@ it('re-dispatches stale pending runs and leaves recent pending runs untouched', 
         ->with('Recover orphans re-dispatched command run', Mockery::on(
             fn (array $context): bool => $context['operation'] === 'logical_backup'
                 && $context['run_id'] === 1
+                && $context['driver'] === 'shell'
+                && $context['queue'] === 'db-ops'
+                && $context['threshold_minutes'] === 10
+                && $context['stale_age_minutes'] === 20
         ));
 
     config()->set('checkpoint.queue.orphan_threshold', 10);
@@ -49,7 +55,13 @@ it('re-dispatches stale pending runs and leaves recent pending runs untouched', 
     Bus::assertNotDispatched(ProcessCommandRunJob::class, fn (ProcessCommandRunJob $job): bool => $job->run->is($freshRun));
     Event::assertDispatched(fn (QueueLagDetected $event): bool => $event->queue === 'db-ops'
         && $event->staleRunCount === 1
-        && $event->thresholdMinutes === 10);
+        && $event->thresholdMinutes === 10
+        && $event->oldestStaleAgeMinutes === 20
+        && $event->staleRunIds === [1]);
     Event::assertDispatched(fn (OrphanRunRedispatched $event): bool => $event->run->is($staleRun)
-        && $event->thresholdMinutes === 10);
+        && $event->queue === 'db-ops'
+        && $event->thresholdMinutes === 10
+        && $event->staleAgeMinutes === 20);
+
+    Date::setTestNow();
 });

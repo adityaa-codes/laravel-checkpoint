@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+use AdityaaCodes\LaravelCheckpoint\Events\BackupFreshnessAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
+use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Event;
 
 it('renders the doctor health table', function (): void {
     checkpoint_artisan('db-ops:doctor')
@@ -131,7 +134,7 @@ it('warns when the last known good backup is stale and the latest run is anomalo
         'status' => 'succeeded',
         'attempts' => 0,
         'duration_seconds' => 300,
-        'last_known_good_at' => now()->subHours(8),
+        'last_known_good_at' => now()->subHours(32),
     ]);
     CommandRun::query()->create([
         'operation' => 'pgbackrest_backup_diff',
@@ -139,7 +142,7 @@ it('warns when the last known good backup is stale and the latest run is anomalo
         'status' => 'succeeded',
         'attempts' => 0,
         'duration_seconds' => 320,
-        'last_known_good_at' => now()->subHours(7),
+        'last_known_good_at' => now()->subHours(31),
     ]);
     CommandRun::query()->create([
         'operation' => 'pgbackrest_backup_incr',
@@ -147,7 +150,7 @@ it('warns when the last known good backup is stale and the latest run is anomalo
         'status' => 'succeeded',
         'attempts' => 0,
         'duration_seconds' => 900,
-        'last_known_good_at' => now()->subHours(6),
+        'last_known_good_at' => now()->subHours(33),
     ]);
 
     Artisan::call('db-ops:doctor', ['--format' => 'json']);
@@ -163,4 +166,49 @@ it('warns when the last known good backup is stale and the latest run is anomalo
             fn (array $check): bool => $check['check'] === 'Backups: duration anomaly'
                 && str_contains($check['notes'], 'factor: 2.0'),
         ))->toBeTrue();
+
+});
+
+it('dispatches a freshness alarm when the last-known-good backup is stale', function (): void {
+    Event::fake([BackupFreshnessAlarmTriggered::class]);
+
+    config()->set('checkpoint.observability.max_last_known_good_age_hours', 12);
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'backup_type' => 'logical_export',
+        'status' => 'succeeded',
+        'attempts' => 0,
+        'last_known_good_at' => now()->subHours(30),
+    ]);
+
+    $command = app(DoctorCommand::class);
+    $method = new ReflectionMethod($command, 'lastKnownGoodRow');
+    $method->setAccessible(true);
+    $method->invoke($command);
+
+    $dispatched = Event::dispatched(BackupFreshnessAlarmTriggered::class);
+
+    expect($dispatched)->toHaveCount(1);
+
+    /** @var BackupFreshnessAlarmTriggered $event */
+    $event = $dispatched->first()[0];
+
+    expect($event->reason)->toBe('stale')
+        ->and($event->ageHours)->toBeInt()
+        ->and($event->ageHours)->toBeGreaterThanOrEqual(30)
+        ->and($event->thresholdHours)->toBe(12)
+        ->and($event->run)->toBeInstanceOf(CommandRun::class)
+        ->and($event->run?->last_known_good_at)->not->toBeNull();
+});
+
+it('dispatches a freshness alarm when no last-known-good backup exists', function (): void {
+    Event::fake([BackupFreshnessAlarmTriggered::class]);
+
+    checkpoint_artisan('db-ops:doctor')->assertSuccessful();
+
+    Event::assertDispatched(fn (BackupFreshnessAlarmTriggered $event): bool => $event->reason === 'missing'
+        && $event->ageHours === null
+        && $event->thresholdHours === 24
+        && $event->run === null);
 });

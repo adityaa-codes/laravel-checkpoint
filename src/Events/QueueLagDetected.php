@@ -10,5 +10,8 @@ final readonly class QueueLagDetected
         public string $queue,
         public int $staleRunCount,
         public int $thresholdMinutes,
+        public int $oldestStaleAgeMinutes,
+        /** @var array<int, int> */
+        public array $staleRunIds,
     ) {}
 }
