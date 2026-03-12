@@ -255,6 +255,7 @@ Behavior notes:
 - `pitr_restore` now rejects invalid restore target timestamps before command execution
 - restore commands fail early when the current environment or target database is not allowlisted
 - when verified-backup enforcement is enabled, restore commands require a matching `last_known_good_at` signal
+- restore runs persist `metadata.restore_audit` with the evaluated environment, database, target, confirmation path, and any matched verified-backup signal
 - `db-ops:status --format=json` mirrors both recent-run and summary views for automation use
 
 ### Observability Notes
@@ -266,6 +267,12 @@ Operational surfaces now include:
 - `db-ops:doctor` duration anomaly warnings for unusually slow backup runs
 - structured log context across drivers, queue job failures, and health checks
 - orphan recovery events for queue lag and redispatched stale runs
+
+`db-ops:status` now exposes restore-specific operator context:
+
+- recent-run JSON payloads include `restore_target` and `restore_audit` for restore operations
+- `db-ops:status --summary` includes `latest_restore_run` alongside the existing latest restore failure signal
+- `latest_restore_run.audit` gives automation consumers the persisted restore guard decision that was in effect when the run started
 
 Structured log fields include `run_id`, `driver`, `backup_type`,
 `restore_target`, `repository`, `stanza`, and `duration_seconds` when those
