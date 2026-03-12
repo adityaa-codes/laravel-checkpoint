@@ -31,16 +31,15 @@ final class ReportCommand extends Command
 
         try {
             $this->validator->validate();
-            $checks = $this->reportBuilder->healthChecks();
-            $health = [
-                'ok' => $this->reportBuilder->healthOk($checks),
-                'checks' => $checks,
-            ];
+            $reportPayload = $this->reportBuilder->reportPayload($effectiveLimit);
             $exitCode = self::SUCCESS;
         } catch (\Throwable $exception) {
-            $health = [
-                'ok' => false,
-                'checks' => [[
+            $reportPayload = [
+                'recent_runs' => [],
+                'summary' => $this->emptySummary(),
+                'health' => [
+                    'ok' => false,
+                    'checks' => [[
                     'code' => 'config.validation',
                     'check' => 'Config validation',
                     'status' => 'fail',
@@ -48,7 +47,8 @@ final class ReportCommand extends Command
                     'data' => [
                         'exception' => $exception::class,
                     ],
-                ]],
+                    ]],
+                ],
             ];
             $exitCode = self::FAILURE;
         }
@@ -58,9 +58,9 @@ final class ReportCommand extends Command
             'driver' => (string) $this->config->get('checkpoint.driver'),
             'limit_requested' => $requestedLimit,
             'limit' => $effectiveLimit,
-            'recent_runs' => $this->reportBuilder->recentRuns($effectiveLimit),
-            'summary' => $this->reportBuilder->summary(),
-            'health' => $health,
+            'recent_runs' => $reportPayload['recent_runs'],
+            'summary' => $reportPayload['summary'],
+            'health' => $reportPayload['health'],
         ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 
         return $exitCode;
@@ -77,6 +77,35 @@ final class ReportCommand extends Command
         return [
             'requested' => $requestedLimit,
             'effective' => min($requestedLimit, $configuredCap),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function emptySummary(): array
+    {
+        $windowDays = max(1, (int) $this->config->get('checkpoint.observability.backup_drill_pass_rate_window_days', 30));
+        $drillPassRate = [
+            'label' => '-',
+            'window_days' => $windowDays,
+            'total' => 0,
+            'passing' => 0,
+            'pass_rate_percent' => null,
+        ];
+
+        return [
+            'pending_runs' => 0,
+            'running_runs' => 0,
+            'failed_runs_24h' => 0,
+            'last_known_good_backup' => ['label' => '-', 'timestamp' => null, 'operation' => null],
+            'latest_verified_backup' => ['label' => '-', 'timestamp' => null, 'operation' => null],
+            'latest_backup_drill' => ['label' => '-', 'timestamp' => null, 'run_uuid' => null, 'overall_result' => null, 'executed_by' => null],
+            'latest_failed_backup_drill' => ['label' => '-', 'timestamp' => null, 'run_uuid' => null, 'overall_result' => null, 'executed_by' => null],
+            'backup_drill_pass_rate' => $drillPassRate,
+            'backup_drill_pass_rate_30d' => $drillPassRate,
+            'latest_restore_run' => ['label' => '-', 'timestamp' => null, 'operation' => null, 'status' => null, 'target' => null, 'audit' => null],
+            'latest_restore_failure' => ['label' => '-', 'timestamp' => null, 'operation' => null, 'target' => null],
         ];
     }
 }

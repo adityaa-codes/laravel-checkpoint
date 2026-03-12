@@ -54,3 +54,24 @@ it('marks shared health output as not ok when warnings are present', function ()
 
     expect(app(OperationalReportBuilder::class)->healthOk($checks))->toBeFalse();
 });
+
+it('builds a combined report payload from a shared snapshot', function (): void {
+    Date::setTestNow('2026-03-11 12:00:00');
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 1,
+        'exit_code' => 0,
+        'last_known_good_at' => now()->subHour(),
+    ]);
+
+    $payload = app(OperationalReportBuilder::class)->reportPayload(5);
+
+    expect($payload)->toHaveKeys(['recent_runs', 'summary', 'health'])
+        ->and($payload['recent_runs'])->toHaveCount(1)
+        ->and($payload['summary'])->toHaveKey('last_known_good_backup')
+        ->and($payload['health'])->toHaveKeys(['ok', 'checks']);
+
+    Date::setTestNow();
+});

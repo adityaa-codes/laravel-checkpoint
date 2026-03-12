@@ -56,6 +56,7 @@ it('renders a machine-readable operational report', function (): void {
 it('returns a failed report when config validation fails', function (): void {
     config()->set('checkpoint.queue.timeout', 3600);
     config()->set('checkpoint.queue.retry_after', 300);
+    config()->set('checkpoint.table_prefix', 'broken_');
 
     $exitCode = Artisan::call('db-ops:report');
     $report = json_decode(Artisan::output(), true);

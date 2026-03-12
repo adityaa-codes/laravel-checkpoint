@@ -53,44 +53,48 @@ final readonly class OperationalReportBuilder
      */
     public function summary(): array
     {
-        $restoreOperations = ['logical_restore_file', 'logical_restore_latest', 'pitr_restore', 'pgbackrest_restore'];
-        $drillWindowDays = $this->backupDrillWindowDays();
-        $commandRunCounts = $this->commandRunSummaryCounts();
-        $drillSummary = $this->backupDrillSummary(now()->subDays($drillWindowDays));
+        return $this->summaryFromSnapshot($this->summarySnapshot());
+    }
 
-        $lastKnownGood = CommandRun::query()
-            ->whereNotNull('last_known_good_at')
-            ->latest('last_known_good_at')
-            ->first();
-        $latestVerified = CommandRun::query()
-            ->where('verification_state', 'verified')
-            ->latest('verified_at')
-            ->latest('id')
-            ->first();
-        $latestRestoreFailure = CommandRun::query()
-            ->where('status', 'failed')
-            ->whereIn('operation', $restoreOperations)
-            ->latest('finished_at')
-            ->latest('id')
-            ->first();
-        $latestRestoreRun = CommandRun::query()
-            ->whereIn('operation', $restoreOperations)
-            ->latest('finished_at')
-            ->latest('started_at')
-            ->latest('id')
-            ->first();
+    /**
+     * @return array{recent_runs:list<array<string, mixed>>,summary:array<string, mixed>,health:array{ok:bool,checks:list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>}}
+     */
+    public function reportPayload(int $limit): array
+    {
+        $snapshot = $this->summarySnapshot();
+        $checks = $this->healthChecksFromSnapshot($snapshot);
+
+        return [
+            'recent_runs' => $this->recentRuns($limit),
+            'summary' => $this->summaryFromSnapshot($snapshot),
+            'health' => [
+                'ok' => $this->healthOk($checks),
+                'checks' => $checks,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array{command_run_counts:array{pending_runs:int,running_runs:int,failed_runs_24h:int},drill_window_days:int,drill_summary:array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int},last_known_good:?CommandRun,latest_verified:?CommandRun,latest_restore_failure:?CommandRun,latest_restore_run:?CommandRun}  $snapshot
+     * @return array<string, mixed>
+     */
+    private function summaryFromSnapshot(array $snapshot): array
+    {
+        $commandRunCounts = $snapshot['command_run_counts'];
+        $drillWindowDays = $snapshot['drill_window_days'];
+        $drillSummary = $snapshot['drill_summary'];
 
         $summary = [
             'pending_runs' => $commandRunCounts['pending_runs'],
             'running_runs' => $commandRunCounts['running_runs'],
             'failed_runs_24h' => $commandRunCounts['failed_runs_24h'],
-            'last_known_good_backup' => $this->summarySignalPayload($lastKnownGood, 'last_known_good_at'),
-            'latest_verified_backup' => $this->summarySignalPayload($latestVerified, 'verified_at'),
+            'last_known_good_backup' => $this->summarySignalPayload($snapshot['last_known_good'], 'last_known_good_at'),
+            'latest_verified_backup' => $this->summarySignalPayload($snapshot['latest_verified'], 'verified_at'),
             'latest_backup_drill' => $this->drillPayload($drillSummary['latest']),
             'latest_failed_backup_drill' => $this->drillPayload($drillSummary['latest_failed']),
             'backup_drill_pass_rate' => $this->drillPassRatePayload($drillSummary['total'], $drillSummary['passing'], $drillWindowDays),
-            'latest_restore_run' => $this->restoreRunPayload($latestRestoreRun),
-            'latest_restore_failure' => $this->restoreFailurePayload($latestRestoreFailure),
+            'latest_restore_run' => $this->restoreRunPayload($snapshot['latest_restore_run']),
+            'latest_restore_failure' => $this->restoreFailurePayload($snapshot['latest_restore_failure']),
         ];
 
         // Keep the legacy status/report key as a compatibility alias for automation consumers.
@@ -139,6 +143,15 @@ final readonly class OperationalReportBuilder
      * @return list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>
      */
     public function healthChecks(): array
+    {
+        return $this->healthChecksFromSnapshot($this->summarySnapshot());
+    }
+
+    /**
+     * @param  array{command_run_counts:array{pending_runs:int,running_runs:int,failed_runs_24h:int},drill_window_days:int,drill_summary:array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int},last_known_good:?CommandRun,latest_verified:?CommandRun,latest_restore_failure:?CommandRun,latest_restore_run:?CommandRun}  $snapshot
+     * @return list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>
+     */
+    private function healthChecksFromSnapshot(array $snapshot): array
     {
         $rows = [
             $this->checkRow('config.driver', 'Config: driver', 'pass', (string) $this->config->get('checkpoint.driver'), [
@@ -195,13 +208,49 @@ final readonly class OperationalReportBuilder
                 'threshold_minutes' => max(1, (int) $this->config->get('checkpoint.queue.orphan_threshold', 10)),
             ],
         );
-        $rows[] = $this->lastKnownGoodCheck();
+        $rows[] = $this->lastKnownGoodCheck($snapshot['last_known_good']);
         $rows[] = $this->backupDurationAnomalyCheck();
-        $backupDrillSummary = $this->backupDrillSummary(now()->subDays($this->backupDrillWindowDays()));
+        $backupDrillSummary = $snapshot['drill_summary'];
         $rows[] = $this->backupDrillFreshnessCheck($backupDrillSummary['latest']);
         $rows[] = $this->backupDrillPassRateCheck($backupDrillSummary);
 
         return $rows;
+    }
+
+    /**
+     * @return array{command_run_counts:array{pending_runs:int,running_runs:int,failed_runs_24h:int},drill_window_days:int,drill_summary:array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int},last_known_good:?CommandRun,latest_verified:?CommandRun,latest_restore_failure:?CommandRun,latest_restore_run:?CommandRun}
+     */
+    private function summarySnapshot(): array
+    {
+        $restoreOperations = ['logical_restore_file', 'logical_restore_latest', 'pitr_restore', 'pgbackrest_restore'];
+        $drillWindowDays = $this->backupDrillWindowDays();
+
+        return [
+            'command_run_counts' => $this->commandRunSummaryCounts(),
+            'drill_window_days' => $drillWindowDays,
+            'drill_summary' => $this->backupDrillSummary(now()->subDays($drillWindowDays)),
+            'last_known_good' => CommandRun::query()
+                ->whereNotNull('last_known_good_at')
+                ->latest('last_known_good_at')
+                ->first(),
+            'latest_verified' => CommandRun::query()
+                ->where('verification_state', 'verified')
+                ->latest('verified_at')
+                ->latest('id')
+                ->first(),
+            'latest_restore_failure' => CommandRun::query()
+                ->where('status', 'failed')
+                ->whereIn('operation', $restoreOperations)
+                ->latest('finished_at')
+                ->latest('id')
+                ->first(),
+            'latest_restore_run' => CommandRun::query()
+                ->whereIn('operation', $restoreOperations)
+                ->latest('finished_at')
+                ->latest('started_at')
+                ->latest('id')
+                ->first(),
+        ];
     }
 
     /**
@@ -401,10 +450,10 @@ final readonly class OperationalReportBuilder
     /**
      * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
      */
-    private function lastKnownGoodCheck(): array
+    private function lastKnownGoodCheck(?CommandRun $latest = null): array
     {
         $maxAgeHours = max(1, (int) $this->config->get('checkpoint.observability.max_last_known_good_age_hours', 24));
-        $latest = CommandRun::query()
+        $latest ??= CommandRun::query()
             ->whereNotNull('last_known_good_at')
             ->latest('last_known_good_at')
             ->first();
