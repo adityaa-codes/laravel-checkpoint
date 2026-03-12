@@ -41,11 +41,9 @@ final class HealthCheckCommand extends Command
                 $this->events->dispatch(new BackupFailed($run, -1, $output));
 
                 $this->logs->channel((string) $this->config->get('checkpoint.log_channel', 'stack'))
-                    ->error('Health check marked command run as failed', [
-                        'run_id' => $run->getKey(),
-                        'operation' => $run->operation,
+                    ->error('Health check marked command run as failed', $this->logContext($run, [
                         'timeout_seconds' => $timeoutSeconds,
-                    ]);
+                    ]));
 
                 $this->line($this->recoveryMessage((int) $run->getKey(), $timeoutSeconds));
             });
@@ -69,5 +67,24 @@ final class HealthCheckCommand extends Command
         }
 
         return (string) $message;
+    }
+
+    /**
+     * @param  array<string, mixed>  $extra
+     * @return array<string, mixed>
+     */
+    private function logContext(CommandRun $run, array $extra = []): array
+    {
+        return array_filter([
+            'run_id' => $run->getKey(),
+            'operation' => $run->operation,
+            'driver' => $run->metadata['driver'] ?? null,
+            'backup_type' => $run->backup_type,
+            'restore_target' => $run->restore_target,
+            'repository' => $run->repository,
+            'stanza' => $run->stanza,
+            'duration_seconds' => $run->duration_seconds,
+            ...$extra,
+        ], static fn (mixed $value): bool => $value !== null);
     }
 }

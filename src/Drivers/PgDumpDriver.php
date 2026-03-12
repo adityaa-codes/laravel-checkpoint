@@ -31,14 +31,13 @@ final class PgDumpDriver implements BackupDriver
                 'command_line' => $process->getCommandLine(),
             ])->save();
             $run->recordMetadata($plannedMetadata);
+            $run = $run->fresh() ?? $run;
 
             event(new BackupStarted($run));
 
-            $this->logger()->info('Starting pg_dump operation', [
-                'run_id' => $run->getKey(),
-                'operation' => $run->operation,
+            $this->logger()->info('Starting pg_dump operation', $this->logContext($run, [
                 'command_line' => $run->command_line,
-            ]);
+            ]));
 
             $process->run();
 
@@ -54,35 +53,32 @@ final class PgDumpDriver implements BackupDriver
 
             if ($exitCode === 0) {
                 $run->markAsSucceeded($exitCode, $output);
+                $run = $run->fresh() ?? $run;
 
                 event(new BackupCompleted($run, $exitCode, $output));
 
-                $this->logger()->info('Completed pg_dump operation', [
-                    'run_id' => $run->getKey(),
-                    'operation' => $run->operation,
+                $this->logger()->info('Completed pg_dump operation', $this->logContext($run, [
                     'exit_code' => $exitCode,
-                ]);
+                ]));
 
                 return;
             }
 
             $run->markAsFailed($exitCode, $output);
+            $run = $run->fresh() ?? $run;
             event(new BackupFailed($run, $exitCode, $output));
 
-            $this->logger()->error('pg_dump operation failed', [
-                'run_id' => $run->getKey(),
-                'operation' => $run->operation,
+            $this->logger()->error('pg_dump operation failed', $this->logContext($run, [
                 'exit_code' => $exitCode,
-            ]);
+            ]));
         } catch (Throwable $exception) {
             $run->markAsFailed(output: $exception->getMessage());
+            $run = $run->fresh() ?? $run;
             event(new BackupFailed($run, -1, $exception->getMessage(), $exception));
 
-            $this->logger()->error('pg_dump operation crashed', [
-                'run_id' => $run->getKey(),
-                'operation' => $run->operation,
+            $this->logger()->error('pg_dump operation crashed', $this->logContext($run, [
                 'error' => $exception->getMessage(),
-            ]);
+            ]));
 
             if ($exception instanceof ConfigurationException) {
                 throw $exception;
@@ -481,5 +477,24 @@ final class PgDumpDriver implements BackupDriver
     private function restoreSafetyGuard(): RestoreSafetyGuard
     {
         return resolve(RestoreSafetyGuard::class);
+    }
+
+    /**
+     * @param  array<string, mixed>  $extra
+     * @return array<string, mixed>
+     */
+    private function logContext(CommandRun $run, array $extra = []): array
+    {
+        return array_filter([
+            'run_id' => $run->getKey(),
+            'operation' => $run->operation,
+            'driver' => 'pgdump',
+            'backup_type' => $run->backup_type,
+            'restore_target' => $run->restore_target,
+            'repository' => $run->repository,
+            'stanza' => $run->stanza,
+            'duration_seconds' => $run->duration_seconds,
+            ...$extra,
+        ], static fn (mixed $value): bool => $value !== null);
     }
 }

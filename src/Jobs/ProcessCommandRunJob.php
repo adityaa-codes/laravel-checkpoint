@@ -73,11 +73,9 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
         if ($catalog->isDestructive($this->run->operation)) {
             if ($configuredAttempts > 1) {
                 Log::channel(config('checkpoint.log_channel', 'stack'))
-                    ->warning('Destructive checkpoint operation forced to a single attempt', [
-                        'run_id' => $this->run->getKey(),
-                        'operation' => $this->run->operation,
+                    ->warning('Destructive checkpoint operation forced to a single attempt', $this->logContext($this->run, [
                         'configured_attempts' => $configuredAttempts,
-                    ]);
+                    ]));
             }
 
             return 1;
@@ -97,11 +95,9 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
         event(new BackupFailed($run, -1, $exception->getMessage(), $exception));
 
         Log::channel(config('checkpoint.log_channel', 'stack'))
-            ->error('ProcessCommandRunJob failed', [
-                'run_id' => $run->getKey(),
-                'operation' => $run->operation,
+            ->error('ProcessCommandRunJob failed', $this->logContext($run, [
                 'error' => $exception->getMessage(),
-            ]);
+            ]));
     }
 
     private function resolveDriver(): BackupDriver
@@ -124,5 +120,24 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
         }
 
         return $resolved;
+    }
+
+    /**
+     * @param  array<string, mixed>  $extra
+     * @return array<string, mixed>
+     */
+    private function logContext(CommandRun $run, array $extra = []): array
+    {
+        return array_filter([
+            'run_id' => $run->getKey(),
+            'operation' => $run->operation,
+            'driver' => $run->metadata['driver'] ?? config('checkpoint.driver', 'shell'),
+            'backup_type' => $run->backup_type,
+            'restore_target' => $run->restore_target ?? $run->argument_text,
+            'repository' => $run->repository,
+            'stanza' => $run->stanza,
+            'duration_seconds' => $run->duration_seconds,
+            ...$extra,
+        ], static fn (mixed $value): bool => $value !== null);
     }
 }

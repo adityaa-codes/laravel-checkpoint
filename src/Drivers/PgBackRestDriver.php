@@ -33,14 +33,13 @@ final class PgBackRestDriver implements BackupDriver
                 'command_line' => $displayCommandLine,
             ])->save();
             $run->recordMetadata($plannedMetadata);
+            $run = $run->fresh() ?? $run;
 
             event(new BackupStarted($run));
 
-            $this->logger()->info('Starting pgBackRest operation', [
-                'run_id' => $run->getKey(),
-                'operation' => $run->operation,
+            $this->logger()->info('Starting pgBackRest operation', $this->logContext($run, [
                 'command_line' => $displayCommandLine,
-            ]);
+            ]));
 
             $process->run();
 
@@ -58,35 +57,32 @@ final class PgBackRestDriver implements BackupDriver
 
             if ($exitCode === 0) {
                 $run->markAsSucceeded($exitCode, $normalizedOutput);
+                $run = $run->fresh() ?? $run;
 
                 event(new BackupCompleted($run, $exitCode, $normalizedOutput));
 
-                $this->logger()->info('Completed pgBackRest operation', [
-                    'run_id' => $run->getKey(),
-                    'operation' => $run->operation,
+                $this->logger()->info('Completed pgBackRest operation', $this->logContext($run, [
                     'exit_code' => $exitCode,
-                ]);
+                ]));
 
                 return;
             }
 
             $run->markAsFailed($exitCode, $normalizedOutput);
+            $run = $run->fresh() ?? $run;
             event(new BackupFailed($run, $exitCode, $normalizedOutput));
 
-            $this->logger()->error('pgBackRest operation failed', [
-                'run_id' => $run->getKey(),
-                'operation' => $run->operation,
+            $this->logger()->error('pgBackRest operation failed', $this->logContext($run, [
                 'exit_code' => $exitCode,
-            ]);
+            ]));
         } catch (Throwable $exception) {
             $run->markAsFailed(output: $exception->getMessage());
+            $run = $run->fresh() ?? $run;
             event(new BackupFailed($run, -1, $exception->getMessage(), $exception));
 
-            $this->logger()->error('pgBackRest operation crashed', [
-                'run_id' => $run->getKey(),
-                'operation' => $run->operation,
+            $this->logger()->error('pgBackRest operation crashed', $this->logContext($run, [
                 'error' => $exception->getMessage(),
-            ]);
+            ]));
 
             if ($exception instanceof ConfigurationException) {
                 throw $exception;
@@ -546,6 +542,25 @@ final class PgBackRestDriver implements BackupDriver
     private function restoreSafetyGuard(): RestoreSafetyGuard
     {
         return resolve(RestoreSafetyGuard::class);
+    }
+
+    /**
+     * @param  array<string, mixed>  $extra
+     * @return array<string, mixed>
+     */
+    private function logContext(CommandRun $run, array $extra = []): array
+    {
+        return array_filter([
+            'run_id' => $run->getKey(),
+            'operation' => $run->operation,
+            'driver' => 'pgbackrest',
+            'backup_type' => $run->backup_type,
+            'restore_target' => $run->restore_target,
+            'repository' => $run->repository,
+            'stanza' => $run->stanza,
+            'duration_seconds' => $run->duration_seconds,
+            ...$extra,
+        ], static fn (mixed $value): bool => $value !== null);
     }
 
     private function redactCommandLine(string $commandLine): string

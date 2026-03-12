@@ -236,13 +236,21 @@ SH));
             return str_contains((string) $context['command_line'], '--repo1-s3-key=[REDACTED]')
                 && str_contains((string) $context['command_line'], '--repo1-s3-key-secret=[REDACTED]')
                 && str_contains((string) $context['command_line'], '--repo1-cipher-pass=[REDACTED]')
+                && $context['driver'] === 'pgbackrest'
+                && $context['repository'] === 1
+                && $context['stanza'] === 'main'
                 && ! str_contains((string) $context['command_line'], 'AKIA-SECRET-KEY')
                 && ! str_contains((string) $context['command_line'], 'super-secret-token')
                 && ! str_contains((string) $context['command_line'], 'repo-passphrase');
         }));
     $logger->shouldReceive('info')
         ->once()
-        ->with('Completed pgBackRest operation', Mockery::type('array'));
+        ->with('Completed pgBackRest operation', Mockery::on(
+            fn (array $context): bool => $context['driver'] === 'pgbackrest'
+                && $context['repository'] === 1
+                && $context['stanza'] === 'main'
+                && array_key_exists('exit_code', $context)
+        ));
     Log::shouldReceive('channel')
         ->twice()
         ->andReturn($logger);
