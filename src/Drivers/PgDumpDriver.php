@@ -22,20 +22,22 @@ final class PgDumpDriver implements BackupDriver
     public function execute(CommandRun $run): void
     {
         try {
-            $process = $this->buildProcess($run);
-            $plannedMetadata = $this->plannedMetadata($run);
-            $restoreAudit = $this->restoreSafetyGuard()->ensureSafe($run, $plannedMetadata);
-            $plannedMetadata = $this->mergeRestoreAuditMetadata($plannedMetadata, $restoreAudit);
-            $displayCommandLine = $this->redactCommandLine($process->getCommandLine());
-
             if (! $run->claimPendingExecution()) {
                 return;
             }
 
+            $run = $run->fresh() ?? $run;
+            $plannedMetadata = $this->plannedMetadata($run);
+            $restoreAudit = $this->restoreSafetyGuard()->ensureSafe($run, $plannedMetadata);
+            $plannedMetadata = $this->mergeRestoreAuditMetadata($plannedMetadata, $restoreAudit);
+            $process = $this->buildProcess($run, $plannedMetadata);
+            $displayCommandLine = $this->redactCommandLine($process->getCommandLine());
+            $persistedPlannedMetadata = $this->persistedPlannedMetadata($plannedMetadata);
+
             $run->forceFill([
                 'command_line' => $displayCommandLine,
             ])->save();
-            $run->recordMetadata($plannedMetadata);
+            $run->recordMetadata($persistedPlannedMetadata);
             $run = $run->fresh() ?? $run;
 
             event(new BackupStarted($run));
@@ -89,7 +91,10 @@ final class PgDumpDriver implements BackupDriver
         }
     }
 
-    private function buildProcess(CommandRun $run): Process
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     */
+    private function buildProcess(CommandRun $run, array $plannedMetadata = []): Process
     {
         return match ($run->operation) {
             'logical_backup' => new Process(
@@ -97,7 +102,7 @@ final class PgDumpDriver implements BackupDriver
                 timeout: $this->commandTimeout(),
             ),
             'logical_restore_file', 'logical_restore_latest' => new Process(
-                $this->restoreCommand($run),
+                $this->restoreCommand($run, $plannedMetadata),
                 timeout: $this->commandTimeout(),
             ),
             default => throw new ConfigurationException(
@@ -135,10 +140,14 @@ final class PgDumpDriver implements BackupDriver
     /**
      * @return list<string>
      */
-    private function restoreCommand(CommandRun $run): array
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return list<string>
+     */
+    private function restoreCommand(CommandRun $run, array $plannedMetadata = []): array
     {
         $format = $this->format();
-        $target = $this->restoreTarget($run, $format);
+        $target = $this->restoreTarget($run, $format, $plannedMetadata);
         $command = [
             $this->restoreBinary(),
             '--dbname='.$this->databaseName(),
@@ -280,8 +289,19 @@ final class PgDumpDriver implements BackupDriver
             : $basePath.'.'.$this->fileExtension();
     }
 
-    private function restoreTarget(CommandRun $run, string $format): string
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     */
+    private function restoreTarget(CommandRun $run, string $format, array $plannedMetadata = []): string
     {
+        if (is_string($plannedMetadata['restore_target'] ?? null) && $plannedMetadata['restore_target'] !== '') {
+            $snapshot = is_array($plannedMetadata['restore_target_snapshot'] ?? null)
+                ? $plannedMetadata['restore_target_snapshot']
+                : null;
+
+            return $this->validatedRestoreTarget((string) $plannedMetadata['restore_target'], $format, $snapshot);
+        }
+
         return match ($run->operation) {
             'logical_restore_latest' => $this->latestBackupTarget($format),
             'logical_restore_file' => $this->restorePathFromArgument($run, $format),
@@ -327,7 +347,10 @@ final class PgDumpDriver implements BackupDriver
         return $this->validatedRestoreTarget($resolvedPath, $format);
     }
 
-    private function validatedRestoreTarget(string $resolvedPath, string $format): string
+    /**
+     * @param  array<string, mixed>|null  $expectedSnapshot
+     */
+    private function validatedRestoreTarget(string $resolvedPath, string $format, ?array $expectedSnapshot = null): string
     {
         $realOutputDir = realpath($this->outputDir());
         $realTargetPath = realpath($resolvedPath);
@@ -365,7 +388,80 @@ final class PgDumpDriver implements BackupDriver
             );
         }
 
+        $snapshot = $this->restoreTargetSnapshot($realTargetPath, $format);
+
+        if ($expectedSnapshot !== null && $this->restoreTargetChanged($snapshot, $expectedSnapshot)) {
+            throw new ConfigurationException(
+                sprintf('logical restore target [%s] changed after validation and must be selected again.', $resolvedPath),
+            );
+        }
+
         return $realTargetPath;
+    }
+
+    /**
+     * @return array{path:string,file_type:string,device:int|null,inode:int|null,mtime:int|null,size:int|null,content_signature:string|null}
+     */
+    private function restoreTargetSnapshot(string $realTargetPath, string $format): array
+    {
+        clearstatcache(true, $realTargetPath);
+
+        $stats = stat($realTargetPath);
+
+        if ($stats === false) {
+            throw new ConfigurationException(
+                sprintf('Configured logical restore target [%s] does not exist.', $realTargetPath),
+            );
+        }
+
+        return [
+            'path' => $realTargetPath,
+            'file_type' => $format,
+            'device' => isset($stats['dev']) ? (int) $stats['dev'] : null,
+            'inode' => isset($stats['ino']) ? (int) $stats['ino'] : null,
+            'mtime' => isset($stats['mtime']) ? (int) $stats['mtime'] : null,
+            'size' => $format === 'custom' && isset($stats['size']) ? (int) $stats['size'] : null,
+            'content_signature' => $format === 'directory' ? $this->directoryContentSignature($realTargetPath) : null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $currentSnapshot
+     * @param  array<string, mixed>  $expectedSnapshot
+     */
+    private function restoreTargetChanged(array $currentSnapshot, array $expectedSnapshot): bool
+    {
+        foreach (['path', 'file_type', 'device', 'inode', 'mtime', 'size', 'content_signature'] as $key) {
+            if (($currentSnapshot[$key] ?? null) !== ($expectedSnapshot[$key] ?? null)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function directoryContentSignature(string $path): string
+    {
+        $entries = [];
+        $baseLength = strlen(rtrim($path, DIRECTORY_SEPARATOR)) + 1;
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS),
+        );
+
+        foreach ($iterator as $file) {
+            $relativePath = substr($file->getPathname(), $baseLength);
+            $entries[] = implode('|', [
+                $relativePath,
+                $file->isDir() ? 'dir' : 'file',
+                $file->getInode(),
+                $file->getSize(),
+                $file->getMTime(),
+            ]);
+        }
+
+        sort($entries);
+
+        return sha1(implode("\n", $entries));
     }
 
     private function formatOption(string $format): string
@@ -435,7 +531,7 @@ final class PgDumpDriver implements BackupDriver
                 ],
             ],
             'logical_restore_latest', 'logical_restore_file' => [
-                'restore_target' => $this->restoreTarget($run, $this->format()),
+                ...$this->resolvedRestoreTargetMetadata($run, $this->format()),
                 'metadata' => [
                     'driver' => 'pgdump',
                     'format' => $this->format(),
@@ -444,6 +540,30 @@ final class PgDumpDriver implements BackupDriver
             ],
             default => [],
         };
+    }
+
+    /**
+     * @return array{restore_target:string,restore_target_snapshot:array<string,mixed>}
+     */
+    private function resolvedRestoreTargetMetadata(CommandRun $run, string $format): array
+    {
+        $target = $this->restoreTarget($run, $format);
+
+        return [
+            'restore_target' => $target,
+            'restore_target_snapshot' => $this->restoreTargetSnapshot($target, $format),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return array<string, mixed>
+     */
+    private function persistedPlannedMetadata(array $plannedMetadata): array
+    {
+        unset($plannedMetadata['restore_target_snapshot']);
+
+        return $plannedMetadata;
     }
 
     /**

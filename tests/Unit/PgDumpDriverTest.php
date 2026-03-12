@@ -255,6 +255,78 @@ it('rejects absolute restore paths outside the configured export directory', fun
         ));
 });
 
+it('rejects restore commands when the validated restore file changes before execution', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgrestore-race-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary restore-file path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    $target = $outputDir.'/nightly-2026-03-11.archive';
+    file_put_contents($target, 'original');
+
+    config()->set('checkpoint.drivers.pgdump.restore_binary', 'pg_restore');
+    config()->set('checkpoint.drivers.pgdump.format', 'custom');
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.pgdump.file_extension', 'archive');
+
+    $driver = new PgDumpDriver;
+    $run = CommandRun::factory()->make([
+        'operation' => 'logical_restore_file',
+        'argument_text' => 'nightly-2026-03-11',
+    ]);
+
+    $plannedMetadata = plannedPgDumpMetadata($driver, $run);
+
+    unlink($target);
+    file_put_contents($target, 'replacement');
+
+    expect(fn (): Process => buildPgDumpProcessWithMetadata($driver, $run, $plannedMetadata))
+        ->toThrow(ConfigurationException::class, sprintf(
+            'logical restore target [%s] changed after validation and must be selected again.',
+            $target,
+        ));
+});
+
+it('rejects restore commands when a validated directory export changes before execution', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgrestore-dir-race-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary restore-directory path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    $target = $outputDir.'/logical-export-42';
+    mkdir($target, 0755, true);
+    file_put_contents($target.'/toc.dat', 'original');
+
+    config()->set('checkpoint.drivers.pgdump.restore_binary', 'pg_restore');
+    config()->set('checkpoint.drivers.pgdump.format', 'directory');
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.pgdump.output_prefix', 'logical-export');
+
+    $driver = new PgDumpDriver;
+    $run = CommandRun::factory()->make([
+        'operation' => 'logical_restore_file',
+        'argument_text' => 'logical-export-42',
+    ]);
+
+    $plannedMetadata = plannedPgDumpMetadata($driver, $run);
+
+    file_put_contents($target.'/toc.dat', 'mutated');
+
+    expect(fn (): Process => buildPgDumpProcessWithMetadata($driver, $run, $plannedMetadata))
+        ->toThrow(ConfigurationException::class, sprintf(
+            'logical restore target [%s] changed after validation and must be selected again.',
+            $target,
+        ));
+});
+
 it('rejects unsupported pg_dump operations', function (): void {
     $run = CommandRun::factory()->make([
         'operation' => 'pgbackrest_info',
@@ -529,9 +601,35 @@ function buildPgDumpProcess(PgDumpDriver $driver, CommandRun $run): Process
     $method = new ReflectionMethod($driver, 'buildProcess');
 
     /** @var Process $process */
-    $process = $method->invoke($driver, $run);
+    $process = $method->invoke($driver, $run, []);
 
     return $process;
+}
+
+/**
+ * @param  array<string, mixed>  $plannedMetadata
+ */
+function buildPgDumpProcessWithMetadata(PgDumpDriver $driver, CommandRun $run, array $plannedMetadata): Process
+{
+    $method = new ReflectionMethod($driver, 'buildProcess');
+
+    /** @var Process $process */
+    $process = $method->invoke($driver, $run, $plannedMetadata);
+
+    return $process;
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function plannedPgDumpMetadata(PgDumpDriver $driver, CommandRun $run): array
+{
+    $method = new ReflectionMethod($driver, 'plannedMetadata');
+
+    /** @var array<string, mixed> $metadata */
+    $metadata = $method->invoke($driver, $run);
+
+    return $metadata;
 }
 
 function fakePgDumpScript(string $contents): string
