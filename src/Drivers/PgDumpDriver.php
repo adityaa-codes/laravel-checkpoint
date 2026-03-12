@@ -10,6 +10,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
@@ -46,11 +47,10 @@ final class PgDumpDriver implements BackupDriver
                 'command_line' => $displayCommandLine,
             ]));
 
-            $process->run();
-
-            $output = $this->combinedOutput($process);
+            $capturedOutput = $this->outputCapture()->captureProcess($process);
+            $output = $capturedOutput['output'];
             $exitCode = $process->getExitCode() ?? -1;
-            $completedMetadata = $this->completedMetadata($run, $plannedMetadata, $exitCode);
+            $completedMetadata = $this->completedMetadata($run, $plannedMetadata, $exitCode, $capturedOutput['metadata']);
 
             $run->forceFill([
                 'command_output' => $output,
@@ -540,11 +540,6 @@ final class PgDumpDriver implements BackupDriver
         return (float) $timeout;
     }
 
-    private function combinedOutput(Process $process): string
-    {
-        return trim($process->getOutput()."\n".$process->getErrorOutput());
-    }
-
     /**
      * @return array<string, mixed>
      */
@@ -602,7 +597,7 @@ final class PgDumpDriver implements BackupDriver
      * @param  array<string, mixed>  $plannedMetadata
      * @return array<string, mixed>
      */
-    private function completedMetadata(CommandRun $run, array $plannedMetadata, int $exitCode): array
+    private function completedMetadata(CommandRun $run, array $plannedMetadata, int $exitCode, array $captureMetadata): array
     {
         $metadata = $plannedMetadata['metadata'] ?? [];
 
@@ -611,7 +606,10 @@ final class PgDumpDriver implements BackupDriver
         }
 
         $completed = [
-            'metadata' => $metadata,
+            'metadata' => [
+                ...$metadata,
+                ...$captureMetadata,
+            ],
         ];
 
         if ($run->operation === 'logical_backup') {
@@ -627,7 +625,7 @@ final class PgDumpDriver implements BackupDriver
 
         if (in_array($run->operation, ['logical_restore_latest', 'logical_restore_file'], true)) {
             $completed['metadata'] = [
-                ...$metadata,
+                ...$completed['metadata'],
                 'restored_via' => 'pg_restore',
             ];
         }
@@ -727,5 +725,10 @@ final class PgDumpDriver implements BackupDriver
                 ...$restoreAudit,
             ],
         ];
+    }
+
+    private function outputCapture(): CommandOutputCapture
+    {
+        return resolve(CommandOutputCapture::class);
     }
 }

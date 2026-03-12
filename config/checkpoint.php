@@ -72,6 +72,9 @@ return [
     'reporting' => [
         'max_recent_runs' => (int) $env('DB_OPS_REPORTING_MAX_RECENT_RUNS', 100),
     ],
+    'output' => [
+        'max_persisted_bytes' => (int) $env('DB_OPS_OUTPUT_MAX_PERSISTED_BYTES', 65536),
+    ],
     'drivers' => [
         'shell' => [
             'class' => ShellCommandDriver::class,

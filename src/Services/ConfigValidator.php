@@ -25,6 +25,7 @@ final readonly class ConfigValidator
         $this->validateScheduleSettings();
         $this->validateObservabilitySettings();
         $this->validateReportingSettings();
+        $this->validateOutputSettings();
         $this->validateCustomOperations();
         $this->validateLogChannel();
         $this->validateUserModel();
@@ -473,6 +474,25 @@ final readonly class ConfigValidator
 
         if ($maxRecentRuns > 1000) {
             throw new ConfigurationException('checkpoint.reporting.max_recent_runs must not exceed 1000.');
+        }
+    }
+
+    private function validateOutputSettings(): void
+    {
+        $config = $this->config->get('checkpoint.output', []);
+
+        if (! is_array($config)) {
+            throw new ConfigurationException('checkpoint.output must be an array.');
+        }
+
+        $maxPersistedBytes = $config['max_persisted_bytes'] ?? null;
+
+        if (! is_int($maxPersistedBytes) || $maxPersistedBytes < 1) {
+            throw new ConfigurationException('checkpoint.output.max_persisted_bytes must be greater than zero.');
+        }
+
+        if ($maxPersistedBytes > 1048576) {
+            throw new ConfigurationException('checkpoint.output.max_persisted_bytes must not exceed 1048576.');
         }
     }
 

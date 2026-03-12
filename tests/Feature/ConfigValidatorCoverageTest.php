@@ -189,6 +189,20 @@ it('rejects a reporting recent run cap that is too large', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.reporting.max_recent_runs must not exceed 1000.');
 });
 
+it('rejects a non-positive output capture limit', function (): void {
+    config()->set('checkpoint.output.max_persisted_bytes', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.output.max_persisted_bytes must be greater than zero.');
+});
+
+it('rejects an output capture limit that is too large', function (): void {
+    config()->set('checkpoint.output.max_persisted_bytes', 1048577);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.output.max_persisted_bytes must not exceed 1048576.');
+});
+
 it('rejects pgdump parallel jobs for non-directory formats', function (): void {
     config()->set('checkpoint.drivers.pgdump.format', 'custom');
     config()->set('checkpoint.drivers.pgdump.jobs', 4);

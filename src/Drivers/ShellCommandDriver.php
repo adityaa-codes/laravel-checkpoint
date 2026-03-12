@@ -11,6 +11,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
@@ -73,11 +74,10 @@ final class ShellCommandDriver implements BackupDriver
                 'command_line' => $displayCommandLine,
             ]));
 
-            $process->run();
-
-            $output = $this->combinedOutput($process);
+            $capturedOutput = $this->outputCapture()->captureProcess($process);
+            $output = $capturedOutput['output'];
             $exitCode = $process->getExitCode() ?? -1;
-            $completedMetadata = $this->completedMetadata($run, $plannedMetadata, $exitCode);
+            $completedMetadata = $this->completedMetadata($run, $plannedMetadata, $exitCode, $capturedOutput['metadata']);
 
             $run->forceFill([
                 'command_output' => $output,
@@ -196,11 +196,6 @@ final class ShellCommandDriver implements BackupDriver
         ]);
     }
 
-    private function combinedOutput(Process $process): string
-    {
-        return trim($process->getOutput()."\n".$process->getErrorOutput());
-    }
-
     private function logger(): LoggerInterface
     {
         return Log::channel(config('checkpoint.log_channel', 'stack'));
@@ -271,10 +266,19 @@ final class ShellCommandDriver implements BackupDriver
      * @param  array<string, mixed>  $plannedMetadata
      * @return array<string, mixed>
      */
-    private function completedMetadata(CommandRun $run, array $plannedMetadata, int $exitCode): array
+    private function completedMetadata(CommandRun $run, array $plannedMetadata, int $exitCode, array $captureMetadata): array
     {
+        $metadata = $plannedMetadata['metadata'] ?? ['driver' => 'shell'];
+
+        if (! is_array($metadata)) {
+            $metadata = ['driver' => 'shell'];
+        }
+
         $completed = [
-            'metadata' => $plannedMetadata['metadata'] ?? ['driver' => 'shell'],
+            'metadata' => [
+                ...$metadata,
+                ...$captureMetadata,
+            ],
         ];
 
         if ($run->operation === 'logical_backup' && $exitCode === 0) {
@@ -304,5 +308,10 @@ final class ShellCommandDriver implements BackupDriver
                 ...$restoreAudit,
             ],
         ];
+    }
+
+    private function outputCapture(): CommandOutputCapture
+    {
+        return resolve(CommandOutputCapture::class);
     }
 }

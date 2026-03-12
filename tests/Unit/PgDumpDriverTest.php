@@ -626,6 +626,51 @@ it('records restore audit metadata for pgdump restore runs', function (): void {
         ]);
 });
 
+it('records output capture metadata for truncated pgdump restore output', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgdump-restore-truncate-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary pgdump restore truncation path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    config()->set('checkpoint.output.max_persisted_bytes', 48);
+    config()->set('checkpoint.drivers.pgdump.restore_binary', fakePgDumpScript("#!/bin/sh\nprintf '%s' \"$(printf 'R%.0s' $(seq 1 96))\"\n"));
+    config()->set('checkpoint.drivers.pgdump.format', 'custom');
+    config()->set('checkpoint.drivers.pgdump.jobs', 1);
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.pgdump.file_extension', 'archive');
+
+    touch($outputDir.'/nightly-2026-03-11.archive');
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_restore_file',
+        'argument_text' => 'nightly-2026-03-11',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new PgDumpDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+        ->and(strlen((string) $run->command_output))->toBeLessThanOrEqual(48)
+        ->and($run->command_output)->toContain('...[truncated ')
+        ->and($run->metadata)->toMatchArray([
+            'driver' => 'pgdump',
+            'restored_via' => 'pg_restore',
+            'output_capture' => [
+                'truncated' => true,
+                'original_bytes' => 96,
+                'persisted_bytes' => strlen((string) $run->command_output),
+                'max_persisted_bytes' => 48,
+            ],
+        ]);
+});
+
 it('redacts pg_dump command lines before persisting and logging them', function (): void {
     $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgdump-redact-');
 
@@ -703,6 +748,44 @@ it('rethrows pg_dump runtime exceptions after marking the run failed', function 
 
     expect($run->status)->toBe(CommandRunStatus::Failed)
         ->and($run->exit_code)->toBe(-1);
+});
+
+it('truncates persisted pgdump output and records capture metadata', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgdump-truncate-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary pgdump truncation path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    config()->set('checkpoint.output.max_persisted_bytes', 48);
+    config()->set('checkpoint.drivers.pgdump.dump_binary', fakePgDumpScript("#!/bin/sh\nprintf '%s' \"$(printf 'X%.0s' $(seq 1 80))\"\n"));
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new PgDumpDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+        ->and(strlen((string) $run->command_output))->toBeLessThanOrEqual(48)
+        ->and($run->command_output)->toContain('...[truncated ')
+        ->and($run->metadata)->toMatchArray([
+            'driver' => 'pgdump',
+            'output_capture' => [
+                'truncated' => true,
+                'original_bytes' => 80,
+                'persisted_bytes' => strlen((string) $run->command_output),
+                'max_persisted_bytes' => 48,
+            ],
+        ]);
 });
 
 function buildPgDumpProcess(PgDumpDriver $driver, CommandRun $run): Process

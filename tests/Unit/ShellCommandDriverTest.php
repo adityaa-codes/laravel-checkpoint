@@ -217,3 +217,31 @@ it('redacts shell command lines before persisting and logging them', function ()
         ->and($run->command_line)->not->toContain('top-secret')
         ->and($run->command_line)->not->toContain('abc123');
 });
+
+it('truncates persisted shell command output and records capture metadata', function (): void {
+    config()->set('checkpoint.output.max_persisted_bytes', 40);
+    config()->set('checkpoint.drivers.shell.commands.logical_backup', 'printf '.str_repeat('A', 30).str_repeat('B', 30));
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new ShellCommandDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+        ->and(strlen((string) $run->command_output))->toBeLessThanOrEqual(40)
+        ->and($run->command_output)->toContain('...[truncated ')
+        ->and($run->metadata)->toMatchArray([
+            'driver' => 'shell',
+            'output_capture' => [
+                'truncated' => true,
+                'original_bytes' => 60,
+                'persisted_bytes' => strlen((string) $run->command_output),
+                'max_persisted_bytes' => 40,
+            ],
+        ]);
+});

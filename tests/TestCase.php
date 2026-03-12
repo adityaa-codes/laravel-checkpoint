@@ -87,6 +87,9 @@ class TestCase extends Orchestra
             'reporting' => [
                 'max_recent_runs' => 100,
             ],
+            'output' => [
+                'max_persisted_bytes' => 65536,
+            ],
             'drivers' => [
                 'shell' => [
                     'class' => ShellCommandDriver::class,

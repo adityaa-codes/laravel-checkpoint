@@ -184,6 +184,34 @@ it('records restore audit metadata for pgbackrest restore runs', function (): vo
         ]);
 });
 
+it('truncates persisted pgbackrest output and records capture metadata', function (): void {
+    config()->set('checkpoint.output.max_persisted_bytes', 64);
+    config()->set('checkpoint.drivers.pgbackrest.binary', fakePgBackRestScript("#!/bin/sh\nprintf '%s' \"$(printf 'Z%.0s' $(seq 1 120))\"\n"));
+
+    $run = CommandRun::query()->create([
+        'operation' => 'pgbackrest_backup_full',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new PgBackRestDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+        ->and(strlen((string) $run->command_output))->toBeLessThanOrEqual(64)
+        ->and($run->command_output)->toContain('...[truncated ')
+        ->and($run->metadata)->toMatchArray([
+            'driver' => 'pgbackrest',
+            'output_capture' => [
+                'truncated' => true,
+                'original_bytes' => 120,
+                'persisted_bytes' => strlen((string) $run->command_output),
+                'max_persisted_bytes' => 64,
+            ],
+        ]);
+});
+
 it('keeps resume and start-fast enabled for pgbackrest backup retries', function (): void {
     config()->set('checkpoint.drivers.pgbackrest.binary', 'pgbackrest');
     config()->set('checkpoint.drivers.pgbackrest.resume', true);

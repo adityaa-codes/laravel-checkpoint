@@ -10,6 +10,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Log;
@@ -48,13 +49,12 @@ final class PgBackRestDriver implements BackupDriver
                 'command_line' => $displayCommandLine,
             ]));
 
-            $process->run();
-
-            $output = $this->combinedOutput($process);
+            $capturedOutput = $this->outputCapture()->captureProcess($process);
+            $output = $capturedOutput['output'];
             $exitCode = $process->getExitCode() ?? -1;
             $summary = $this->operationSummary($run->operation, $output, $exitCode);
             $normalizedOutput = $this->normalizeOutput($summary, $output);
-            $completedMetadata = $this->completedMetadata($run, $plannedMetadata, $summary, $exitCode);
+            $completedMetadata = $this->completedMetadata($run, $plannedMetadata, $summary, $exitCode, $capturedOutput['metadata']);
 
             $run->forceFill([
                 'command_output' => $normalizedOutput,
@@ -311,11 +311,6 @@ final class PgBackRestDriver implements BackupDriver
         return $args;
     }
 
-    private function combinedOutput(Process $process): string
-    {
-        return trim($process->getOutput()."\n".$process->getErrorOutput());
-    }
-
     /**
      * @param  array<string, mixed>|null  $summary
      */
@@ -340,7 +335,14 @@ final class PgBackRestDriver implements BackupDriver
             return "[checkpoint-summary]\n".$encodedSummary;
         }
 
-        return "[checkpoint-summary]\n".$encodedSummary."\n\n[raw-output]\n".$trimmedOutput;
+        $prefix = "[checkpoint-summary]\n".$encodedSummary."\n\n[raw-output]\n";
+        $availableBytes = $this->outputCapture()->maxPersistedBytes() - strlen($prefix);
+
+        if ($availableBytes < 1) {
+            return "[checkpoint-summary]\n".$encodedSummary;
+        }
+
+        return $prefix.$this->outputCapture()->capture($trimmedOutput, $availableBytes)['output'];
     }
 
     /**
@@ -493,6 +495,7 @@ final class PgBackRestDriver implements BackupDriver
         array $plannedMetadata,
         ?array $summary,
         int $exitCode,
+        array $captureMetadata,
     ): array {
         $metadata = $plannedMetadata['metadata'] ?? [];
 
@@ -503,6 +506,11 @@ final class PgBackRestDriver implements BackupDriver
         if ($summary !== null) {
             $metadata['summary'] = $summary;
         }
+
+        $metadata = [
+            ...$metadata,
+            ...$captureMetadata,
+        ];
 
         $completed = [
             'metadata' => $metadata,
@@ -695,5 +703,10 @@ final class PgBackRestDriver implements BackupDriver
                 ...$restoreAudit,
             ],
         ];
+    }
+
+    private function outputCapture(): CommandOutputCapture
+    {
+        return resolve(CommandOutputCapture::class);
     }
 }
