@@ -12,6 +12,7 @@ use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Gate;
+use Spatie\LaravelPackageTools\Package;
 
 it('resolves the configured backup driver from the service provider binding', function (): void {
     config()->set('checkpoint.driver', 'fake');
@@ -43,6 +44,20 @@ it('registers the default scheduled checkpoint commands', function (): void {
             ->and($event->expiresAt)->toBe(180)
             ->and($event->onOneServer)->toBeTrue();
     });
+});
+
+it('registers published migrations in dependency order', function (): void {
+    $provider = new LaravelCheckpointServiceProvider(app());
+    $package = new Package();
+
+    $provider->configurePackage($package);
+
+    expect($package->migrationFileNames)->toBe([
+        'create_checkpoint_command_runs_table',
+        'add_checkpoint_metadata_to_command_runs_table',
+        'add_orphan_recovery_claim_to_command_runs_table',
+        'create_checkpoint_backup_drill_runs_table',
+    ]);
 });
 
 it('can disable schedule overlap and cluster guards', function (): void {
