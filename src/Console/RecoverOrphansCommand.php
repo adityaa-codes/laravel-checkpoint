@@ -77,7 +77,7 @@ final class RecoverOrphansCommand extends Command
                         $threshold,
                         $thresholdMinutes
                     ): void {
-                        if (! $run->claimForOrphanRecovery($threshold, $claimExpiresBefore, $claimedAt)) {
+                        if (! $run->claimForOrphanRecovery($threshold, $claimExpiresBefore, $claimedAt, refresh: false)) {
                             return;
                         }
 
@@ -91,7 +91,7 @@ final class RecoverOrphansCommand extends Command
                         $job = new ProcessCommandRunJob($run)
                             ->onQueue($queue);
 
-                        $runClaimedAt = $run->orphan_recovery_claimed_at;
+                        $runClaimedAt = $claimedAt;
 
                         try {
                             $this->dispatcher->dispatch($job);
@@ -103,7 +103,7 @@ final class RecoverOrphansCommand extends Command
                             }
 
                             if ($runClaimedAt !== null) {
-                                $run->releaseOrphanRecoveryClaim($runClaimedAt);
+                                $run->releaseOrphanRecoveryClaim($runClaimedAt, refresh: false);
                             }
 
                             throw $exception;

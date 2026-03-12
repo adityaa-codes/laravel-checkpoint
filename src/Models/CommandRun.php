@@ -185,7 +185,7 @@ class CommandRun extends Model
         return $this;
     }
 
-    public function claimPendingExecution(?Carbon $startedAt = null): bool
+    public function claimPendingExecution(?Carbon $startedAt = null, bool $refresh = true): bool
     {
         $startedAt ??= now();
 
@@ -199,7 +199,9 @@ class CommandRun extends Model
                 'orphan_recovery_claimed_at' => null,
             ]);
 
-        $this->refresh();
+        if ($refresh) {
+            $this->refresh();
+        }
 
         return $updated === 1;
     }
@@ -248,7 +250,7 @@ class CommandRun extends Model
         return $this;
     }
 
-    public function claimForOrphanRecovery(Carbon $threshold, Carbon $claimExpiresBefore, ?Carbon $claimedAt = null): bool
+    public function claimForOrphanRecovery(Carbon $threshold, Carbon $claimExpiresBefore, ?Carbon $claimedAt = null, bool $refresh = true): bool
     {
         $claimedAt ??= now();
 
@@ -267,12 +269,14 @@ class CommandRun extends Model
                 ]);
         });
 
-        $this->refresh();
+        if ($refresh) {
+            $this->refresh();
+        }
 
         return $updated === 1;
     }
 
-    public function releaseOrphanRecoveryClaim(Carbon $claimedAt): bool
+    public function releaseOrphanRecoveryClaim(Carbon $claimedAt, bool $refresh = true): bool
     {
         $updated = static::withoutTimestamps(function () use ($claimedAt): int {
             return static::query()
@@ -284,7 +288,9 @@ class CommandRun extends Model
                 ]);
         });
 
-        $this->refresh();
+        if ($refresh) {
+            $this->refresh();
+        }
 
         return $updated === 1;
     }
