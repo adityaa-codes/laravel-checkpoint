@@ -305,7 +305,7 @@ final class PgDumpDriver implements BackupDriver
 
         usort($candidates, static fn (string $left, string $right): int => filemtime($right) <=> filemtime($left));
 
-        return $candidates[0];
+        return $this->validatedRestoreTarget($candidates[0], $format);
     }
 
     private function restorePathFromArgument(CommandRun $run, string $format): string
@@ -316,17 +316,56 @@ final class PgDumpDriver implements BackupDriver
             throw new ConfigurationException('logical_restore_file requires a backup path or export name.');
         }
 
-        if (str_starts_with($argument, '/')) {
-            return $argument;
-        }
-
-        $resolvedPath = $this->outputDir().'/'.ltrim($argument, '/');
+        $resolvedPath = str_starts_with($argument, '/')
+            ? $argument
+            : $this->outputDir().'/'.ltrim($argument, '/');
 
         if ($format === 'custom' && pathinfo($resolvedPath, PATHINFO_EXTENSION) === '') {
             $resolvedPath .= '.'.$this->fileExtension();
         }
 
-        return $resolvedPath;
+        return $this->validatedRestoreTarget($resolvedPath, $format);
+    }
+
+    private function validatedRestoreTarget(string $resolvedPath, string $format): string
+    {
+        $realOutputDir = realpath($this->outputDir());
+        $realTargetPath = realpath($resolvedPath);
+
+        if (! is_string($realOutputDir) || $realOutputDir === '') {
+            throw new ConfigurationException('Unable to resolve the configured pg_dump output directory.');
+        }
+
+        if (! is_string($realTargetPath) || $realTargetPath === '') {
+            throw new ConfigurationException(
+                sprintf('Configured logical restore target [%s] does not exist.', $resolvedPath),
+            );
+        }
+
+        $realOutputDir = rtrim($realOutputDir, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
+        $realTargetPrefix = rtrim($realTargetPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
+        $isContained = str_starts_with($realTargetPath, $realOutputDir)
+            || str_starts_with($realTargetPrefix, $realOutputDir);
+
+        if (! $isContained) {
+            throw new ConfigurationException(
+                sprintf('logical_restore_file target [%s] must be inside the configured pg_dump output directory.', $resolvedPath),
+            );
+        }
+
+        if ($format === 'directory' && ! is_dir($realTargetPath)) {
+            throw new ConfigurationException(
+                sprintf('logical_restore_file target [%s] must be a directory export.', $resolvedPath),
+            );
+        }
+
+        if ($format === 'custom' && ! is_file($realTargetPath)) {
+            throw new ConfigurationException(
+                sprintf('logical_restore_file target [%s] must be a restoreable file export.', $resolvedPath),
+            );
+        }
+
+        return $realTargetPath;
     }
 
     private function formatOption(string $format): string

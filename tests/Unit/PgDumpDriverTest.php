@@ -85,6 +85,53 @@ it('builds restore commands from the latest logical export directory', function 
         ->and($process->getCommandLine())->toContain($newer);
 });
 
+it('rejects logical_restore_latest when the newest matching export escapes via symlink', function (): void {
+    if (! function_exists('symlink')) {
+        test()->markTestSkipped('Symlinks are not supported in this environment.');
+    }
+
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgrestore-latest-link-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary restore path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    $safeExport = $outputDir.'/logical-export-10';
+    $outsideExport = tempnam(sys_get_temp_dir(), 'checkpoint-pgrestore-external-dir-');
+
+    if ($outsideExport === false) {
+        throw new RuntimeException('Unable to allocate an external export path.');
+    }
+
+    unlink($outsideExport);
+    mkdir($outsideExport, 0755, true);
+    mkdir($safeExport, 0755, true);
+
+    $linkedExport = $outputDir.'/logical-export-11';
+    symlink($outsideExport, $linkedExport);
+    touch($safeExport, time() - 60);
+    touch($outsideExport, time());
+
+    config()->set('checkpoint.drivers.pgdump.restore_binary', 'pg_restore');
+    config()->set('checkpoint.drivers.pgdump.format', 'directory');
+    config()->set('checkpoint.drivers.pgdump.jobs', 4);
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.pgdump.output_prefix', 'logical-export');
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'logical_restore_latest',
+    ]);
+
+    expect(fn (): Process => buildPgDumpProcess(new PgDumpDriver, $run))
+        ->toThrow(ConfigurationException::class, sprintf(
+            'logical_restore_file target [%s] must be inside the configured pg_dump output directory.',
+            $linkedExport,
+        ));
+});
+
 it('resolves relative restore arguments within the configured export directory', function (): void {
     $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgrestore-file-');
 
@@ -102,6 +149,8 @@ it('resolves relative restore arguments within the configured export directory',
     config()->set('checkpoint.drivers.pgdump.file_extension', 'archive');
     config()->set('checkpoint.drivers.pgdump.extra_args.restore', ['--if-exists']);
 
+    touch($outputDir.'/nightly-2026-03-11.archive');
+
     $run = CommandRun::factory()->make([
         'operation' => 'logical_restore_file',
         'argument_text' => 'nightly-2026-03-11',
@@ -112,6 +161,98 @@ it('resolves relative restore arguments within the configured export directory',
     expect($process->getCommandLine())->toContain('--format=custom')
         ->and($process->getCommandLine())->toContain('--if-exists')
         ->and($process->getCommandLine())->toContain($outputDir.'/nightly-2026-03-11.archive');
+});
+
+it('accepts absolute restore paths only when they stay inside the configured export directory', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgrestore-abs-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary restore-file path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    $target = $outputDir.'/nightly-2026-03-11.archive';
+    touch($target);
+
+    config()->set('checkpoint.drivers.pgdump.restore_binary', 'pg_restore');
+    config()->set('checkpoint.drivers.pgdump.format', 'custom');
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.pgdump.file_extension', 'archive');
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'logical_restore_file',
+        'argument_text' => $target,
+    ]);
+
+    $process = buildPgDumpProcess(new PgDumpDriver, $run);
+
+    expect($process->getCommandLine())->toContain($target);
+});
+
+it('rejects restore paths that escape the configured export directory', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgrestore-escape-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary restore-file path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+    touch(dirname($outputDir).'/outside.archive');
+
+    config()->set('checkpoint.drivers.pgdump.restore_binary', 'pg_restore');
+    config()->set('checkpoint.drivers.pgdump.format', 'custom');
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.pgdump.file_extension', 'archive');
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'logical_restore_file',
+        'argument_text' => '../outside',
+    ]);
+
+    expect(fn (): Process => buildPgDumpProcess(new PgDumpDriver, $run))
+        ->toThrow(ConfigurationException::class, sprintf(
+            'logical_restore_file target [%s] must be inside the configured pg_dump output directory.',
+            $outputDir.'/../outside.archive',
+        ));
+});
+
+it('rejects absolute restore paths outside the configured export directory', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgrestore-outside-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary restore-file path.');
+    }
+
+    $outsideTargetBase = tempnam(sys_get_temp_dir(), 'checkpoint-pgdump-outside-artifact-');
+
+    if ($outsideTargetBase === false) {
+        throw new RuntimeException('Unable to allocate an external restore artifact.');
+    }
+
+    $outsideTarget = $outsideTargetBase.'.archive';
+    rename($outsideTargetBase, $outsideTarget);
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    config()->set('checkpoint.drivers.pgdump.restore_binary', 'pg_restore');
+    config()->set('checkpoint.drivers.pgdump.format', 'custom');
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.pgdump.file_extension', 'archive');
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'logical_restore_file',
+        'argument_text' => $outsideTarget,
+    ]);
+
+    expect(fn (): Process => buildPgDumpProcess(new PgDumpDriver, $run))
+        ->toThrow(ConfigurationException::class, sprintf(
+            'logical_restore_file target [%s] must be inside the configured pg_dump output directory.',
+            $outsideTarget,
+        ));
 });
 
 it('rejects unsupported pg_dump operations', function (): void {

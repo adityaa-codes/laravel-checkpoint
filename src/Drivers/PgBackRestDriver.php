@@ -22,8 +22,11 @@ final class PgBackRestDriver implements BackupDriver
 {
     public function execute(CommandRun $run): void
     {
+        $tempConfigPath = null;
+
         try {
             $process = $this->buildProcess($run);
+            $tempConfigPath = $this->tempConfigPath($process);
             $plannedMetadata = $this->plannedMetadata($run);
             $restoreAudit = $this->restoreSafetyGuard()->ensureSafe($run, $plannedMetadata);
             $plannedMetadata = $this->mergeRestoreAuditMetadata($plannedMetadata, $restoreAudit);
@@ -89,6 +92,8 @@ final class PgBackRestDriver implements BackupDriver
             ]));
 
             throw $exception;
+        } finally {
+            $this->cleanupTempConfig($tempConfigPath);
         }
     }
 
@@ -111,8 +116,17 @@ final class PgBackRestDriver implements BackupDriver
             ...$this->extraArgs($definition['extra_args_key']),
         ];
 
+        $tempConfig = $this->secretConfigOptions();
+        $env = [];
+
+        if ($tempConfig !== null) {
+            $argv[] = '--config='.$tempConfig['path'];
+            $env['LARAVEL_CHECKPOINT_TEMP_CONFIG_PATH'] = $tempConfig['path'];
+        }
+
         return new Process(
             $argv,
+            env: $env,
             timeout: (float) config('checkpoint.drivers.pgbackrest.command_timeout_seconds', 7200),
         );
     }
@@ -228,8 +242,6 @@ final class PgBackRestDriver implements BackupDriver
             $options[] = sprintf('--repo%d-s3-bucket=%s', $repoId, (string) $s3['bucket']);
             $options[] = sprintf('--repo%d-s3-endpoint=%s', $repoId, (string) $s3['endpoint']);
             $options[] = sprintf('--repo%d-s3-region=%s', $repoId, (string) $s3['region']);
-            $options[] = sprintf('--repo%d-s3-key=%s', $repoId, (string) $s3['key']);
-            $options[] = sprintf('--repo%d-s3-key-secret=%s', $repoId, (string) $s3['secret']);
             $options[] = sprintf('--repo%d-s3-uri-style=%s', $repoId, (string) ($s3['uri_style'] ?? 'host'));
         }
 
@@ -244,7 +256,6 @@ final class PgBackRestDriver implements BackupDriver
 
         if (($encryption['enabled'] ?? false) === true) {
             $options[] = sprintf('--repo%d-cipher-type=%s', $repoId, (string) $encryption['cipher_type']);
-            $options[] = sprintf('--repo%d-cipher-pass=%s', $repoId, (string) $encryption['passphrase']);
         }
 
         return $options;
@@ -574,6 +585,72 @@ final class PgBackRestDriver implements BackupDriver
         ];
 
         return (string) preg_replace($patterns, '$1[REDACTED]', $commandLine);
+    }
+
+    /**
+     * @return array{path:string}|null
+     */
+    private function secretConfigOptions(): ?array
+    {
+        $repoId = $this->selectedRepositoryId();
+        $repository = $this->selectedRepositoryConfig();
+        $lines = [];
+
+        if ($repository['type'] === 's3') {
+            $s3 = is_array($repository['s3'] ?? null) ? $repository['s3'] : [];
+
+            if (is_string($s3['key'] ?? null) && trim((string) $s3['key']) !== '') {
+                $lines[] = sprintf('repo%d-s3-key=%s', $repoId, (string) $s3['key']);
+            }
+
+            if (is_string($s3['secret'] ?? null) && trim((string) $s3['secret']) !== '') {
+                $lines[] = sprintf('repo%d-s3-key-secret=%s', $repoId, (string) $s3['secret']);
+            }
+        }
+
+        $encryption = is_array($repository['encryption'] ?? null) ? $repository['encryption'] : [];
+
+        if (($encryption['enabled'] ?? false) === true && is_string($encryption['passphrase'] ?? null) && trim((string) $encryption['passphrase']) !== '') {
+            $lines[] = sprintf('repo%d-cipher-pass=%s', $repoId, (string) $encryption['passphrase']);
+        }
+
+        if ($lines === []) {
+            return null;
+        }
+
+        $path = tempnam(sys_get_temp_dir(), 'checkpoint-pgbackrest-');
+
+        if ($path === false) {
+            throw new ConfigurationException('Unable to allocate a temporary pgBackRest config file.');
+        }
+
+        $contents = "[global]\n".implode("\n", $lines)."\n";
+
+        if (file_put_contents($path, $contents) === false) {
+            @unlink($path);
+
+            throw new ConfigurationException('Unable to write a temporary pgBackRest config file.');
+        }
+
+        @chmod($path, 0600);
+
+        return ['path' => $path];
+    }
+
+    private function tempConfigPath(Process $process): ?string
+    {
+        $path = $process->getEnv()['LARAVEL_CHECKPOINT_TEMP_CONFIG_PATH'] ?? null;
+
+        return is_string($path) && $path !== '' ? $path : null;
+    }
+
+    private function cleanupTempConfig(?string $path): void
+    {
+        if (! is_string($path) || $path === '' || ! is_file($path)) {
+            return;
+        }
+
+        @unlink($path);
     }
 
     private function selectedRepositoryId(): int

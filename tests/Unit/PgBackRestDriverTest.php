@@ -74,6 +74,7 @@ it('builds typed pgbackrest backup commands from structured config', function ()
     ]);
 
     $process = buildPgBackRestProcess(new PgBackRestDriver, $run);
+    $tempConfigPath = $process->getEnv()['LARAVEL_CHECKPOINT_TEMP_CONFIG_PATH'] ?? null;
 
     expect($process)->toBeInstanceOf(Process::class)
         ->and($process->getCommandLine())->toContain('pgbackrest')
@@ -89,13 +90,25 @@ it('builds typed pgbackrest backup commands from structured config', function ()
         ->and($process->getCommandLine())->toContain('--repo2-storage-verify-tls=y')
         ->and($process->getCommandLine())->toContain('--repo2-storage-ca-file=/etc/ssl/checkpoint.pem')
         ->and($process->getCommandLine())->toContain('--repo2-cipher-type=aes-256-cbc')
-        ->and($process->getCommandLine())->toContain('--repo2-cipher-pass=cipher-passphrase')
+        ->and($process->getCommandLine())->toContain('--config=')
+        ->and($process->getCommandLine())->not->toContain('--repo2-s3-key=')
+        ->and($process->getCommandLine())->not->toContain('--repo2-s3-key-secret=')
+        ->and($process->getCommandLine())->not->toContain('--repo2-cipher-pass=')
         ->and($process->getCommandLine())->toContain('--process-max=4')
         ->and($process->getCommandLine())->toContain('--resume')
         ->and($process->getCommandLine())->toContain('--start-fast')
         ->and($process->getCommandLine())->toContain('--backup-standby')
         ->and($process->getCommandLine())->toContain('--checksum-page')
-        ->and($process->getCommandLine())->toContain('--buffer-size=4MiB');
+        ->and($process->getCommandLine())->toContain('--buffer-size=4MiB')
+        ->and($tempConfigPath)->toBeString()
+        ->and($tempConfigPath)->not->toBe('')
+        ->and(file_get_contents($tempConfigPath))->toContain('repo2-s3-key=repo-key')
+        ->and(file_get_contents($tempConfigPath))->toContain('repo2-s3-key-secret=repo-secret')
+        ->and(file_get_contents($tempConfigPath))->toContain('repo2-cipher-pass=cipher-passphrase');
+
+    if (is_string($tempConfigPath) && is_file($tempConfigPath)) {
+        unlink($tempConfigPath);
+    }
 });
 
 it('requests json output for pgbackrest info operations', function (): void {
@@ -288,12 +301,13 @@ SH));
     $logger->shouldReceive('info')
         ->once()
         ->with('Starting pgBackRest operation', Mockery::on(function (array $context): bool {
-            return str_contains((string) $context['command_line'], '--repo1-s3-key=[REDACTED]')
-                && str_contains((string) $context['command_line'], '--repo1-s3-key-secret=[REDACTED]')
-                && str_contains((string) $context['command_line'], '--repo1-cipher-pass=[REDACTED]')
+            return str_contains((string) $context['command_line'], '--config=')
                 && $context['driver'] === 'pgbackrest'
                 && $context['repository'] === 1
                 && $context['stanza'] === 'main'
+                && ! str_contains((string) $context['command_line'], '--repo1-s3-key=')
+                && ! str_contains((string) $context['command_line'], '--repo1-s3-key-secret=')
+                && ! str_contains((string) $context['command_line'], '--repo1-cipher-pass=')
                 && ! str_contains((string) $context['command_line'], 'AKIA-SECRET-KEY')
                 && ! str_contains((string) $context['command_line'], 'super-secret-token')
                 && ! str_contains((string) $context['command_line'], 'repo-passphrase');
@@ -320,12 +334,53 @@ SH));
 
     $run->refresh();
 
-    expect($run->command_line)->toContain('--repo1-s3-key=[REDACTED]')
-        ->and($run->command_line)->toContain('--repo1-s3-key-secret=[REDACTED]')
-        ->and($run->command_line)->toContain('--repo1-cipher-pass=[REDACTED]')
+    expect($run->command_line)->toContain('--config=')
+        ->and($run->command_line)->not->toContain('--repo1-s3-key=')
+        ->and($run->command_line)->not->toContain('--repo1-s3-key-secret=')
+        ->and($run->command_line)->not->toContain('--repo1-cipher-pass=')
         ->and($run->command_line)->not->toContain('AKIA-SECRET-KEY')
         ->and($run->command_line)->not->toContain('super-secret-token')
         ->and($run->command_line)->not->toContain('repo-passphrase');
+});
+
+it('cleans up temporary pgbackrest secret config files after execution', function (): void {
+    config()->set('checkpoint.drivers.pgbackrest.repositories', [
+        1 => [
+            'type' => 's3',
+            'path' => null,
+            's3' => [
+                'bucket' => 'checkpoint-backups',
+                'endpoint' => 's3.example.com',
+                'region' => 'ap-south-1',
+                'key' => 'AKIA-SECRET-KEY',
+                'secret' => 'super-secret-token',
+                'uri_style' => 'host',
+            ],
+            'tls' => [
+                'verify' => true,
+                'ca_file' => null,
+            ],
+            'encryption' => [
+                'enabled' => true,
+                'cipher_type' => 'aes-256-cbc',
+                'passphrase' => 'repo-passphrase',
+            ],
+        ],
+    ]);
+    config()->set('checkpoint.drivers.pgbackrest.binary', fakePgBackRestScript("#!/bin/sh\nprintf 'ok'\n"));
+
+    $run = CommandRun::query()->create([
+        'operation' => 'pgbackrest_info',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new PgBackRestDriver)->execute($run);
+
+    preg_match('/--config=([^\s]+)/', (string) $run->fresh()?->command_line, $matches);
+
+    expect($matches[1] ?? null)->toBeString()
+        ->and(is_file((string) $matches[1]))->toBeFalse();
 });
 
 it('stores a structured summary when pgbackrest check fails', function (): void {
