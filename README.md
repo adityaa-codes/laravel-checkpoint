@@ -29,7 +29,7 @@ Important config groups in `config/checkpoint.php`:
 
 - `user_model`, `user_name_column`, `table_prefix`
 - `queue.connection`, `queue.name`, `queue.max_attempts`, `queue.retry_after`, `queue.timeout`, `queue.unique_for`, `queue.lock_store`, `queue.orphan_threshold`, `queue.orphan_claim_timeout`, `queue.orphan_batch_size`, `queue.orphan_event_max_ids`
-- `schedule.logical_backup_*`, `schedule.health_check_enabled`, `schedule.recover_orphans_enabled`, `schedule.prune_enabled`, `schedule.without_overlapping`, `schedule.overlap_expires_at`, `schedule.on_one_server`
+- `schedule.logical_backup_*`, `schedule.health_check_enabled`, `schedule.recover_orphans_enabled`, `schedule.prune_enabled`, `schedule.without_overlapping`, `schedule.overlap_expires_at`, `schedule.on_one_server`, `schedule.prune_keep_*`
 - `driver`, `drivers.shell.*`, `drivers.pgbackrest.*`, `drivers.pgdump.*`
 - `reporting.max_recent_runs`, `output.max_persisted_bytes`
 - `log_channel`
@@ -48,6 +48,9 @@ DB_OPS_QUEUE_ORPHAN_CLAIM_TIMEOUT=61
 DB_OPS_QUEUE_ORPHAN_BATCH_SIZE=100
 DB_OPS_QUEUE_ORPHAN_EVENT_MAX_IDS=50
 DB_OPS_OUTPUT_MAX_PERSISTED_BYTES=65536
+DB_OPS_PRUNE_KEEP_DAYS=90
+DB_OPS_PRUNE_KEEP_FAILED_DAYS=365
+DB_OPS_PRUNE_KEEP_BACKUP_DRILL_DAYS=365
 DB_OPS_LOG_CHANNEL=stack
 
 DB_OPS_CMD_LOGICAL_BACKUP=
@@ -322,6 +325,12 @@ Backup drill observability thresholds are configurable:
 - `observability.max_backup_drill_age_days`: warns when the newest drill is older than this threshold
 - `observability.backup_drill_pass_rate_window_days`: rolling window used for drill pass-rate evaluation
 - `observability.backup_drill_min_pass_rate`: minimum acceptable drill pass rate percentage before `doctor` warns
+
+Retention notes:
+
+- `db-ops:prune` now deletes expired `command_runs` and expired `backup_drill_runs`
+- `schedule.prune_keep_backup_drill_days` controls backup drill retention
+- drill retention must be greater than or equal to both `observability.max_backup_drill_age_days` and `observability.backup_drill_pass_rate_window_days`, so pruning cannot erase the package's own drill health window
 
 Structured log fields include `run_id`, `driver`, `backup_type`,
 `restore_target`, `repository`, `stanza`, and `duration_seconds` when those
