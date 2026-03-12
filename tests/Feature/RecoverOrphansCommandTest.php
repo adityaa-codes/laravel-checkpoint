@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
+use AdityaaCodes\LaravelCheckpoint\Console\RecoverOrphansCommand;
 use AdityaaCodes\LaravelCheckpoint\Events\OrphanRunRedispatched;
 use AdityaaCodes\LaravelCheckpoint\Events\QueueLagDetected;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Event;
@@ -106,6 +108,79 @@ it('re-dispatches large stale batches with aggregate lag details', function (): 
         ->and($lagEvent->oldestStaleAgeMinutes)->toBeGreaterThanOrEqual(45)
         ->and($lagEvent->staleRunIds)->toHaveCount(25);
     Event::assertDispatchedTimes(OrphanRunRedispatched::class, 25);
+
+    Date::setTestNow();
+});
+
+it('does not redispatch the same orphan twice across overlapping recover runs', function (): void {
+    Date::setTestNow('2026-03-12 10:00:00');
+
+    Bus::fake();
+    Event::fake([QueueLagDetected::class, OrphanRunRedispatched::class]);
+    Log::shouldReceive('channel->warning')->once();
+
+    config()->set('checkpoint.queue.orphan_threshold', 10);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'created_at' => Date::now()->subMinutes(20),
+        'updated_at' => Date::now()->subMinutes(20),
+    ]);
+
+    checkpoint_artisan('db-ops:recover-orphans')
+        ->expectsOutput(sprintf('Re-dispatched orphaned run #%d.', $run->id))
+        ->assertSuccessful();
+
+    checkpoint_artisan('db-ops:recover-orphans')
+        ->doesntExpectOutput(sprintf('Re-dispatched orphaned run #%d.', $run->id))
+        ->assertSuccessful();
+
+    Bus::assertDispatchedTimes(ProcessCommandRunJob::class, 1);
+    Event::assertDispatchedTimes(QueueLagDetected::class, 1);
+    Event::assertDispatchedTimes(OrphanRunRedispatched::class, 1);
+
+    $run->refresh();
+
+    expect($run->updated_at?->toDateTimeString())->toBe('2026-03-12 10:00:00');
+
+    Date::setTestNow();
+});
+
+it('releases orphan claims when redispatch throws so the run stays recoverable', function (): void {
+    Date::setTestNow('2026-03-12 10:00:00');
+
+    Event::fake([QueueLagDetected::class, OrphanRunRedispatched::class]);
+    Log::shouldReceive('channel->warning')->never();
+
+    config()->set('checkpoint.queue.orphan_threshold', 10);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'created_at' => Date::now()->subMinutes(20),
+        'updated_at' => Date::now()->subMinutes(20),
+    ]);
+
+    $dispatcher = Mockery::mock(Dispatcher::class);
+    $dispatcher->shouldReceive('dispatch')
+        ->once()
+        ->andThrow(new \RuntimeException('queue offline'));
+
+    app()->instance(Dispatcher::class, $dispatcher);
+
+    expect(fn () => app(RecoverOrphansCommand::class)->handle())
+        ->toThrow(\RuntimeException::class, 'queue offline');
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Pending)
+        ->and($run->updated_at?->lt(Date::now()->subMinutes(10)))->toBeTrue();
+
+    Event::assertDispatchedTimes(QueueLagDetected::class, 1);
+    Event::assertNotDispatched(OrphanRunRedispatched::class);
 
     Date::setTestNow();
 });

@@ -71,7 +71,12 @@ final class DoctorCommand extends Command
         $rows[] = $this->tableRow('command_runs', (new CommandRun)->getTable());
         $rows[] = $this->tableRow('backup_drill_runs', (new BackupDrillRun)->getTable());
         $rows[] = ['Queue: '.$this->config->get('checkpoint.queue.name', 'db-ops'), $this->statusWord('warn'), 'Cannot verify queue without running worker'];
-        $rows[] = ['Orphaned runs', $this->statusWord('pass'), sprintf('%d pending runs beyond threshold', $this->orphanedRunsCount())];
+        $orphanedRunsCount = $this->orphanedRunsCount();
+        $rows[] = [
+            'Orphaned runs',
+            $this->statusWord($orphanedRunsCount > 0 ? 'warn' : 'pass'),
+            sprintf('%d pending runs beyond threshold', $orphanedRunsCount),
+        ];
         $rows[] = $this->lastKnownGoodRow();
         $rows[] = $this->backupDurationAnomalyRow();
 
@@ -140,7 +145,7 @@ final class DoctorCommand extends Command
 
         return CommandRun::query()
             ->pending()
-            ->where('created_at', '<', now()->subMinutes($thresholdMinutes))
+            ->where('updated_at', '<', now()->subMinutes($thresholdMinutes))
             ->count();
     }
 

@@ -58,18 +58,17 @@ final class FakeDriver implements BackupDriver
 
     public function execute(CommandRun $run): void
     {
-        $this->calls[] = $run;
         $outcome = $this->outcomes[$run->operation] ?? [
             'type' => 'success',
             'exit_code' => 0,
             'output' => 'ok',
         ];
 
-        $run->markAsRunning();
-
-        if ($run->status !== \AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus::Running) {
+        if (! $run->claimPendingExecution()) {
             return;
         }
+
+        $this->calls[] = $run;
 
         event(new BackupStarted($run));
 

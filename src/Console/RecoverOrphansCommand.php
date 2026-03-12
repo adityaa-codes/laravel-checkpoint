@@ -12,7 +12,9 @@ use Illuminate\Console\Command;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher as EventDispatcher;
+use Illuminate\Support\Collection;
 use Illuminate\Log\LogManager;
+use Throwable;
 
 final class RecoverOrphansCommand extends Command
 {
@@ -33,28 +35,44 @@ final class RecoverOrphansCommand extends Command
     {
         $thresholdMinutes = max(1, (int) $this->config->get('checkpoint.queue.orphan_threshold', 10));
         $threshold = now()->subMinutes($thresholdMinutes);
+        $claimedAt = now();
         $queue = (string) $this->config->get('checkpoint.queue.name', 'db-ops');
         $staleRuns = CommandRun::query()
             ->pending()
-            ->where('created_at', '<', $threshold)
+            ->where('updated_at', '<', $threshold)
             ->get();
 
-        if ($staleRuns->isNotEmpty()) {
+        $claimedRuns = $staleRuns->filter(
+            fn (CommandRun $run): bool => $run->claimForOrphanRecovery($threshold, $claimedAt),
+        )->values();
+
+        if ($claimedRuns->isNotEmpty()) {
             $this->events->dispatch(new QueueLagDetected(
                 $queue,
-                $staleRuns->count(),
+                $claimedRuns->count(),
                 $thresholdMinutes,
-                $this->oldestStaleAgeMinutes($staleRuns),
-                $staleRuns->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all(),
+                $this->oldestStaleAgeMinutes($claimedRuns),
+                $claimedRuns->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all(),
             ));
         }
 
-        $staleRuns->each(function (CommandRun $run) use ($queue, $thresholdMinutes): void {
+        $claimedRuns->each(function (CommandRun $run) use ($queue, $threshold, $thresholdMinutes): void {
                 $job = new ProcessCommandRunJob($run)
                     ->onQueue($queue);
 
                 $staleAgeMinutes = $this->staleAgeMinutes($run);
-                $this->dispatcher->dispatch($job);
+                $claimedAt = $run->updated_at;
+
+                try {
+                    $this->dispatcher->dispatch($job);
+                } catch (Throwable $exception) {
+                    if ($claimedAt !== null) {
+                        $run->releaseOrphanRecoveryClaim($claimedAt, $threshold->copy()->subSecond());
+                    }
+
+                    throw $exception;
+                }
+
                 $this->events->dispatch(new OrphanRunRedispatched($run, $queue, $thresholdMinutes, $staleAgeMinutes));
 
                 $this->logs->channel((string) $this->config->get('checkpoint.log_channel', 'stack'))
@@ -84,9 +102,9 @@ final class RecoverOrphansCommand extends Command
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, CommandRun>  $runs
+     * @param  Collection<int, CommandRun>  $runs
      */
-    private function oldestStaleAgeMinutes(\Illuminate\Support\Collection $runs): int
+    private function oldestStaleAgeMinutes(Collection $runs): int
     {
         return (int) $runs
             ->map(fn (CommandRun $run): int => $this->staleAgeMinutes($run))

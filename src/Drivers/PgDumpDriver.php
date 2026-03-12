@@ -27,9 +27,7 @@ final class PgDumpDriver implements BackupDriver
             $this->restoreSafetyGuard()->ensureSafe($run, $plannedMetadata);
             $displayCommandLine = $this->redactCommandLine($process->getCommandLine());
 
-            $run->markAsRunning();
-
-            if ($run->status !== \AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus::Running) {
+            if (! $run->claimPendingExecution()) {
                 return;
             }
 

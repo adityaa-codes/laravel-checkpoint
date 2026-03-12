@@ -178,20 +178,27 @@ class CommandRun extends Model
 
     public function markAsRunning(): self
     {
-        $now = now();
+        $this->claimPendingExecution();
 
-        static::query()
+        return $this;
+    }
+
+    public function claimPendingExecution(?Carbon $startedAt = null): bool
+    {
+        $startedAt ??= now();
+
+        $updated = static::query()
             ->whereKey($this->getKey())
             ->where('status', CommandRunStatus::Pending)
             ->update([
                 'status' => CommandRunStatus::Running,
-                'started_at' => $now,
-                'updated_at' => $now,
+                'started_at' => $startedAt,
+                'updated_at' => $startedAt,
             ]);
 
         $this->refresh();
 
-        return $this;
+        return $updated === 1;
     }
 
     public function markAsSucceeded(int $exitCode, string $output): self
@@ -234,6 +241,40 @@ class CommandRun extends Model
         $this->refresh();
 
         return $this;
+    }
+
+    public function claimForOrphanRecovery(Carbon $threshold, ?Carbon $claimedAt = null): bool
+    {
+        $claimedAt ??= now();
+
+        $updated = static::query()
+            ->whereKey($this->getKey())
+            ->where('status', CommandRunStatus::Pending)
+            ->where('updated_at', '<', $threshold)
+            ->update([
+                'updated_at' => $claimedAt,
+            ]);
+
+        $this->refresh();
+
+        return $updated === 1;
+    }
+
+    public function releaseOrphanRecoveryClaim(Carbon $claimedAt, ?Carbon $releasedAt = null): bool
+    {
+        $releasedAt ??= now()->subSecond();
+
+        $updated = static::query()
+            ->whereKey($this->getKey())
+            ->where('status', CommandRunStatus::Pending)
+            ->where('updated_at', $claimedAt)
+            ->update([
+                'updated_at' => $releasedAt,
+            ]);
+
+        $this->refresh();
+
+        return $updated === 1;
     }
 
     /** @return Builder<self> */

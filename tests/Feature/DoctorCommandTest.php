@@ -212,3 +212,48 @@ it('dispatches a freshness alarm when no last-known-good backup exists', functio
         && $event->thresholdHours === 24
         && $event->run === null);
 });
+
+it('treats recent orphan recovery heartbeats as non-stale in doctor output', function (): void {
+    config()->set('checkpoint.queue.orphan_threshold', 10);
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => 'pending',
+        'attempts' => 0,
+        'created_at' => now()->subMinutes(45),
+        'updated_at' => now()->subMinutes(5),
+    ]);
+
+    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+
+    $report = json_decode(Artisan::output(), true);
+
+    expect($report)->toBeArray()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['check'] === 'Orphaned runs'
+                && $check['notes'] === '0 pending runs beyond threshold',
+        ))->toBeTrue();
+});
+
+it('warns when stale orphaned runs remain beyond the threshold', function (): void {
+    config()->set('checkpoint.queue.orphan_threshold', 10);
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => 'pending',
+        'attempts' => 0,
+        'created_at' => now()->subMinutes(45),
+        'updated_at' => now()->subMinutes(45),
+    ]);
+
+    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+
+    $report = json_decode(Artisan::output(), true);
+
+    expect($report)->toBeArray()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['check'] === 'Orphaned runs'
+                && $check['status'] === 'warn'
+                && $check['notes'] === '1 pending runs beyond threshold',
+        ))->toBeTrue();
+});

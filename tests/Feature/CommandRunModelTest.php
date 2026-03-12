@@ -111,6 +111,43 @@ it('claims pending runs atomically and does not reopen terminal runs', function 
     Date::setTestNow();
 });
 
+it('claims orphaned pending runs once using the updated heartbeat', function (): void {
+    Date::setTestNow('2026-03-11 12:00:00');
+
+    $run = CommandRun::factory()->pending()->create([
+        'created_at' => Date::now()->subMinutes(30),
+        'updated_at' => Date::now()->subMinutes(30),
+    ]);
+
+    $threshold = Date::now()->subMinutes(10);
+
+    expect($run->claimForOrphanRecovery($threshold, Date::now()))->toBeTrue();
+
+    $run->refresh();
+
+    expect($run->updated_at?->toDateTimeString())->toBe('2026-03-11 12:00:00')
+        ->and($run->claimForOrphanRecovery($threshold, Date::now()->addMinute()))->toBeFalse();
+
+    Date::setTestNow();
+});
+
+it('allows only one pending execution claimant across stale copies', function (): void {
+    Date::setTestNow('2026-03-11 12:00:00');
+
+    $run = CommandRun::factory()->pending()->create();
+    $staleCopy = CommandRun::query()->findOrFail($run->getKey());
+
+    expect($run->claimPendingExecution())->toBeTrue()
+        ->and($staleCopy->claimPendingExecution())->toBeFalse();
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Running)
+        ->and($run->started_at?->toDateTimeString())->toBe('2026-03-11 12:00:00');
+
+    Date::setTestNow();
+});
+
 it('selects prunable records using the configured retention windows', function (): void {
     config()->set('checkpoint.schedule.prune_keep_days', 30);
     config()->set('checkpoint.schedule.prune_keep_failed_days', 365);

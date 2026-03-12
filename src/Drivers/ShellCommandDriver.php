@@ -55,9 +55,7 @@ final class ShellCommandDriver implements BackupDriver
             $plannedMetadata = $this->plannedMetadata($run);
             $displayCommandLine = $this->redactCommandLine($process->getCommandLine());
 
-            $run->markAsRunning();
-
-            if ($run->status !== CommandRunStatus::Running) {
+            if (! $run->claimPendingExecution()) {
                 return;
             }
 
