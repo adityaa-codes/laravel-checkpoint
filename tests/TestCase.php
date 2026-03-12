@@ -62,6 +62,7 @@ class TestCase extends Orchestra
                 'orphan_threshold' => 10,
                 'orphan_claim_timeout' => 61,
                 'orphan_batch_size' => 100,
+                'orphan_event_max_ids' => 50,
                 'unique_for' => 3660,
                 'lock_store' => 'array',
             ],

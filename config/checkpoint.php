@@ -24,6 +24,7 @@ return [
         'orphan_threshold' => (int) $env('DB_OPS_QUEUE_ORPHAN_THRESHOLD', 10),
         'orphan_claim_timeout' => (int) $env('DB_OPS_QUEUE_ORPHAN_CLAIM_TIMEOUT', (int) ceil(((int) $env('DB_OPS_QUEUE_RETRY_AFTER', 3660)) / 60)),
         'orphan_batch_size' => (int) $env('DB_OPS_QUEUE_ORPHAN_BATCH_SIZE', 100),
+        'orphan_event_max_ids' => (int) $env('DB_OPS_QUEUE_ORPHAN_EVENT_MAX_IDS', 50),
         'unique_for' => (int) $env('DB_OPS_QUEUE_UNIQUE_FOR', 3660),
         'lock_store' => $env('DB_OPS_QUEUE_LOCK_STORE'),
     ],

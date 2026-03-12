@@ -13,5 +13,6 @@ final readonly class QueueLagDetected
         public int $oldestStaleAgeMinutes,
         /** @var array<int, int> */
         public array $staleRunIds,
+        public bool $staleRunIdsTruncated,
     ) {}
 }

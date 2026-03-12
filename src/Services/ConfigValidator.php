@@ -302,6 +302,7 @@ final readonly class ConfigValidator
         $orphanThreshold = (int) $this->config->get('checkpoint.queue.orphan_threshold', 0);
         $orphanClaimTimeout = (int) $this->config->get('checkpoint.queue.orphan_claim_timeout', 0);
         $orphanBatchSize = (int) $this->config->get('checkpoint.queue.orphan_batch_size', 0);
+        $orphanEventMaxIds = (int) $this->config->get('checkpoint.queue.orphan_event_max_ids', 0);
         $uniqueFor = (int) $this->config->get('checkpoint.queue.unique_for', 0);
         $lockStore = $this->config->get('checkpoint.queue.lock_store');
 
@@ -340,6 +341,14 @@ final readonly class ConfigValidator
 
         if ($orphanBatchSize < 1) {
             throw new ConfigurationException('checkpoint.queue.orphan_batch_size must be greater than zero.');
+        }
+
+        if ($orphanEventMaxIds < 1) {
+            throw new ConfigurationException('checkpoint.queue.orphan_event_max_ids must be greater than zero.');
+        }
+
+        if ($orphanEventMaxIds > 1000) {
+            throw new ConfigurationException('checkpoint.queue.orphan_event_max_ids must not exceed 1000.');
         }
 
         if ($uniqueFor < 1) {

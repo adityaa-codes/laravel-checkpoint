@@ -118,7 +118,7 @@ it('exposes public properties only for intentional payload seams', function (): 
         BackupFreshnessAlarmTriggered::class => ['run', 'reason', 'ageHours', 'thresholdHours'],
         BackupDrillCompleted::class => ['run'],
         OrphanRunRedispatched::class => ['queue', 'run', 'staleAgeMinutes', 'thresholdMinutes'],
-        QueueLagDetected::class => ['oldestStaleAgeMinutes', 'queue', 'staleRunCount', 'staleRunIds', 'thresholdMinutes'],
+        QueueLagDetected::class => ['oldestStaleAgeMinutes', 'queue', 'staleRunCount', 'staleRunIds', 'staleRunIdsTruncated', 'thresholdMinutes'],
     ];
 
     foreach ($allowedPublicProperties as $class => $allowedProperties) {

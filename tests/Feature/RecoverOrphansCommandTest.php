@@ -59,7 +59,8 @@ it('re-dispatches stale pending runs and leaves recent pending runs untouched', 
         && $event->staleRunCount === 1
         && $event->thresholdMinutes === 10
         && $event->oldestStaleAgeMinutes === 20
-        && $event->staleRunIds === [1]);
+        && $event->staleRunIds === [1]
+        && $event->staleRunIdsTruncated === false);
     Event::assertDispatched(fn (OrphanRunRedispatched $event): bool => $event->run->is($staleRun)
         && $event->queue === 'db-ops'
         && $event->thresholdMinutes === 10
@@ -77,6 +78,7 @@ it('re-dispatches large stale batches with aggregate lag details', function (): 
 
     config()->set('checkpoint.queue.orphan_threshold', 10);
     config()->set('checkpoint.queue.orphan_batch_size', 4);
+    config()->set('checkpoint.queue.orphan_event_max_ids', 10);
 
     $staleRuns = collect(range(1, 25))->map(fn (int $index): CommandRun => CommandRun::query()->create([
         'operation' => 'logical_backup',
@@ -107,7 +109,8 @@ it('re-dispatches large stale batches with aggregate lag details', function (): 
         ->and($lagEvent->staleRunCount)->toBe(25)
         ->and($lagEvent->thresholdMinutes)->toBe(10)
         ->and($lagEvent->oldestStaleAgeMinutes)->toBeGreaterThanOrEqual(45)
-        ->and($lagEvent->staleRunIds)->toHaveCount(25);
+        ->and($lagEvent->staleRunIds)->toHaveCount(10)
+        ->and($lagEvent->staleRunIdsTruncated)->toBeTrue();
     Event::assertDispatchedTimes(OrphanRunRedispatched::class, 25);
 
     Date::setTestNow();
@@ -182,7 +185,7 @@ it('releases orphan claims when redispatch throws so the run stays recoverable',
         ->and($run->updated_at?->lt(Date::now()->subMinutes(10)))->toBeTrue()
         ->and($run->orphan_recovery_claimed_at)->toBeNull();
 
-    Event::assertDispatchedTimes(QueueLagDetected::class, 1);
+    Event::assertNotDispatched(QueueLagDetected::class);
     Event::assertNotDispatched(OrphanRunRedispatched::class);
 
     Date::setTestNow();

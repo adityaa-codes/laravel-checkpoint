@@ -229,6 +229,20 @@ it('rejects a non-positive orphan recovery batch size', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.queue.orphan_batch_size must be greater than zero.');
 });
 
+it('rejects a non-positive orphan lag event id cap', function (): void {
+    config()->set('checkpoint.queue.orphan_event_max_ids', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.queue.orphan_event_max_ids must be greater than zero.');
+});
+
+it('rejects an orphan lag event id cap that is too large', function (): void {
+    config()->set('checkpoint.queue.orphan_event_max_ids', 1001);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.queue.orphan_event_max_ids must not exceed 1000.');
+});
+
 it('rejects a non-positive unique queue lock duration', function (): void {
     config()->set('checkpoint.queue.unique_for', 0);
 

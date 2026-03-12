@@ -38,6 +38,7 @@ final class RecoverOrphansCommand extends Command
         $claimExpiresBefore = now()->subMinutes($claimTimeoutMinutes);
         $claimedAt = now();
         $batchSize = max(1, (int) $this->config->get('checkpoint.queue.orphan_batch_size', 100));
+        $eventMaxIds = max(1, (int) $this->config->get('checkpoint.queue.orphan_event_max_ids', 50));
         $queue = (string) $this->config->get('checkpoint.queue.name', 'db-ops');
         $claimedRunIds = [];
         $claimedRunCount = 0;
@@ -60,6 +61,7 @@ final class RecoverOrphansCommand extends Command
                     &$oldestStaleAgeMinutes,
                     $claimedAt,
                     $claimExpiresBefore,
+                    $eventMaxIds,
                     $queue,
                     $threshold,
                     $thresholdMinutes
@@ -70,6 +72,7 @@ final class RecoverOrphansCommand extends Command
                         &$oldestStaleAgeMinutes,
                         $claimedAt,
                         $claimExpiresBefore,
+                        $eventMaxIds,
                         $queue,
                         $threshold,
                         $thresholdMinutes
@@ -79,7 +82,9 @@ final class RecoverOrphansCommand extends Command
                         }
 
                         $claimedRunCount++;
-                        $claimedRunIds[] = (int) $run->getKey();
+                        if (count($claimedRunIds) < $eventMaxIds) {
+                            $claimedRunIds[] = (int) $run->getKey();
+                        }
                         $staleAgeMinutes = $this->staleAgeMinutes($run);
                         $oldestStaleAgeMinutes = max($oldestStaleAgeMinutes, $staleAgeMinutes);
 
@@ -91,6 +96,12 @@ final class RecoverOrphansCommand extends Command
                         try {
                             $this->dispatcher->dispatch($job);
                         } catch (Throwable $exception) {
+                            $claimedRunCount--;
+                            if (($arrayKey = array_search((int) $run->getKey(), $claimedRunIds, true)) !== false) {
+                                unset($claimedRunIds[$arrayKey]);
+                                $claimedRunIds = array_values($claimedRunIds);
+                            }
+
                             if ($runClaimedAt !== null) {
                                 $run->releaseOrphanRecoveryClaim($runClaimedAt);
                             }
@@ -121,6 +132,7 @@ final class RecoverOrphansCommand extends Command
                 $thresholdMinutes,
                 $oldestStaleAgeMinutes,
                 $claimedRunIds,
+                $claimedRunCount > count($claimedRunIds),
             ));
         }
 
