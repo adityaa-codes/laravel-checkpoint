@@ -198,6 +198,7 @@ it('dispatches a freshness alarm when the last-known-good backup is stale', func
         ->and($event->ageHours)->toBeInt()
         ->and($event->ageHours)->toBeGreaterThanOrEqual(30)
         ->and($event->thresholdHours)->toBe(12)
+        ->and($event->version)->toBe(1)
         ->and($event->run)->toBeInstanceOf(CommandRun::class)
         ->and($event->run?->last_known_good_at)->not->toBeNull();
 });
@@ -210,6 +211,7 @@ it('dispatches a freshness alarm when no last-known-good backup exists', functio
     Event::assertDispatched(fn (BackupFreshnessAlarmTriggered $event): bool => $event->reason === 'missing'
         && $event->ageHours === null
         && $event->thresholdHours === 24
+        && $event->version === 1
         && $event->run === null);
 });
 

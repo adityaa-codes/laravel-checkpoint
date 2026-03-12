@@ -14,5 +14,6 @@ final readonly class BackupFailed
         public int $exitCode,
         public string $output,
         public ?Throwable $exception = null,
+        public int $version = 1,
     ) {}
 }

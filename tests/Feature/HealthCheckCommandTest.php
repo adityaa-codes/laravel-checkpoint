@@ -50,5 +50,6 @@ it('marks timed-out running runs as failed and leaves recent runs untouched', fu
 
     Event::assertDispatched(fn (BackupFailed $event): bool => $event->run->is($timedOutRun)
         && $event->output === 'Timed out by health check'
-        && $event->exitCode === -1);
+        && $event->exitCode === -1
+        && $event->version === 1);
 });

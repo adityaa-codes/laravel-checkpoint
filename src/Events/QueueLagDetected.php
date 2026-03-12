@@ -14,5 +14,6 @@ final readonly class QueueLagDetected
         /** @var array<int, int> */
         public array $staleRunIds,
         public bool $staleRunIdsTruncated,
+        public int $version = 1,
     ) {}
 }

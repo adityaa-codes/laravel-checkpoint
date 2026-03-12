@@ -222,5 +222,6 @@ it('marks the run failed and emits the failure event in the failed callback', fu
     Event::assertDispatched(fn (BackupFailed $event): bool => $event->run->is($run)
         && $event->exitCode === -1
         && $event->output === 'boom'
+        && $event->version === 1
         && $event->exception instanceof RuntimeException);
 });

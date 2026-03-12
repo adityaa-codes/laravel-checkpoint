@@ -60,11 +60,13 @@ it('re-dispatches stale pending runs and leaves recent pending runs untouched', 
         && $event->thresholdMinutes === 10
         && $event->oldestStaleAgeMinutes === 20
         && $event->staleRunIds === [1]
-        && $event->staleRunIdsTruncated === false);
+        && $event->staleRunIdsTruncated === false
+        && $event->version === 1);
     Event::assertDispatched(fn (OrphanRunRedispatched $event): bool => $event->run->is($staleRun)
         && $event->queue === 'db-ops'
         && $event->thresholdMinutes === 10
-        && $event->staleAgeMinutes === 20);
+        && $event->staleAgeMinutes === 20
+        && $event->version === 1);
 
     Date::setTestNow();
 });

@@ -13,5 +13,6 @@ final readonly class OrphanRunRedispatched
         public string $queue,
         public int $thresholdMinutes,
         public int $staleAgeMinutes,
+        public int $version = 1,
     ) {}
 }

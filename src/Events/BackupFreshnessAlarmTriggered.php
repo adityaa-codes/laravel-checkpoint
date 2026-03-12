@@ -16,5 +16,6 @@ final readonly class BackupFreshnessAlarmTriggered
         public string $reason,
         public ?int $ageHours,
         public int $thresholdHours,
+        public int $version = 1,
     ) {}
 }
