@@ -371,7 +371,7 @@ Tasks:
 - `[x]` add age-of-last-success checks
 - `[x]` add backup duration anomaly checks
 - `[x]` add queue lag and orphan metrics hooks
-- `[ ]` add operator-facing status summary command
+- `[x]` add operator-facing status summary command
 
 Acceptance:
 
