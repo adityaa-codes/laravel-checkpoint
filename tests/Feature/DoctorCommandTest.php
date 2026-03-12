@@ -10,9 +10,9 @@ use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
+use AdityaaCodes\LaravelCheckpoint\Tests\Support\DoctorCommandTestSupport;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Date;
 
 it('renders the doctor health table', function (): void {
     checkpoint_artisan('db-ops:doctor')
@@ -109,19 +109,8 @@ it('renders a machine-readable json report', function (): void {
 });
 
 it('reports drill freshness and pass rate in machine-readable json', function (): void {
-    Date::setTestNow('2026-03-11 12:00:00');
-
-    BackupDrillRun::query()->create([
-        'run_uuid' => 'drill-pass-001',
-        'overall_result' => 'pass',
-        'executed_at' => now()->subDays(5),
-    ]);
-
-    BackupDrillRun::query()->create([
-        'run_uuid' => 'drill-fail-001',
-        'overall_result' => 'fail',
-        'executed_at' => now()->subDays(2),
-    ]);
+    DoctorCommandTestSupport::freezeTime();
+    DoctorCommandTestSupport::seedRecentDrillPair();
 
     Artisan::call('db-ops:doctor', ['--format' => 'json']);
 
@@ -139,28 +128,18 @@ it('reports drill freshness and pass rate in machine-readable json', function ()
                 && $check['notes'] === '1/2 passed in the last 30 days (50.0%, threshold: 100.0%)',
         ))->toBeTrue();
 
-    Date::setTestNow();
+    DoctorCommandTestSupport::resetTime();
 });
 
 it('dispatches drill alarms when drill freshness and pass rate fall below threshold', function (): void {
     Event::fake([BackupDrillFreshnessAlarmTriggered::class, BackupDrillPassRateAlarmTriggered::class]);
-    Date::setTestNow('2026-03-11 12:00:00');
+    DoctorCommandTestSupport::freezeTime();
 
     config()->set('checkpoint.observability.max_backup_drill_age_days', 7);
     config()->set('checkpoint.observability.backup_drill_pass_rate_window_days', 14);
     config()->set('checkpoint.observability.backup_drill_min_pass_rate', 100.0);
 
-    $latestRun = BackupDrillRun::query()->create([
-        'run_uuid' => 'drill-fail-001',
-        'overall_result' => 'fail',
-        'executed_at' => now()->subDays(10),
-    ]);
-
-    BackupDrillRun::query()->create([
-        'run_uuid' => 'drill-pass-001',
-        'overall_result' => 'pass',
-        'executed_at' => now()->subDays(12),
-    ]);
+    $latestRun = DoctorCommandTestSupport::seedStaleDrillAlarmState()['latest'];
 
     checkpoint_artisan('db-ops:doctor')->assertSuccessful();
 
@@ -178,7 +157,7 @@ it('dispatches drill alarms when drill freshness and pass rate fall below thresh
         && $event->thresholdPercent === 100.0
         && $event->version === 1);
 
-    Date::setTestNow();
+    DoctorCommandTestSupport::resetTime();
 });
 
 it('dispatches drill alarms when no backup drills exist', function (): void {
@@ -223,38 +202,7 @@ it('warns when the last known good backup is stale and the latest run is anomalo
     config()->set('checkpoint.observability.backup_duration_anomaly_factor', 2.0);
     config()->set('checkpoint.observability.backup_duration_min_samples', 3);
 
-    CommandRun::query()->create([
-        'operation' => 'logical_backup',
-        'backup_type' => 'logical_export',
-        'status' => 'succeeded',
-        'attempts' => 0,
-        'duration_seconds' => 900,
-        'last_known_good_at' => now()->subHours(30),
-    ]);
-    CommandRun::query()->create([
-        'operation' => 'pgbackrest_backup_full',
-        'backup_type' => 'full',
-        'status' => 'succeeded',
-        'attempts' => 0,
-        'duration_seconds' => 300,
-        'last_known_good_at' => now()->subHours(32),
-    ]);
-    CommandRun::query()->create([
-        'operation' => 'pgbackrest_backup_diff',
-        'backup_type' => 'diff',
-        'status' => 'succeeded',
-        'attempts' => 0,
-        'duration_seconds' => 320,
-        'last_known_good_at' => now()->subHours(31),
-    ]);
-    CommandRun::query()->create([
-        'operation' => 'pgbackrest_backup_incr',
-        'backup_type' => 'incr',
-        'status' => 'succeeded',
-        'attempts' => 0,
-        'duration_seconds' => 900,
-        'last_known_good_at' => now()->subHours(33),
-    ]);
+    DoctorCommandTestSupport::seedAnomalousBackupHistory();
 
     Artisan::call('db-ops:doctor', ['--format' => 'json']);
 
@@ -277,13 +225,7 @@ it('dispatches a freshness alarm when the last-known-good backup is stale', func
 
     config()->set('checkpoint.observability.max_last_known_good_age_hours', 12);
 
-    CommandRun::query()->create([
-        'operation' => 'logical_backup',
-        'backup_type' => 'logical_export',
-        'status' => 'succeeded',
-        'attempts' => 0,
-        'last_known_good_at' => now()->subHours(30),
-    ]);
+    DoctorCommandTestSupport::seedStaleLastKnownGoodBackup();
 
     checkpoint_artisan('db-ops:doctor')->assertSuccessful();
 
