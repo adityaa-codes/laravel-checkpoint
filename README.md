@@ -265,6 +265,9 @@ Event hooks now include:
 - `QueueLagDetected` when `db-ops:recover-orphans` finds stale pending work, including oldest stale age and affected run ids
 - `OrphanRunRedispatched` for each stale pending run that gets re-queued, including queue and stale age context
 
+Wire these events to your application listeners, metrics pipeline, or alerting
+provider to turn them into actual pages, notifications, or dashboards.
+
 ### pgDump Large-Export Configuration
 
 The bundled `pgdump` driver defaults to PostgreSQL directory format so large exports use parallel dump jobs:
