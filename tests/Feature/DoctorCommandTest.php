@@ -10,6 +10,11 @@ it('renders the doctor health table', function (): void {
         ->expectsOutputToContain('Config: driver')
         ->expectsOutputToContain('Config: queue.name')
         ->expectsOutputToContain('Config: pgbackrest.stanza')
+        ->expectsOutputToContain('Config: pgbackrest.repositories')
+        ->expectsOutputToContain('Repo: pgbackrest.active')
+        ->expectsOutputToContain('Repo: pgbackrest.target')
+        ->expectsOutputToContain('Repo: pgbackrest.tls')
+        ->expectsOutputToContain('Repo: pgbackrest.encryption')
         ->expectsOutputToContain('Binary: pgBackRest')
         ->expectsOutputToContain('DB: command_runs table')
         ->expectsOutputToContain('DB: backup_drill_runs table')
@@ -39,5 +44,38 @@ it('shows the configured pgbackrest binary when it is missing from path', functi
 
     checkpoint_artisan('db-ops:doctor')
         ->expectsOutputToContain('Binary: pgBackRest')
+        ->assertSuccessful();
+});
+
+it('shows selected remote repo hardening details without secrets', function (): void {
+    config()->set('checkpoint.drivers.pgbackrest.repositories.1', [
+        'type' => 's3',
+        'path' => null,
+        's3' => [
+            'bucket' => 'checkpoint-backups',
+            'endpoint' => 's3.example.com',
+            'region' => 'ap-south-1',
+            'key' => 'hidden-key',
+            'secret' => 'hidden-secret',
+            'uri_style' => 'host',
+        ],
+        'tls' => [
+            'verify' => false,
+            'ca_file' => '/etc/ssl/checkpoint.pem',
+        ],
+        'encryption' => [
+            'enabled' => true,
+            'cipher_type' => 'aes-256-cbc',
+            'passphrase' => 'hidden-passphrase',
+        ],
+    ]);
+
+    checkpoint_artisan('db-ops:doctor')
+        ->expectsOutputToContain('s3://checkpoint-backups via s3.example.com')
+        ->expectsOutputToContain('verify disabled')
+        ->expectsOutputToContain('enabled (aes-256-cbc)')
+        ->doesntExpectOutputToContain('hidden-key')
+        ->doesntExpectOutputToContain('hidden-secret')
+        ->doesntExpectOutputToContain('hidden-passphrase')
         ->assertSuccessful();
 });

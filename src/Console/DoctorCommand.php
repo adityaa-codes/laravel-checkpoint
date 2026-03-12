@@ -45,7 +45,12 @@ final class DoctorCommand extends Command
         $rows[] = ['Config: log_channel', $this->statusWord('pass'), (string) $this->config->get('checkpoint.log_channel', 'stack')];
         $rows[] = ['Config: pgbackrest.stanza', $this->statusWord('pass'), (string) $this->config->get('checkpoint.drivers.pgbackrest.stanza', 'main')];
         $rows[] = ['Config: pgbackrest.repo', $this->statusWord('pass'), (string) $this->config->get('checkpoint.drivers.pgbackrest.repo', 1)];
+        $rows[] = ['Config: pgbackrest.repositories', $this->statusWord('pass'), (string) count($this->pgBackRestRepositories())];
         $rows[] = ['Config: pgbackrest.process_max', $this->statusWord('pass'), (string) $this->config->get('checkpoint.drivers.pgbackrest.process_max', 1)];
+        $rows[] = $this->selectedPgBackRestRepositoryRow();
+        $rows[] = $this->selectedPgBackRestTargetRow();
+        $rows[] = $this->selectedPgBackRestTlsRow();
+        $rows[] = $this->selectedPgBackRestEncryptionRow();
         $rows[] = $this->binaryRow('pg_dump');
         $rows[] = $this->configuredBinaryRow(
             'pgBackRest',
@@ -119,6 +124,97 @@ final class DoctorCommand extends Command
             ->pending()
             ->where('created_at', '<', now()->subMinutes($thresholdMinutes))
             ->count();
+    }
+
+    /**
+     * @return array<int|string, mixed>
+     */
+    private function pgBackRestRepositories(): array
+    {
+        $repositories = $this->config->get('checkpoint.drivers.pgbackrest.repositories', []);
+
+        return is_array($repositories) ? $repositories : [];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function selectedPgBackRestRepository(): array
+    {
+        $repoId = (int) $this->config->get('checkpoint.drivers.pgbackrest.repo', 1);
+        $repositories = $this->pgBackRestRepositories();
+
+        $repository = $repositories[$repoId] ?? [];
+
+        return is_array($repository) ? $repository : [];
+    }
+
+    /**
+     * @return array{0:string,1:string,2:string}
+     */
+    private function selectedPgBackRestRepositoryRow(): array
+    {
+        $repoId = (int) $this->config->get('checkpoint.drivers.pgbackrest.repo', 1);
+        $type = (string) ($this->selectedPgBackRestRepository()['type'] ?? 'unknown');
+
+        return ['Repo: pgbackrest.active', $this->statusWord('pass'), sprintf('repo%d (%s)', $repoId, $type)];
+    }
+
+    /**
+     * @return array{0:string,1:string,2:string}
+     */
+    private function selectedPgBackRestTargetRow(): array
+    {
+        $repository = $this->selectedPgBackRestRepository();
+        $type = (string) ($repository['type'] ?? 'unknown');
+
+        if ($type === 's3') {
+            $s3 = is_array($repository['s3'] ?? null) ? $repository['s3'] : [];
+
+            return [
+                'Repo: pgbackrest.target',
+                $this->statusWord('pass'),
+                sprintf('s3://%s via %s', (string) ($s3['bucket'] ?? '-'), (string) ($s3['endpoint'] ?? '-')),
+            ];
+        }
+
+        return [
+            'Repo: pgbackrest.target',
+            $this->statusWord('pass'),
+            (string) ($repository['path'] ?? '-'),
+        ];
+    }
+
+    /**
+     * @return array{0:string,1:string,2:string}
+     */
+    private function selectedPgBackRestTlsRow(): array
+    {
+        $tls = $this->selectedPgBackRestRepository()['tls'] ?? [];
+        $tls = is_array($tls) ? $tls : [];
+        $verify = (bool) ($tls['verify'] ?? true);
+        $caFile = $tls['ca_file'] ?? null;
+        $notes = $verify ? 'verify enabled' : 'verify disabled';
+
+        if (is_string($caFile) && trim($caFile) !== '') {
+            $notes .= sprintf(' (ca: %s)', $caFile);
+        }
+
+        return ['Repo: pgbackrest.tls', $this->statusWord($verify ? 'pass' : 'warn'), $notes];
+    }
+
+    /**
+     * @return array{0:string,1:string,2:string}
+     */
+    private function selectedPgBackRestEncryptionRow(): array
+    {
+        $encryption = $this->selectedPgBackRestRepository()['encryption'] ?? [];
+        $encryption = is_array($encryption) ? $encryption : [];
+        $enabled = (bool) ($encryption['enabled'] ?? false);
+        $cipherType = (string) ($encryption['cipher_type'] ?? 'unknown');
+        $notes = $enabled ? sprintf('enabled (%s)', $cipherType) : 'disabled';
+
+        return ['Repo: pgbackrest.encryption', $this->statusWord($enabled ? 'pass' : 'warn'), $notes];
     }
 
     private function statusWord(string $level): string
