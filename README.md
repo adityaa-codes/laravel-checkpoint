@@ -143,6 +143,7 @@ php artisan db-ops:health-check
 php artisan db-ops:recover-orphans
 php artisan db-ops:prune
 php artisan db-ops:doctor
+php artisan db-ops:doctor --format=json
 ```
 
 ## Driver Customization
@@ -242,6 +243,17 @@ Behavior notes:
 - `pitr_restore` now rejects invalid restore target timestamps before command execution
 - restore commands fail early when the current environment or target database is not allowlisted
 - when verified-backup enforcement is enabled, restore commands require a matching `last_known_good_at` signal
+
+### Observability Notes
+
+Operational surfaces now include:
+
+- `db-ops:doctor --format=json` for machine-readable health checks
+- structured log context across drivers, queue job failures, and health checks
+
+Structured log fields include `run_id`, `driver`, `backup_type`,
+`restore_target`, `repository`, `stanza`, and `duration_seconds` when those
+values are known for the current run.
 
 ### pgDump Large-Export Configuration
 

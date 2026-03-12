@@ -361,12 +361,12 @@ Goal:
 Make backup health visible and operable at scale.
 
 Status:
-- `[ ]` not started
+- `[-]` partial
 
 Tasks:
 
-- `[ ]` add machine-readable `doctor` output mode
-- `[ ]` add structured log context for run ids, repo, stanza, type, duration
+- `[x]` add machine-readable `doctor` output mode
+- `[x]` add structured log context for run ids, repo, stanza, type, duration
 - `[ ]` add events or hooks for stale backup alarms
 - `[ ]` add age-of-last-success checks
 - `[ ]` add backup duration anomaly checks
