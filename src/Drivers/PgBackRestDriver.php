@@ -25,7 +25,8 @@ final class PgBackRestDriver implements BackupDriver
         try {
             $process = $this->buildProcess($run);
             $plannedMetadata = $this->plannedMetadata($run);
-            $this->restoreSafetyGuard()->ensureSafe($run, $plannedMetadata);
+            $restoreAudit = $this->restoreSafetyGuard()->ensureSafe($run, $plannedMetadata);
+            $plannedMetadata = $this->mergeRestoreAuditMetadata($plannedMetadata, $restoreAudit);
             $displayCommandLine = $this->redactCommandLine($process->getCommandLine());
 
             if (! $run->claimPendingExecution()) {
@@ -595,5 +596,27 @@ final class PgBackRestDriver implements BackupDriver
         }
 
         return $repositories[$repoId];
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @param  array<string, mixed>  $restoreAudit
+     * @return array<string, mixed>
+     */
+    private function mergeRestoreAuditMetadata(array $plannedMetadata, array $restoreAudit): array
+    {
+        if ($restoreAudit === []) {
+            return $plannedMetadata;
+        }
+
+        $metadata = is_array($plannedMetadata['metadata'] ?? null) ? $plannedMetadata['metadata'] : [];
+
+        return [
+            ...$plannedMetadata,
+            'metadata' => [
+                ...$metadata,
+                ...$restoreAudit,
+            ],
+        ];
     }
 }

@@ -250,6 +250,60 @@ it('blocks logical_restore_latest when the newest export lacks a matching verifi
         ->toThrow(ConfigurationException::class, 'Restore operation [logical_restore_latest] requires a verified backup signal before execution.');
 });
 
+it('records restore audit metadata for pgdump restore runs', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgdump-restore-audit-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary pgdump restore audit path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    config()->set('checkpoint.restore.require_confirmation', true);
+    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.drivers.pgdump.restore_binary', fakePgDumpScript("#!/bin/sh\nprintf 'restore complete'\n"));
+    config()->set('checkpoint.drivers.pgdump.format', 'custom');
+    config()->set('checkpoint.drivers.pgdump.jobs', 1);
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.pgdump.file_extension', 'archive');
+
+    touch($outputDir.'/nightly-2026-03-11.archive');
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_restore_file',
+        'argument_text' => 'nightly-2026-03-11',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new PgDumpDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+        ->and($run->metadata)->toMatchArray([
+            'driver' => 'pgdump',
+            'format' => 'custom',
+            'jobs' => 1,
+            'restored_via' => 'pg_restore',
+            'restore_audit' => [
+                'environment' => (string) config('app.env'),
+                'database' => ':memory:',
+                'target' => $outputDir.'/nightly-2026-03-11.archive',
+                'confirmation_required' => true,
+                'confirmation_satisfied_via' => 'token',
+                'verified_backup_required' => false,
+                'verified_signal_run_id' => null,
+                'verified_signal_operation' => null,
+                'verified_signal_backup_label' => null,
+                'verified_signal_artifact_path' => null,
+                'verified_signal_last_known_good_at' => null,
+            ],
+        ]);
+});
+
 it('redacts pg_dump command lines before persisting and logging them', function (): void {
     $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgdump-redact-');
 

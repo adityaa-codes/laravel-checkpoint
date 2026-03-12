@@ -66,6 +66,8 @@ final class StatusCommand extends Command
 
     private function renderSummary(string $format): void
     {
+        $restoreOperations = ['logical_restore_file', 'logical_restore_latest', 'pitr_restore', 'pgbackrest_restore'];
+
         $lastKnownGood = CommandRun::query()
             ->whereNotNull('last_known_good_at')
             ->latest('last_known_good_at')
@@ -79,8 +81,15 @@ final class StatusCommand extends Command
 
         $latestRestoreFailure = CommandRun::query()
             ->where('status', 'failed')
-            ->whereIn('operation', ['logical_restore_file', 'logical_restore_latest', 'pitr_restore'])
+            ->whereIn('operation', $restoreOperations)
             ->latest('finished_at')
+            ->latest('id')
+            ->first();
+
+        $latestRestoreRun = CommandRun::query()
+            ->whereIn('operation', $restoreOperations)
+            ->latest('finished_at')
+            ->latest('started_at')
             ->latest('id')
             ->first();
 
@@ -90,6 +99,7 @@ final class StatusCommand extends Command
             'failed_runs_24h' => CommandRun::query()->failed()->where('created_at', '>=', now()->subDay())->count(),
             'last_known_good_backup' => $this->summarySignalPayload($lastKnownGood, 'last_known_good_at'),
             'latest_verified_backup' => $this->summarySignalPayload($latestVerified, 'verified_at'),
+            'latest_restore_run' => $this->restoreRunPayload($latestRestoreRun),
             'latest_restore_failure' => $this->restoreFailurePayload($latestRestoreFailure),
         ];
 
@@ -108,6 +118,7 @@ final class StatusCommand extends Command
             ['Failed runs (24h)', (string) $summary['failed_runs_24h']],
             ['Last known good backup', $this->summaryRunValue($lastKnownGood, 'last_known_good_at')],
             ['Latest verified backup', $this->summaryRunValue($latestVerified, 'verified_at')],
+            ['Latest restore run', $this->restoreRunSummary($latestRestoreRun)],
             ['Latest restore failure', $this->restoreFailureSummary($latestRestoreFailure)],
         ]);
     }
@@ -193,6 +204,47 @@ final class StatusCommand extends Command
         return sprintf('%s at %s', $summary, $run->finished_at->format('Y-m-d H:i:s'));
     }
 
+    private function restoreRunSummary(?CommandRun $run): string
+    {
+        if (! $run instanceof CommandRun) {
+            return '-';
+        }
+
+        $target = $run->restore_target ?? $run->argument_text;
+        $summary = sprintf('%s [%s]', $run->operation, (string) $run->status->value);
+
+        if (is_string($target) && $target !== '') {
+            $summary .= sprintf(' (%s)', $target);
+        }
+
+        $metadata = is_array($run->metadata) ? $run->metadata : [];
+        $audit = is_array($metadata['restore_audit'] ?? null) ? $metadata['restore_audit'] : [];
+        $confirmation = is_string($audit['confirmation_satisfied_via'] ?? null) ? $audit['confirmation_satisfied_via'] : null;
+        $verifiedRunId = $audit['verified_signal_run_id'] ?? null;
+
+        if ($confirmation !== null || is_int($verifiedRunId)) {
+            $parts = [];
+
+            if ($confirmation !== null) {
+                $parts[] = 'confirm='.$confirmation;
+            }
+
+            if (is_int($verifiedRunId)) {
+                $parts[] = 'verified_run='.$verifiedRunId;
+            }
+
+            $summary .= ' {'.implode(', ', $parts).'}';
+        }
+
+        $timestamp = $run->finished_at ?? $run->started_at;
+
+        if (! $timestamp instanceof Carbon) {
+            return $summary;
+        }
+
+        return sprintf('%s at %s', $summary, $timestamp->format('Y-m-d H:i:s'));
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -205,6 +257,8 @@ final class StatusCommand extends Command
             'exit_code' => $run->exit_code,
             'backup' => $this->backupSummary($run),
             'verification_state' => $run->verification_state,
+            'restore_target' => $run->restore_target,
+            'restore_audit' => $this->restoreAuditPayload($run),
             'last_known_good_at' => $run->last_known_good_at?->format('Y-m-d H:i:s'),
             'started_at' => $run->started_at?->format('Y-m-d H:i:s'),
             'finished_at' => $run->finished_at?->format('Y-m-d H:i:s'),
@@ -256,5 +310,43 @@ final class StatusCommand extends Command
             'operation' => $run->operation,
             'target' => $target,
         ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function restoreRunPayload(?CommandRun $run): array
+    {
+        if (! $run instanceof CommandRun) {
+            return [
+                'label' => '-',
+                'timestamp' => null,
+                'operation' => null,
+                'status' => null,
+                'target' => null,
+                'audit' => null,
+            ];
+        }
+
+        $timestamp = $run->finished_at ?? $run->started_at;
+
+        return [
+            'label' => $this->restoreRunSummary($run),
+            'timestamp' => $timestamp?->format('Y-m-d H:i:s'),
+            'operation' => $run->operation,
+            'status' => (string) $run->status->value,
+            'target' => $run->restore_target ?? $run->argument_text,
+            'audit' => $this->restoreAuditPayload($run),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function restoreAuditPayload(CommandRun $run): ?array
+    {
+        $metadata = is_array($run->metadata) ? $run->metadata : [];
+
+        return is_array($metadata['restore_audit'] ?? null) ? $metadata['restore_audit'] : null;
     }
 }

@@ -87,6 +87,9 @@ it('requires a verified backup signal when configured for restores', function ()
 
 it('accepts restores when a matching verified backup signal exists', function (): void {
     config()->set('checkpoint.restore.require_verified_backup', true);
+    config()->set('checkpoint.restore.require_confirmation', true);
+    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
 
     CommandRun::query()->create([
         'operation' => 'pgbackrest_info',
@@ -101,8 +104,20 @@ it('accepts restores when a matching verified backup signal exists', function ()
         'argument_text' => '20260312-010101F',
     ]);
 
-    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run))
-        ->not->toThrow(ConfigurationException::class);
+    $audit = resolve(RestoreSafetyGuard::class)->ensureSafe($run);
+
+    expect($audit['restore_audit'])->toBeArray()
+        ->and($audit['restore_audit']['environment'])->toBe((string) config('app.env'))
+        ->and($audit['restore_audit']['database'])->toBe(':memory:')
+        ->and($audit['restore_audit']['target'])->toBe('20260312-010101F')
+        ->and($audit['restore_audit']['confirmation_required'])->toBeTrue()
+        ->and($audit['restore_audit']['confirmation_satisfied_via'])->toBe('token')
+        ->and($audit['restore_audit']['verified_backup_required'])->toBeTrue()
+        ->and($audit['restore_audit']['verified_signal_run_id'])->toBeInt()
+        ->and($audit['restore_audit']['verified_signal_operation'])->toBe('pgbackrest_info')
+        ->and($audit['restore_audit']['verified_signal_backup_label'])->toBe('20260312-010101F')
+        ->and($audit['restore_audit']['verified_signal_artifact_path'])->toBeNull()
+        ->and($audit['restore_audit']['verified_signal_last_known_good_at'])->toBeString();
 });
 
 it('requires an explicit pgbackrest backup label when verified backup enforcement is enabled', function (): void {

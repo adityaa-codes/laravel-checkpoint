@@ -141,6 +141,43 @@ it('blocks restore execution when confirmation is missing', function (): void {
         ->toThrow(ConfigurationException::class, 'Restore confirmation is required.');
 });
 
+it('records restore audit metadata for shell restore runs', function (): void {
+    config()->set('checkpoint.restore.require_confirmation', true);
+    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.drivers.shell.pre_restore_snapshot', false);
+    config()->set('checkpoint.drivers.shell.commands.logical_restore_file', 'printf restore');
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_restore_file',
+        'argument_text' => 'archive.sql',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new ShellCommandDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+        ->and($run->metadata)->toMatchArray([
+            'driver' => 'shell',
+            'restore_audit' => [
+                'environment' => (string) config('app.env'),
+                'database' => ':memory:',
+                'target' => 'archive.sql',
+                'confirmation_required' => true,
+                'confirmation_satisfied_via' => 'token',
+                'verified_backup_required' => false,
+                'verified_signal_run_id' => null,
+                'verified_signal_operation' => null,
+                'verified_signal_backup_label' => null,
+                'verified_signal_artifact_path' => null,
+                'verified_signal_last_known_good_at' => null,
+            ],
+        ]);
+});
+
 it('redacts shell command lines before persisting and logging them', function (): void {
     config()->set(
         'checkpoint.drivers.shell.commands.logical_backup',

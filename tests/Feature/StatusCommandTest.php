@@ -93,6 +93,12 @@ it('shows an operator-facing summary of recent checkpoint health signals', funct
         'operation' => 'logical_restore_file',
         'argument_text' => 'nightly.sql',
         'restore_target' => 'nightly.sql',
+        'metadata' => [
+            'restore_audit' => [
+                'confirmation_satisfied_via' => 'token',
+                'verified_signal_run_id' => 2,
+            ],
+        ],
         'verification_state' => 'failed',
         'status' => CommandRunStatus::Failed,
         'attempts' => 1,
@@ -111,6 +117,7 @@ it('shows an operator-facing summary of recent checkpoint health signals', funct
                 ['Failed runs (24h)', '1'],
                 ['Last known good backup', 'full:20260311-010101F at 2026-03-11 11:50:00'],
                 ['Latest verified backup', 'full:20260311-010101F at 2026-03-11 11:55:00'],
+                ['Latest restore run', 'logical_restore_file [failed] (nightly.sql) {confirm=token, verified_run=2} at 2026-03-11 11:42:00'],
                 ['Latest restore failure', 'logical_restore_file (nightly.sql) at 2026-03-11 11:42:00'],
             ],
         )
@@ -157,6 +164,8 @@ it('renders recent runs as machine-readable json', function (): void {
             'exit_code' => 0,
             'backup' => 'full:20260311-010101F',
             'verification_state' => 'verified',
+            'restore_target' => null,
+            'restore_audit' => null,
             'last_known_good_at' => '2026-03-11 11:50:00',
         ]);
 
@@ -193,6 +202,17 @@ it('renders summary signals as machine-readable json', function (): void {
         'operation' => 'logical_restore_file',
         'argument_text' => 'nightly.sql',
         'restore_target' => 'nightly.sql',
+        'metadata' => [
+            'restore_audit' => [
+                'environment' => 'testing',
+                'database' => ':memory:',
+                'target' => 'nightly.sql',
+                'confirmation_required' => true,
+                'confirmation_satisfied_via' => 'token',
+                'verified_backup_required' => true,
+                'verified_signal_run_id' => 2,
+            ],
+        ],
         'verification_state' => 'failed',
         'status' => CommandRunStatus::Failed,
         'attempts' => 1,
@@ -217,6 +237,22 @@ it('renders summary signals as machine-readable json', function (): void {
             'label' => 'full:20260311-010101F at 2026-03-11 11:50:00',
             'timestamp' => '2026-03-11 11:50:00',
             'operation' => 'pgbackrest_backup',
+        ])
+        ->and($report['summary']['latest_restore_run'])->toMatchArray([
+            'label' => 'logical_restore_file [failed] (nightly.sql) {confirm=token, verified_run=2} at 2026-03-11 11:42:00',
+            'timestamp' => '2026-03-11 11:42:00',
+            'operation' => 'logical_restore_file',
+            'status' => 'failed',
+            'target' => 'nightly.sql',
+        ])
+        ->and($report['summary']['latest_restore_run']['audit'])->toMatchArray([
+            'environment' => 'testing',
+            'database' => ':memory:',
+            'target' => 'nightly.sql',
+            'confirmation_required' => true,
+            'confirmation_satisfied_via' => 'token',
+            'verified_backup_required' => true,
+            'verified_signal_run_id' => 2,
         ])
         ->and($report['summary']['latest_restore_failure'])->toMatchArray([
             'label' => 'logical_restore_file (nightly.sql) at 2026-03-11 11:42:00',

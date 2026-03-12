@@ -134,6 +134,43 @@ it('adds restore options from structured config and the optional backup set argu
         ->and($process->getCommandLine())->toContain('--target-action=promote');
 });
 
+it('records restore audit metadata for pgbackrest restore runs', function (): void {
+    config()->set('checkpoint.restore.require_confirmation', true);
+    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.drivers.pgbackrest.binary', fakePgBackRestScript("#!/bin/sh\nprintf 'restore complete'\n"));
+
+    $run = CommandRun::query()->create([
+        'operation' => 'pgbackrest_restore',
+        'argument_text' => '20260312-010101F',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new PgBackRestDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+        ->and($run->metadata)->toMatchArray([
+            'driver' => 'pgbackrest',
+            'repository_type' => 'posix',
+            'restore_audit' => [
+                'environment' => (string) config('app.env'),
+                'database' => ':memory:',
+                'target' => '20260312-010101F',
+                'confirmation_required' => true,
+                'confirmation_satisfied_via' => 'token',
+                'verified_backup_required' => false,
+                'verified_signal_run_id' => null,
+                'verified_signal_operation' => null,
+                'verified_signal_backup_label' => null,
+                'verified_signal_artifact_path' => null,
+                'verified_signal_last_known_good_at' => null,
+            ],
+        ]);
+});
+
 it('keeps resume and start-fast enabled for pgbackrest backup retries', function (): void {
     config()->set('checkpoint.drivers.pgbackrest.binary', 'pgbackrest');
     config()->set('checkpoint.drivers.pgbackrest.resume', true);
