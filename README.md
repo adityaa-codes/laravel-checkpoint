@@ -298,7 +298,8 @@ Report notes:
 
 - `health.ok` is only `true` when every emitted health check is `pass`
 - `summary.backup_drill_pass_rate.window_days` follows the same configurable drill pass-rate window as `db-ops:doctor`
-- `db-ops:status`, `db-ops:doctor`, and `db-ops:report` each track their own JSON contract version and currently emit `1`
+- `db-ops:doctor --format=json` uses the same health semantics as `db-ops:report`: `ok` is only `true` when every emitted health check is `pass`
+- `db-ops:status` emits JSON contract version `1`, `db-ops:doctor` emits `2`, and `db-ops:report` emits `1`
 - future JSON contract changes should stay additive within a version; breaking shape changes should increment the top-level `version`
 
 Backup drill observability thresholds are configurable:
