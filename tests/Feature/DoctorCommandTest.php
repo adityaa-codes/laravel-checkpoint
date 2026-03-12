@@ -281,10 +281,7 @@ it('dispatches a freshness alarm when the last-known-good backup is stale', func
         'last_known_good_at' => now()->subHours(30),
     ]);
 
-    $command = app(DoctorCommand::class);
-    $method = new ReflectionMethod($command, 'lastKnownGoodRow');
-    $method->setAccessible(true);
-    $method->invoke($command);
+    checkpoint_artisan('db-ops:doctor')->assertSuccessful();
 
     $dispatched = Event::dispatched(BackupFreshnessAlarmTriggered::class);
 

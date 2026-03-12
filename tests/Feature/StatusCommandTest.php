@@ -284,7 +284,7 @@ it('renders summary signals as machine-readable json', function (): void {
             'overall_result' => 'fail',
             'executed_by' => 'ops-user',
         ])
-        ->and($report['summary']['backup_drill_pass_rate_30d'])->toMatchArray([
+        ->and($report['summary']['backup_drill_pass_rate'])->toMatchArray([
             'label' => '1/2 (50.0%)',
             'window_days' => 30,
             'total' => 2,
