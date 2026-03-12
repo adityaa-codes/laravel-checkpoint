@@ -258,6 +258,7 @@ Behavior notes:
 - when verified-backup enforcement is enabled, restore commands require a matching `last_known_good_at` signal
 - restore runs persist `metadata.restore_audit` with the evaluated environment, database, target, confirmation path, and any matched verified-backup signal
 - `db-ops:status --format=json` mirrors both recent-run and summary views for automation use
+- `db-ops:status --format=json` includes top-level `version` and `surface=status` fields for contract-safe consumers
 
 ### Observability Notes
 
@@ -265,6 +266,7 @@ Operational surfaces now include:
 
 - `db-ops:report` for one combined machine-readable operational snapshot
 - `db-ops:doctor --format=json` for machine-readable health checks
+- all machine-readable command payloads now expose a top-level `version` and `surface`
 - `db-ops:doctor` freshness warnings for stale last-known-good backups
 - `db-ops:doctor` duration anomaly warnings for unusually slow backup runs
 - `db-ops:doctor` backup drill freshness and pass-rate warnings
@@ -296,6 +298,8 @@ Report notes:
 
 - `health.ok` is only `true` when every emitted health check is `pass`
 - `summary.backup_drill_pass_rate.window_days` follows the same configurable drill pass-rate window as `db-ops:doctor`
+- `db-ops:status`, `db-ops:doctor`, and `db-ops:report` each track their own JSON contract version and currently emit `1`
+- future JSON contract changes should stay additive within a version; breaking shape changes should increment the top-level `version`
 
 Backup drill observability thresholds are configurable:
 
