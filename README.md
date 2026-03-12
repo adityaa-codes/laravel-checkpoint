@@ -265,6 +265,7 @@ Operational surfaces now include:
 - `db-ops:doctor --format=json` for machine-readable health checks
 - `db-ops:doctor` freshness warnings for stale last-known-good backups
 - `db-ops:doctor` duration anomaly warnings for unusually slow backup runs
+- `db-ops:doctor` backup drill freshness and pass-rate warnings
 - structured log context across drivers, queue job failures, and health checks
 - orphan recovery events for queue lag and redispatched stale runs
 
@@ -280,6 +281,12 @@ Operational surfaces now include:
 - `backup_drill_pass_rate_30d` summarizes recent drill reliability for automation consumers
 - the table summary mirrors those signals for operators without requiring JSON parsing
 
+Backup drill observability thresholds are configurable:
+
+- `observability.max_backup_drill_age_days`: warns when the newest drill is older than this threshold
+- `observability.backup_drill_pass_rate_window_days`: rolling window used for drill pass-rate evaluation
+- `observability.backup_drill_min_pass_rate`: minimum acceptable drill pass rate percentage before `doctor` warns
+
 Structured log fields include `run_id`, `driver`, `backup_type`,
 `restore_target`, `repository`, `stanza`, and `duration_seconds` when those
 values are known for the current run.
@@ -287,6 +294,8 @@ values are known for the current run.
 Event hooks now include:
 
 - `BackupFreshnessAlarmTriggered` when `db-ops:doctor` detects a missing or stale last-known-good backup
+- `BackupDrillFreshnessAlarmTriggered` when no drill exists or the newest drill is older than the configured age threshold
+- `BackupDrillPassRateAlarmTriggered` when no drills exist in the pass-rate window or the rolling pass rate drops below the configured threshold
 - `QueueLagDetected` when `db-ops:recover-orphans` finds stale pending work, including oldest stale age, total claimed backlog count, and a bounded sample of affected run ids
 - `OrphanRunRedispatched` for each stale pending run that gets re-queued, including queue and stale age context
 
