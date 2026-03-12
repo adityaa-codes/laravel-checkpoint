@@ -13,12 +13,16 @@ it('applies the command run migrations on a fresh install', function (): void {
     freshCommandRunMigration()->up();
     metadataCommandRunMigration()->up();
     orphanClaimMigration()->up();
+    operatorSummaryColumnsMigration()->up();
     backupDrillRunMigration()->up();
     reportingIndexesMigration()->up();
 
     expect(Schema::hasTable('db_ops_command_runs'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'backup_type'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'orphan_recovery_claimed_at'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'driver_name'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'restore_confirmation_satisfied_via'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'restore_verified_signal_run_id'))->toBeTrue()
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_orphan_recovery_index')
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_verified_at_lookup_index')
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_status_created_at_index')
@@ -28,7 +32,7 @@ it('applies the command run migrations on a fresh install', function (): void {
         ->and(backupDrillRunIndexNames())->toContain('db_ops_backup_drill_runs_result_executed_at_index');
 });
 
-it('adds the orphan recovery claim column and index on upgrade installs', function (): void {
+it('adds operational summary columns and indexes on upgrade installs', function (): void {
     Schema::dropIfExists('db_ops_backup_drill_runs');
     Schema::dropIfExists('db_ops_command_runs');
 
@@ -65,13 +69,19 @@ it('adds the orphan recovery claim column and index on upgrade installs', functi
     });
 
     expect(Schema::hasColumn('db_ops_command_runs', 'orphan_recovery_claimed_at'))->toBeFalse();
+    expect(Schema::hasColumn('db_ops_command_runs', 'driver_name'))->toBeFalse();
 
     orphanClaimMigration()->up();
     orphanClaimMigration()->up();
+    operatorSummaryColumnsMigration()->up();
+    operatorSummaryColumnsMigration()->up();
     reportingIndexesMigration()->up();
     reportingIndexesMigration()->up();
 
     expect(Schema::hasColumn('db_ops_command_runs', 'orphan_recovery_claimed_at'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'driver_name'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'restore_confirmation_satisfied_via'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'restore_verified_signal_run_id'))->toBeTrue()
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_orphan_recovery_index')
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_verified_at_lookup_index')
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_status_created_at_index')
@@ -119,6 +129,17 @@ function reportingIndexesMigration(): object
 {
     /** @var object{up: callable():void} $migration */
     $migration = require __DIR__.'/../../database/migrations/add_reporting_indexes_to_checkpoint_tables.php.stub';
+
+    return $migration;
+}
+
+/**
+ * @return object{up: callable():void}
+ */
+function operatorSummaryColumnsMigration(): object
+{
+    /** @var object{up: callable():void} $migration */
+    $migration = require __DIR__.'/../../database/migrations/add_operator_summary_columns_to_command_runs_table.php.stub';
 
     return $migration;
 }

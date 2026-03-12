@@ -78,7 +78,7 @@ final class HealthCheckCommand extends Command
         return array_filter([
             'run_id' => $run->getKey(),
             'operation' => $run->operation,
-            'driver' => $run->metadata['driver'] ?? null,
+            'driver' => $run->resolvedDriverName((string) $this->config->get('checkpoint.driver', 'shell')),
             'backup_type' => $run->backup_type,
             'restore_target' => $run->restore_target,
             'repository' => $run->repository,

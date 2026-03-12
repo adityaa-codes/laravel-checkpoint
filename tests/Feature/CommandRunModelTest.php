@@ -85,6 +85,65 @@ it('updates status metadata through markAs helper methods', function (): void {
     Date::setTestNow();
 });
 
+it('denormalizes hot operator fields from metadata payloads', function (): void {
+    $run = CommandRun::factory()->pending()->create();
+
+    $run->recordMetadata([
+        'metadata' => [
+            'driver' => 'pgbackrest',
+            'restore_audit' => [
+                'confirmation_satisfied_via' => 'token',
+                'verified_signal_run_id' => 42,
+                'verified_signal_operation' => 'pgbackrest_info',
+            ],
+        ],
+    ]);
+
+    $run->refresh();
+
+    expect($run->driver_name)->toBe('pgbackrest')
+        ->and($run->restore_confirmation_satisfied_via)->toBe('token')
+        ->and($run->restore_verified_signal_run_id)->toBe(42)
+        ->and($run->resolvedDriverName('shell'))->toBe('pgbackrest')
+        ->and($run->restoreAuditSummary())->toBe([
+            'confirmation_satisfied_via' => 'token',
+            'verified_signal_run_id' => 42,
+        ]);
+});
+
+it('clears denormalized operator fields when metadata no longer carries them', function (): void {
+    $run = CommandRun::factory()->pending()->create([
+        'driver_name' => 'pgbackrest',
+        'restore_confirmation_satisfied_via' => 'token',
+        'restore_verified_signal_run_id' => 42,
+        'metadata' => [
+            'driver' => 'pgbackrest',
+            'restore_audit' => [
+                'confirmation_satisfied_via' => 'token',
+                'verified_signal_run_id' => 42,
+            ],
+        ],
+    ]);
+
+    $run->recordMetadata([
+        'metadata' => [
+            'restore_audit' => [
+                'environment' => 'testing',
+            ],
+        ],
+    ]);
+
+    $run->refresh();
+
+    expect($run->driver_name)->toBeNull()
+        ->and($run->restore_confirmation_satisfied_via)->toBeNull()
+        ->and($run->restore_verified_signal_run_id)->toBeNull()
+        ->and($run->restoreAuditSummary())->toBe([
+            'confirmation_satisfied_via' => null,
+            'verified_signal_run_id' => null,
+        ]);
+});
+
 it('claims pending runs atomically and does not reopen terminal runs', function (): void {
     Date::setTestNow('2026-03-11 12:00:00');
 

@@ -75,3 +75,40 @@ it('builds a combined report payload from a shared snapshot', function (): void 
 
     Date::setTestNow();
 });
+
+it('prefers denormalized restore audit fields in restore summaries', function (): void {
+    Date::setTestNow('2026-03-11 12:00:00');
+
+    CommandRun::query()->create([
+        'operation' => 'logical_restore_latest',
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 1,
+        'exit_code' => 0,
+        'restore_target' => '/managed/export/latest',
+        'restore_confirmation_satisfied_via' => 'token',
+        'restore_verified_signal_run_id' => 77,
+        'finished_at' => now()->subMinute(),
+        'metadata' => [
+            'restore_audit' => [
+                'confirmation_satisfied_via' => 'stale',
+                'verified_signal_run_id' => 3,
+            ],
+        ],
+    ]);
+
+    $summary = app(OperationalReportBuilder::class)->summary();
+
+    expect($summary['latest_restore_run'])->toMatchArray([
+        'operation' => 'logical_restore_latest',
+        'status' => 'succeeded',
+        'target' => '/managed/export/latest',
+    ])->and($summary['latest_restore_run']['label'])->toContain('confirm=token')
+        ->and($summary['latest_restore_run']['label'])->toContain('verified_run=77')
+        ->and($summary['latest_restore_run']['label'])->not->toContain('verified_run=3')
+        ->and($summary['latest_restore_run']['audit'])->toMatchArray([
+            'confirmation_satisfied_via' => 'token',
+            'verified_signal_run_id' => 77,
+        ]);
+
+    Date::setTestNow();
+});

@@ -29,6 +29,25 @@ final readonly class OperationalReportBuilder
     public function recentRuns(int $limit): array
     {
         return CommandRun::query()
+            ->select([
+                'id',
+                'operation',
+                'status',
+                'exit_code',
+                'backup_type',
+                'backup_label',
+                'stanza',
+                'repository',
+                'verification_state',
+                'restore_target',
+                'argument_text',
+                'restore_confirmation_satisfied_via',
+                'restore_verified_signal_run_id',
+                'last_known_good_at',
+                'started_at',
+                'finished_at',
+                'metadata',
+            ])
             ->latest('id')
             ->limit(max(1, $limit))
             ->get()
@@ -230,21 +249,25 @@ final readonly class OperationalReportBuilder
             'drill_window_days' => $drillWindowDays,
             'drill_summary' => $this->backupDrillSummary(now()->subDays($drillWindowDays)),
             'last_known_good' => CommandRun::query()
+                ->select($this->summarySignalColumns())
                 ->whereNotNull('last_known_good_at')
                 ->latest('last_known_good_at')
                 ->first(),
             'latest_verified' => CommandRun::query()
+                ->select($this->summarySignalColumns())
                 ->where('verification_state', 'verified')
                 ->latest('verified_at')
                 ->latest('id')
                 ->first(),
             'latest_restore_failure' => CommandRun::query()
+                ->select($this->restoreSummaryColumns())
                 ->where('status', 'failed')
                 ->whereIn('operation', $restoreOperations)
                 ->latest('finished_at')
                 ->latest('id')
                 ->first(),
             'latest_restore_run' => CommandRun::query()
+                ->select($this->restoreSummaryColumns())
                 ->whereIn('operation', $restoreOperations)
                 ->latest('finished_at')
                 ->latest('started_at')
@@ -348,8 +371,9 @@ final readonly class OperationalReportBuilder
         }
 
         $audit = $this->restoreAuditPayload($run);
-        $confirmation = is_string($audit['confirmation_satisfied_via'] ?? null) ? $audit['confirmation_satisfied_via'] : null;
-        $verifiedRunId = $audit['verified_signal_run_id'] ?? null;
+        $summary = $run->restoreAuditSummary();
+        $confirmation = $summary['confirmation_satisfied_via'];
+        $verifiedRunId = $summary['verified_signal_run_id'];
 
         if ($confirmation !== null || is_int($verifiedRunId)) {
             $parts = [];
@@ -387,8 +411,52 @@ final readonly class OperationalReportBuilder
     private function restoreAuditPayload(CommandRun $run): ?array
     {
         $metadata = is_array($run->metadata) ? $run->metadata : [];
+        $restoreAudit = is_array($metadata['restore_audit'] ?? null) ? $metadata['restore_audit'] : [];
+        $summary = $run->restoreAuditSummary();
 
-        return is_array($metadata['restore_audit'] ?? null) ? $metadata['restore_audit'] : null;
+        if ($summary['confirmation_satisfied_via'] !== null) {
+            $restoreAudit['confirmation_satisfied_via'] = $summary['confirmation_satisfied_via'];
+        }
+
+        if ($summary['verified_signal_run_id'] !== null) {
+            $restoreAudit['verified_signal_run_id'] = $summary['verified_signal_run_id'];
+        }
+
+        return $restoreAudit !== [] ? $restoreAudit : null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function summarySignalColumns(): array
+    {
+        return [
+            'id',
+            'operation',
+            'backup_type',
+            'backup_label',
+            'verified_at',
+            'last_known_good_at',
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function restoreSummaryColumns(): array
+    {
+        return [
+            'id',
+            'operation',
+            'status',
+            'argument_text',
+            'restore_target',
+            'restore_confirmation_satisfied_via',
+            'restore_verified_signal_run_id',
+            'started_at',
+            'finished_at',
+            'metadata',
+        ];
     }
 
     /**

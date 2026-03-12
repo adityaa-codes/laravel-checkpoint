@@ -25,9 +25,12 @@ use Illuminate\Support\Carbon;
  * @property string|null $backup_type
  * @property string|null $backup_label
  * @property string|null $stanza
+ * @property string|null $driver_name
  * @property int|null $repository
  * @property string|null $verification_state
  * @property string|null $restore_target
+ * @property string|null $restore_confirmation_satisfied_via
+ * @property int|null $restore_verified_signal_run_id
  * @property string|null $artifact_path
  * @property int|null $backup_size_bytes
  * @property int|null $duration_seconds
@@ -72,6 +75,7 @@ class CommandRun extends Model
             'exit_code' => 'integer',
             'metadata' => 'array',
             'repository' => 'integer',
+            'restore_verified_signal_run_id' => 'integer',
             'status' => CommandRunStatus::class,
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
@@ -171,9 +175,52 @@ class CommandRun extends Model
      */
     public function recordMetadata(array $attributes): self
     {
-        $this->forceFill($attributes)->save();
+        $this->forceFill([
+            ...$attributes,
+            ...$this->denormalizedMetadataColumns($attributes),
+        ])->save();
 
         return $this;
+    }
+
+    public function resolvedDriverName(?string $fallback = null): ?string
+    {
+        if (is_string($this->driver_name) && $this->driver_name !== '') {
+            return $this->driver_name;
+        }
+
+        $metadata = is_array($this->metadata) ? $this->metadata : [];
+        $metadataDriver = $metadata['driver'] ?? null;
+
+        if (is_string($metadataDriver) && $metadataDriver !== '') {
+            return $metadataDriver;
+        }
+
+        return $fallback;
+    }
+
+    /**
+     * @return array{confirmation_satisfied_via:?string,verified_signal_run_id:?int}
+     */
+    public function restoreAuditSummary(): array
+    {
+        $metadata = is_array($this->metadata) ? $this->metadata : [];
+        $restoreAudit = is_array($metadata['restore_audit'] ?? null) ? $metadata['restore_audit'] : [];
+        $confirmation = $this->restore_confirmation_satisfied_via;
+        $verifiedSignalRunId = $this->restore_verified_signal_run_id;
+
+        if ($confirmation === null && is_string($restoreAudit['confirmation_satisfied_via'] ?? null)) {
+            $confirmation = $restoreAudit['confirmation_satisfied_via'];
+        }
+
+        if ($verifiedSignalRunId === null && is_numeric($restoreAudit['verified_signal_run_id'] ?? null)) {
+            $verifiedSignalRunId = (int) $restoreAudit['verified_signal_run_id'];
+        }
+
+        return [
+            'confirmation_satisfied_via' => $confirmation,
+            'verified_signal_run_id' => $verifiedSignalRunId,
+        ];
     }
 
     public function markAsRunning(): self
@@ -371,5 +418,42 @@ class CommandRun extends Model
     private function outputStore(): CommandOutputStore
     {
         return resolve(CommandOutputStore::class);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    private function denormalizedMetadataColumns(array $attributes): array
+    {
+        $metadata = is_array($attributes['metadata'] ?? null) ? $attributes['metadata'] : null;
+
+        if ($metadata === null) {
+            return [];
+        }
+
+        $columns = [
+            'driver_name' => null,
+            'restore_confirmation_satisfied_via' => null,
+            'restore_verified_signal_run_id' => null,
+        ];
+
+        if (is_string($metadata['driver'] ?? null) && $metadata['driver'] !== '') {
+            $columns['driver_name'] = $metadata['driver'];
+        }
+
+        $restoreAudit = is_array($metadata['restore_audit'] ?? null) ? $metadata['restore_audit'] : null;
+
+        if (is_array($restoreAudit)) {
+            if (is_string($restoreAudit['confirmation_satisfied_via'] ?? null) && $restoreAudit['confirmation_satisfied_via'] !== '') {
+                $columns['restore_confirmation_satisfied_via'] = $restoreAudit['confirmation_satisfied_via'];
+            }
+
+            if (is_numeric($restoreAudit['verified_signal_run_id'] ?? null)) {
+                $columns['restore_verified_signal_run_id'] = (int) $restoreAudit['verified_signal_run_id'];
+            }
+        }
+
+        return $columns;
     }
 }

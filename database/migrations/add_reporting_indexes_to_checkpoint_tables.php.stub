@@ -52,18 +52,34 @@ return new class extends Migration
         $backupDrillRuns = $this->backupDrillRunsTable();
 
         if (Schema::hasTable($commandRuns)) {
-            Schema::table($commandRuns, function (Blueprint $table): void {
-                $table->dropIndex($this->verifiedAtIndexName());
-                $table->dropIndex($this->statusCreatedAtIndexName());
-                $table->dropIndex($this->restoreFinishedIndexName());
-                $table->dropIndex($this->restoreActivityIndexName());
+            Schema::table($commandRuns, function (Blueprint $table) use ($commandRuns): void {
+                if ($this->hasIndex($commandRuns, $this->verifiedAtIndexName())) {
+                    $table->dropIndex($this->verifiedAtIndexName());
+                }
+
+                if ($this->hasIndex($commandRuns, $this->statusCreatedAtIndexName())) {
+                    $table->dropIndex($this->statusCreatedAtIndexName());
+                }
+
+                if ($this->hasIndex($commandRuns, $this->restoreFinishedIndexName())) {
+                    $table->dropIndex($this->restoreFinishedIndexName());
+                }
+
+                if ($this->hasIndex($commandRuns, $this->restoreActivityIndexName())) {
+                    $table->dropIndex($this->restoreActivityIndexName());
+                }
             });
         }
 
         if (Schema::hasTable($backupDrillRuns)) {
-            Schema::table($backupDrillRuns, function (Blueprint $table): void {
-                $table->dropIndex($this->drillExecutedAtIndexName());
-                $table->dropIndex($this->drillResultExecutedAtIndexName());
+            Schema::table($backupDrillRuns, function (Blueprint $table) use ($backupDrillRuns): void {
+                if ($this->hasIndex($backupDrillRuns, $this->drillExecutedAtIndexName())) {
+                    $table->dropIndex($this->drillExecutedAtIndexName());
+                }
+
+                if ($this->hasIndex($backupDrillRuns, $this->drillResultExecutedAtIndexName())) {
+                    $table->dropIndex($this->drillResultExecutedAtIndexName());
+                }
             });
         }
     }
@@ -82,7 +98,7 @@ return new class extends Migration
                 'SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND tablename = ?',
                 [$table],
             ))->contains(fn (object $index): bool => (string) ($index->indexname ?? '') === $indexName),
-            default => false,
+            default => true,
         };
     }
 

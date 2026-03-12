@@ -16,7 +16,7 @@ it('marks timed-out running runs as failed and leaves recent runs untouched', fu
         ->once()
         ->with('Health check marked command run as failed', Mockery::on(
             fn (array $context): bool => $context['operation'] === 'logical_backup'
-                && ! array_key_exists('driver', $context)
+                && $context['driver'] === 'shell'
                 && $context['timeout_seconds'] === 300
         ));
 

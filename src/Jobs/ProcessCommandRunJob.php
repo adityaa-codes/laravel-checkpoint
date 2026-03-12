@@ -142,7 +142,7 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
         return array_filter([
             'run_id' => $run->getKey(),
             'operation' => $run->operation,
-            'driver' => $run->metadata['driver'] ?? config('checkpoint.driver', 'shell'),
+            'driver' => $run->resolvedDriverName((string) config('checkpoint.driver', 'shell')),
             'backup_type' => $run->backup_type,
             'restore_target' => $run->restore_target ?? $run->argument_text,
             'repository' => $run->repository,

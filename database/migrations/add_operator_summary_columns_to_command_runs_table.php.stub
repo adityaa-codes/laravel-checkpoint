@@ -1,0 +1,32 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class
+{
+    public function up(): void
+    {
+        $table = 'db_ops_command_runs';
+
+        if (! Schema::hasTable($table)) {
+            return;
+        }
+
+        Schema::table($table, function (Blueprint $table): void {
+            if (! Schema::hasColumn($table->getTable(), 'driver_name')) {
+                $table->string('driver_name')->nullable()->after('stanza');
+            }
+
+            if (! Schema::hasColumn($table->getTable(), 'restore_confirmation_satisfied_via')) {
+                $table->string('restore_confirmation_satisfied_via')->nullable()->after('restore_target');
+            }
+
+            if (! Schema::hasColumn($table->getTable(), 'restore_verified_signal_run_id')) {
+                $table->unsignedBigInteger('restore_verified_signal_run_id')->nullable()->after('restore_confirmation_satisfied_via');
+            }
+        });
+    }
+};
