@@ -347,6 +347,33 @@ it('blocks pgbackrest restore execution in disallowed environments', function ()
         ->toThrow(ConfigurationException::class, 'Restore operations are blocked in environment [production].');
 });
 
+it('rethrows pgbackrest runtime exceptions after marking the run failed', function (): void {
+    $logger = Mockery::mock(LoggerInterface::class);
+    $logger->shouldReceive('info')
+        ->once()
+        ->andThrow(new RuntimeException('logger runtime failure'));
+    $logger->shouldReceive('error')
+        ->once()
+        ->with('pgBackRest operation crashed', Mockery::on(
+            fn (array $context): bool => $context['error'] === 'logger runtime failure'
+        ));
+    Log::shouldReceive('channel')->twice()->andReturn($logger);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'pgbackrest_info',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    expect(fn (): mixed => (new PgBackRestDriver)->execute($run))
+        ->toThrow(RuntimeException::class, 'logger runtime failure');
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Failed)
+        ->and($run->exit_code)->toBe(-1);
+});
+
 function buildPgBackRestProcess(PgBackRestDriver $driver, CommandRun $run): Process
 {
     $method = new ReflectionMethod($driver, 'buildProcess');

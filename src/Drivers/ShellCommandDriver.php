@@ -53,6 +53,7 @@ final class ShellCommandDriver implements BackupDriver
         try {
             $process = $this->buildProcess($run);
             $plannedMetadata = $this->plannedMetadata($run);
+            $displayCommandLine = $this->redactCommandLine($process->getCommandLine());
 
             $run->markAsRunning();
 
@@ -61,7 +62,7 @@ final class ShellCommandDriver implements BackupDriver
             }
 
             $run->forceFill([
-                'command_line' => $process->getCommandLine(),
+                'command_line' => $displayCommandLine,
             ])->save();
             $run->recordMetadata($plannedMetadata);
             $run = $run->fresh() ?? $run;
@@ -69,7 +70,7 @@ final class ShellCommandDriver implements BackupDriver
             event(new BackupStarted($run));
 
             $this->logger()->info('Starting checkpoint operation', $this->logContext($run, [
-                'command_line' => $run->command_line,
+                'command_line' => $displayCommandLine,
             ]));
 
             $process->run();
@@ -113,9 +114,7 @@ final class ShellCommandDriver implements BackupDriver
                 'error' => $exception->getMessage(),
             ]));
 
-            if ($exception instanceof ConfigurationException) {
-                throw $exception;
-            }
+            throw $exception;
         }
     }
 
@@ -210,6 +209,21 @@ final class ShellCommandDriver implements BackupDriver
     private function restoreSafetyGuard(): RestoreSafetyGuard
     {
         return resolve(RestoreSafetyGuard::class);
+    }
+
+    private function redactCommandLine(string $commandLine): string
+    {
+        $patterns = [
+            '/(\b(?:password|pass|token|secret|apikey|api_key|pgpassword)=)([^\s]+)/i',
+            '/(--(?:password|pass|token|secret|apikey|api-key)=)([^\s]+)/i',
+            '/(postgres(?:ql)?:\/\/[^:\s]+:)([^@\/\s]+)(@)/i',
+        ];
+
+        foreach ($patterns as $pattern) {
+            $commandLine = (string) preg_replace($pattern, '$1[REDACTED]$3', $commandLine);
+        }
+
+        return $commandLine;
     }
 
     /**

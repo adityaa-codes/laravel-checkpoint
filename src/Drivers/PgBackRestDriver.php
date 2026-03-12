@@ -89,9 +89,7 @@ final class PgBackRestDriver implements BackupDriver
                 'error' => $exception->getMessage(),
             ]));
 
-            if ($exception instanceof ConfigurationException) {
-                throw $exception;
-            }
+            throw $exception;
         }
     }
 

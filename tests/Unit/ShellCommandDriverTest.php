@@ -10,6 +10,8 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
+use Psr\Log\LoggerInterface;
 
 it('executes argv tokens without shell interpretation', function (): void {
     config()->set('checkpoint.drivers.shell.commands.logical_backup', 'printf %s:%s:%s $HOME *.sql {db}');
@@ -137,4 +139,44 @@ it('blocks restore execution when confirmation is missing', function (): void {
 
     expect(fn (): mixed => (new ShellCommandDriver)->execute($run))
         ->toThrow(ConfigurationException::class, 'Restore confirmation is required.');
+});
+
+it('redacts shell command lines before persisting and logging them', function (): void {
+    config()->set(
+        'checkpoint.drivers.shell.commands.logical_backup',
+        'printf ok postgresql://app:super-secret@db.internal/app password=top-secret --token=abc123'
+    );
+
+    $logger = Mockery::mock(LoggerInterface::class);
+    $logger->shouldReceive('info')
+        ->once()
+        ->with('Starting checkpoint operation', Mockery::on(
+            fn (array $context): bool => str_contains((string) $context['command_line'], 'postgresql://app:[REDACTED]@db.internal/app')
+                && str_contains((string) $context['command_line'], 'password=[REDACTED]')
+                && str_contains((string) $context['command_line'], '--token=[REDACTED]')
+                && ! str_contains((string) $context['command_line'], 'super-secret')
+                && ! str_contains((string) $context['command_line'], 'top-secret')
+                && ! str_contains((string) $context['command_line'], 'abc123')
+        ));
+    $logger->shouldReceive('info')
+        ->once()
+        ->with('Completed checkpoint operation', Mockery::type('array'));
+    Log::shouldReceive('channel')->twice()->andReturn($logger);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new ShellCommandDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->command_line)->toContain('postgresql://app:[REDACTED]@db.internal/app')
+        ->and($run->command_line)->toContain('password=[REDACTED]')
+        ->and($run->command_line)->toContain('--token=[REDACTED]')
+        ->and($run->command_line)->not->toContain('super-secret')
+        ->and($run->command_line)->not->toContain('top-secret')
+        ->and($run->command_line)->not->toContain('abc123');
 });

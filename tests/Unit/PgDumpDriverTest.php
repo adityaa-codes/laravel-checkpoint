@@ -10,6 +10,8 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Process\Process;
 
 it('builds directory format pg_dump commands with parallel jobs', function (): void {
@@ -246,6 +248,85 @@ it('blocks logical_restore_latest when the newest export lacks a matching verifi
 
     expect(fn (): mixed => (new PgDumpDriver)->execute($run))
         ->toThrow(ConfigurationException::class, 'Restore operation [logical_restore_latest] requires a verified backup signal before execution.');
+});
+
+it('redacts pg_dump command lines before persisting and logging them', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgdump-redact-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary pgdump redaction path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    config()->set('checkpoint.drivers.pgdump.dump_binary', fakePgDumpScript("#!/bin/sh\nprintf 'ok'\n"));
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.pgdump.extra_args.backup', [
+        'postgresql://app:super-secret@db.internal/app',
+        'password=top-secret',
+        '--token=abc123',
+    ]);
+
+    $logger = Mockery::mock(LoggerInterface::class);
+    $logger->shouldReceive('info')
+        ->once()
+        ->with('Starting pg_dump operation', Mockery::on(
+            fn (array $context): bool => str_contains((string) $context['command_line'], 'postgresql://app:[REDACTED]@db.internal/app')
+                && str_contains((string) $context['command_line'], 'password=[REDACTED]')
+                && str_contains((string) $context['command_line'], '--token=[REDACTED]')
+                && ! str_contains((string) $context['command_line'], 'super-secret')
+                && ! str_contains((string) $context['command_line'], 'top-secret')
+                && ! str_contains((string) $context['command_line'], 'abc123')
+        ));
+    $logger->shouldReceive('info')
+        ->once()
+        ->with('Completed pg_dump operation', Mockery::type('array'));
+    Log::shouldReceive('channel')->twice()->andReturn($logger);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new PgDumpDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->command_line)->toContain('postgresql://app:[REDACTED]@db.internal/app')
+        ->and($run->command_line)->toContain('password=[REDACTED]')
+        ->and($run->command_line)->toContain('--token=[REDACTED]')
+        ->and($run->command_line)->not->toContain('super-secret')
+        ->and($run->command_line)->not->toContain('top-secret')
+        ->and($run->command_line)->not->toContain('abc123');
+});
+
+it('rethrows pg_dump runtime exceptions after marking the run failed', function (): void {
+    $logger = Mockery::mock(LoggerInterface::class);
+    $logger->shouldReceive('info')
+        ->once()
+        ->andThrow(new RuntimeException('logger runtime failure'));
+    $logger->shouldReceive('error')
+        ->once()
+        ->with('pg_dump operation crashed', Mockery::on(
+            fn (array $context): bool => $context['error'] === 'logger runtime failure'
+        ));
+    Log::shouldReceive('channel')->twice()->andReturn($logger);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    expect(fn (): mixed => (new PgDumpDriver)->execute($run))
+        ->toThrow(RuntimeException::class, 'logger runtime failure');
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Failed)
+        ->and($run->exit_code)->toBe(-1);
 });
 
 function buildPgDumpProcess(PgDumpDriver $driver, CommandRun $run): Process

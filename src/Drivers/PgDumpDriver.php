@@ -25,6 +25,7 @@ final class PgDumpDriver implements BackupDriver
             $process = $this->buildProcess($run);
             $plannedMetadata = $this->plannedMetadata($run);
             $this->restoreSafetyGuard()->ensureSafe($run, $plannedMetadata);
+            $displayCommandLine = $this->redactCommandLine($process->getCommandLine());
 
             $run->markAsRunning();
 
@@ -33,7 +34,7 @@ final class PgDumpDriver implements BackupDriver
             }
 
             $run->forceFill([
-                'command_line' => $process->getCommandLine(),
+                'command_line' => $displayCommandLine,
             ])->save();
             $run->recordMetadata($plannedMetadata);
             $run = $run->fresh() ?? $run;
@@ -41,7 +42,7 @@ final class PgDumpDriver implements BackupDriver
             event(new BackupStarted($run));
 
             $this->logger()->info('Starting pg_dump operation', $this->logContext($run, [
-                'command_line' => $run->command_line,
+                'command_line' => $displayCommandLine,
             ]));
 
             $process->run();
@@ -85,9 +86,7 @@ final class PgDumpDriver implements BackupDriver
                 'error' => $exception->getMessage(),
             ]));
 
-            if ($exception instanceof ConfigurationException) {
-                throw $exception;
-            }
+            throw $exception;
         }
     }
 
@@ -477,6 +476,21 @@ final class PgDumpDriver implements BackupDriver
     private function logger(): LoggerInterface
     {
         return Log::channel(config('checkpoint.log_channel', 'stack'));
+    }
+
+    private function redactCommandLine(string $commandLine): string
+    {
+        $patterns = [
+            '/(\b(?:password|pass|token|secret|apikey|api_key|pgpassword)=)([^\s]+)/i',
+            '/(--(?:password|pass|token|secret|apikey|api-key)=)([^\s]+)/i',
+            '/(postgres(?:ql)?:\/\/[^:\s]+:)([^@\/\s]+)(@)/i',
+        ];
+
+        foreach ($patterns as $pattern) {
+            $commandLine = (string) preg_replace($pattern, '$1[REDACTED]$3', $commandLine);
+        }
+
+        return $commandLine;
     }
 
     private function restoreSafetyGuard(): RestoreSafetyGuard
