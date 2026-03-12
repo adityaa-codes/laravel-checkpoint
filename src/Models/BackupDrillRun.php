@@ -83,4 +83,19 @@ class BackupDrillRun extends Model
     {
         $query->latest('executed_at');
     }
+
+    /** @return Builder<self> */
+    /** @return Builder<static> */
+    public function prunable(): Builder
+    {
+        $keepDays = (int) config('checkpoint.schedule.prune_keep_backup_drill_days', 365);
+
+        return static::query()
+            ->where('executed_at', '<=', now()->subDays($keepDays));
+    }
+
+    public function pruneAll(): int
+    {
+        return $this->prunable()->delete();
+    }
 }

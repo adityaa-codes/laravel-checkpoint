@@ -58,6 +58,7 @@ return [
         'on_one_server' => (bool) $env('DB_OPS_SCHEDULE_ON_ONE_SERVER', true),
         'prune_keep_days' => (int) $env('DB_OPS_PRUNE_KEEP_DAYS', 90),
         'prune_keep_failed_days' => (int) $env('DB_OPS_PRUNE_KEEP_FAILED_DAYS', 365),
+        'prune_keep_backup_drill_days' => (int) $env('DB_OPS_PRUNE_KEEP_BACKUP_DRILL_DAYS', 365),
     ],
 
     'driver' => $env('DB_OPS_DRIVER', 'shell'),

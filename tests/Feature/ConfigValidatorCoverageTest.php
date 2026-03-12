@@ -182,6 +182,30 @@ it('rejects a non-positive reporting recent run cap', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.reporting.max_recent_runs must be greater than zero.');
 });
 
+it('rejects a non-positive backup drill prune retention', function (): void {
+    config()->set('checkpoint.schedule.prune_keep_backup_drill_days', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.schedule.prune_keep_backup_drill_days must be greater than zero.');
+});
+
+it('rejects backup drill retention shorter than the drill freshness window', function (): void {
+    config()->set('checkpoint.schedule.prune_keep_backup_drill_days', 6);
+    config()->set('checkpoint.observability.max_backup_drill_age_days', 7);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.schedule.prune_keep_backup_drill_days must be greater than or equal to checkpoint.observability.max_backup_drill_age_days.');
+});
+
+it('rejects backup drill retention shorter than the drill pass rate window', function (): void {
+    config()->set('checkpoint.schedule.prune_keep_backup_drill_days', 13);
+    config()->set('checkpoint.observability.max_backup_drill_age_days', 7);
+    config()->set('checkpoint.observability.backup_drill_pass_rate_window_days', 14);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.schedule.prune_keep_backup_drill_days must be greater than or equal to checkpoint.observability.backup_drill_pass_rate_window_days.');
+});
+
 it('rejects a reporting recent run cap that is too large', function (): void {
     config()->set('checkpoint.reporting.max_recent_runs', 1001);
 

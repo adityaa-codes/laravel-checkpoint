@@ -174,6 +174,7 @@ class TestCase extends Orchestra
                 'on_one_server' => true,
                 'prune_keep_days' => 90,
                 'prune_keep_failed_days' => 365,
+                'prune_keep_backup_drill_days' => 365,
             ],
             'custom_operations' => [],
         ]);

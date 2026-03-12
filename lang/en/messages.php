@@ -35,6 +35,7 @@ return [
     'cli.orphan_redispatched' => 'Re-dispatched orphaned run #:id.',
     'cli.health_check_failed' => 'Marked run #:id as failed (timed out after :seconds seconds).',
     'cli.pruned' => 'Pruned :count command run records.',
+    'cli.pruned_with_drills' => 'Pruned :command_run_count command run records and :backup_drill_count backup drill records.',
     'cli.doctor_pass' => 'PASS',
     'cli.doctor_warn' => 'WARN',
     'cli.doctor_fail' => 'FAIL',

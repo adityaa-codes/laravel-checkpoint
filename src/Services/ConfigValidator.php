@@ -529,10 +529,28 @@ final readonly class ConfigValidator
             throw new ConfigurationException('checkpoint.schedule.logical_backup_timezone must be a valid timezone identifier.');
         }
 
-        foreach (['overlap_expires_at', 'prune_keep_days', 'prune_keep_failed_days'] as $key) {
+        foreach (['overlap_expires_at', 'prune_keep_days', 'prune_keep_failed_days', 'prune_keep_backup_drill_days'] as $key) {
             if (! is_int($config[$key] ?? null) || $config[$key] < 1) {
                 throw new ConfigurationException(sprintf('checkpoint.schedule.%s must be greater than zero.', $key));
             }
+        }
+
+        $backupDrillRetentionDays = $config['prune_keep_backup_drill_days'];
+        $observability = $this->config->get('checkpoint.observability', []);
+
+        if (! is_array($observability)) {
+            throw new ConfigurationException('checkpoint.observability must be an array.');
+        }
+
+        $maxBackupDrillAgeDays = $observability['max_backup_drill_age_days'] ?? null;
+        $backupDrillPassRateWindowDays = $observability['backup_drill_pass_rate_window_days'] ?? null;
+
+        if (is_int($maxBackupDrillAgeDays) && $backupDrillRetentionDays < $maxBackupDrillAgeDays) {
+            throw new ConfigurationException('checkpoint.schedule.prune_keep_backup_drill_days must be greater than or equal to checkpoint.observability.max_backup_drill_age_days.');
+        }
+
+        if (is_int($backupDrillPassRateWindowDays) && $backupDrillRetentionDays < $backupDrillPassRateWindowDays) {
+            throw new ConfigurationException('checkpoint.schedule.prune_keep_backup_drill_days must be greater than or equal to checkpoint.observability.backup_drill_pass_rate_window_days.');
         }
     }
 
