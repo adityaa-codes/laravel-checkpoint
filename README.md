@@ -378,7 +378,7 @@ Behavior notes:
 - directory format exports use `pg_dump --format=directory --jobs=<n>`
 - parallel dump jobs are only valid for directory format
 - restore commands use `pg_restore`
-- `logical_restore_latest` resolves the newest export in the configured output directory
+- `logical_restore_latest` prefers the newest tracked successful logical export and only falls back to scanning the configured output directory when tracking metadata is missing or stale
 - `logical_restore_file` resolves relative export names inside the configured output directory
 - restore targets are snapshotted and revalidated immediately before `pg_restore` argv is built so swapped files or mutated directory exports are rejected
 
