@@ -24,10 +24,11 @@ final class PgBackRestDriver implements BackupDriver
         try {
             $process = $this->buildProcess($run);
             $plannedMetadata = $this->plannedMetadata($run);
+            $displayCommandLine = $this->redactCommandLine($process->getCommandLine());
 
             $run->markAsRunning();
             $run->forceFill([
-                'command_line' => $process->getCommandLine(),
+                'command_line' => $displayCommandLine,
             ])->save();
             $run->recordMetadata($plannedMetadata);
 
@@ -36,7 +37,7 @@ final class PgBackRestDriver implements BackupDriver
             $this->logger()->info('Starting pgBackRest operation', [
                 'run_id' => $run->getKey(),
                 'operation' => $run->operation,
-                'command_line' => $run->command_line,
+                'command_line' => $displayCommandLine,
             ]);
 
             $process->run();
@@ -538,6 +539,17 @@ final class PgBackRestDriver implements BackupDriver
     private function logger(): LoggerInterface
     {
         return Log::channel(config('checkpoint.log_channel', 'stack'));
+    }
+
+    private function redactCommandLine(string $commandLine): string
+    {
+        $patterns = [
+            '/(--repo\d+-s3-key=)[^\s]+/',
+            '/(--repo\d+-s3-key-secret=)[^\s]+/',
+            '/(--repo\d+-cipher-pass=)[^\s]+/',
+        ];
+
+        return (string) preg_replace($patterns, '$1[REDACTED]', $commandLine);
     }
 
     private function selectedRepositoryId(): int

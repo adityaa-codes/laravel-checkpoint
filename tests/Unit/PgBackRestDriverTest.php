@@ -10,6 +10,8 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Process\Process;
 
 it('builds typed pgbackrest backup commands from structured config', function (): void {
@@ -189,6 +191,78 @@ SH));
 
     Event::assertDispatched(BackupCompleted::class);
     Event::assertNotDispatched(BackupFailed::class);
+});
+
+it('redacts repository secrets from persisted command lines and logs', function (): void {
+    Event::fake([
+        BackupStarted::class,
+        BackupCompleted::class,
+        BackupFailed::class,
+    ]);
+
+    config()->set('checkpoint.drivers.pgbackrest.repositories', [
+        1 => [
+            'type' => 's3',
+            'path' => null,
+            's3' => [
+                'bucket' => 'checkpoint-backups',
+                'endpoint' => 's3.example.com',
+                'region' => 'ap-south-1',
+                'key' => 'AKIA-SECRET-KEY',
+                'secret' => 'super-secret-token',
+                'uri_style' => 'host',
+            ],
+            'tls' => [
+                'verify' => true,
+                'ca_file' => null,
+            ],
+            'encryption' => [
+                'enabled' => true,
+                'cipher_type' => 'aes-256-cbc',
+                'passphrase' => 'repo-passphrase',
+            ],
+        ],
+    ]);
+    config()->set('checkpoint.drivers.pgbackrest.binary', fakePgBackRestScript(<<<'SH'
+#!/bin/sh
+printf '%s' '[{"name":"main","status":{"code":0,"message":"ok"},"backup":[]}]'
+SH));
+
+    $logger = Mockery::mock(LoggerInterface::class);
+
+    $logger->shouldReceive('info')
+        ->once()
+        ->with('Starting pgBackRest operation', Mockery::on(function (array $context): bool {
+            return str_contains((string) $context['command_line'], '--repo1-s3-key=[REDACTED]')
+                && str_contains((string) $context['command_line'], '--repo1-s3-key-secret=[REDACTED]')
+                && str_contains((string) $context['command_line'], '--repo1-cipher-pass=[REDACTED]')
+                && ! str_contains((string) $context['command_line'], 'AKIA-SECRET-KEY')
+                && ! str_contains((string) $context['command_line'], 'super-secret-token')
+                && ! str_contains((string) $context['command_line'], 'repo-passphrase');
+        }));
+    $logger->shouldReceive('info')
+        ->once()
+        ->with('Completed pgBackRest operation', Mockery::type('array'));
+    Log::shouldReceive('channel')
+        ->twice()
+        ->andReturn($logger);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'pgbackrest_info',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new PgBackRestDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->command_line)->toContain('--repo1-s3-key=[REDACTED]')
+        ->and($run->command_line)->toContain('--repo1-s3-key-secret=[REDACTED]')
+        ->and($run->command_line)->toContain('--repo1-cipher-pass=[REDACTED]')
+        ->and($run->command_line)->not->toContain('AKIA-SECRET-KEY')
+        ->and($run->command_line)->not->toContain('super-secret-token')
+        ->and($run->command_line)->not->toContain('repo-passphrase');
 });
 
 it('stores a structured summary when pgbackrest check fails', function (): void {
