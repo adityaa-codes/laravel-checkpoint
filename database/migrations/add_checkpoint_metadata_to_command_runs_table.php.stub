@@ -14,6 +14,8 @@ return new class extends Migration
             return;
         }
 
+        $hadLastKnownGoodColumn = Schema::hasColumn($table, 'last_known_good_at');
+
         Schema::table($table, function (Blueprint $table): void {
             if (! Schema::hasColumn($table->getTable(), 'backup_type')) {
                 $table->string('backup_type')->nullable()->after('argument_text');
@@ -67,6 +69,10 @@ return new class extends Migration
                 $table->json('metadata')->nullable()->after('last_known_good_at');
             }
         });
+
+        if ($hadLastKnownGoodColumn) {
+            return;
+        }
 
         Schema::table($table, function (Blueprint $table): void {
             $table->index('last_known_good_at');
