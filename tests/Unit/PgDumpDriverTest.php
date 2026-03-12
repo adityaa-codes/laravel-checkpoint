@@ -207,6 +207,47 @@ it('blocks logical restores when no verified backup signal is available', functi
         ->toThrow(ConfigurationException::class, 'Restore operation [logical_restore_latest] requires a verified backup signal before execution.');
 });
 
+it('blocks logical_restore_latest when the newest export lacks a matching verified signal', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgrestore-guard-latest-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary restore guard path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    $older = $outputDir.'/logical-export-11';
+    $newer = $outputDir.'/logical-export-12';
+
+    mkdir($older, 0755, true);
+    mkdir($newer, 0755, true);
+    touch($older, time() - 60);
+    touch($newer, time());
+
+    config()->set('checkpoint.restore.require_verified_backup', true);
+    config()->set('checkpoint.drivers.pgdump.restore_binary', 'pg_restore');
+    config()->set('checkpoint.drivers.pgdump.format', 'directory');
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'artifact_path' => $older,
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 0,
+        'last_known_good_at' => now(),
+    ]);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_restore_latest',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    expect(fn (): mixed => (new PgDumpDriver)->execute($run))
+        ->toThrow(ConfigurationException::class, 'Restore operation [logical_restore_latest] requires a verified backup signal before execution.');
+});
+
 function buildPgDumpProcess(PgDumpDriver $driver, CommandRun $run): Process
 {
     $method = new ReflectionMethod($driver, 'buildProcess');

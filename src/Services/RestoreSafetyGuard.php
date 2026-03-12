@@ -133,10 +133,8 @@ final readonly class RestoreSafetyGuard
             ->whereNotNull('last_known_good_at');
 
         match ($run->operation) {
-            'logical_restore_file' => $query->where('artifact_path', 'like', '%'.$restoreTarget.'%'),
-            'pgbackrest_restore' => $restoreTarget !== ''
-                ? $query->where('backup_label', $restoreTarget)
-                : $query->whereNotNull('backup_label'),
+            'logical_restore_file', 'logical_restore_latest' => $query->where('artifact_path', $restoreTarget),
+            'pgbackrest_restore' => $this->requireExplicitPgBackRestBackupLabel($restoreTarget, $query),
             default => $query,
         };
 
@@ -168,5 +166,19 @@ final readonly class RestoreSafetyGuard
     {
         return (bool) $this->config->get('checkpoint.restore.allow_in_ci', true)
             && (bool) $this->config->get('checkpoint.restore.ci', false);
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<CommandRun>  $query
+     */
+    private function requireExplicitPgBackRestBackupLabel(string $restoreTarget, \Illuminate\Database\Eloquent\Builder $query): void
+    {
+        if ($restoreTarget === '') {
+            throw new ConfigurationException(
+                'pgbackrest_restore requires an explicit backup set label when checkpoint.restore.require_verified_backup is enabled.',
+            );
+        }
+
+        $query->where('backup_label', $restoreTarget);
     }
 }

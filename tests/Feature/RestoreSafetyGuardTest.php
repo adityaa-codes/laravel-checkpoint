@@ -104,3 +104,18 @@ it('accepts restores when a matching verified backup signal exists', function ()
     expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run))
         ->not->toThrow(ConfigurationException::class);
 });
+
+it('requires an explicit pgbackrest backup label when verified backup enforcement is enabled', function (): void {
+    config()->set('checkpoint.restore.require_verified_backup', true);
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'pgbackrest_restore',
+        'argument_text' => null,
+    ]);
+
+    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run))
+        ->toThrow(
+            ConfigurationException::class,
+            'pgbackrest_restore requires an explicit backup set label when checkpoint.restore.require_verified_backup is enabled.',
+        );
+});
