@@ -118,6 +118,31 @@ it('returns an exclusive unique id for exclusive operations', function (): void 
         ->toBe('db-ops-exclusive:logical_backup');
 });
 
+it('uses the same unique key for concurrent exclusive backup runs', function (): void {
+    $logicalBackupA = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    $logicalBackupB = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    $fullBackup = CommandRun::query()->create([
+        'operation' => 'pgbackrest_backup_full',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    expect(new ProcessCommandRunJob($logicalBackupA)->uniqueId())
+        ->toBe(new ProcessCommandRunJob($logicalBackupB)->uniqueId())
+        ->and(new ProcessCommandRunJob($fullBackup)->uniqueId())
+        ->not->toBe(new ProcessCommandRunJob($logicalBackupA)->uniqueId());
+});
+
 it('returns a per-run unique id for non-exclusive operations', function (): void {
     $run = CommandRun::query()->create([
         'operation' => 'pgbackrest_check',
