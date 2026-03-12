@@ -85,6 +85,106 @@ it('builds restore commands from the latest logical export directory', function 
         ->and($process->getCommandLine())->toContain($newer);
 });
 
+it('prefers the newest tracked logical export over a filesystem scan for restore_latest', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgrestore-tracked-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary restore path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    $olderTracked = $outputDir.'/logical-export-10';
+    $newerTracked = $outputDir.'/logical-export-11';
+    $filesystemNewest = $outputDir.'/logical-export-99';
+
+    mkdir($olderTracked, 0755, true);
+    mkdir($newerTracked, 0755, true);
+    mkdir($filesystemNewest, 0755, true);
+    touch($olderTracked, time() - 120);
+    touch($newerTracked, time() - 60);
+    touch($filesystemNewest, time());
+
+    config()->set('checkpoint.drivers.pgdump.restore_binary', 'pg_restore');
+    config()->set('checkpoint.drivers.pgdump.format', 'directory');
+    config()->set('checkpoint.drivers.pgdump.jobs', 4);
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.pgdump.output_prefix', 'logical-export');
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'artifact_path' => $olderTracked,
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 0,
+        'finished_at' => now()->subMinutes(5),
+    ]);
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'artifact_path' => $newerTracked,
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 0,
+        'finished_at' => now()->subMinute(),
+    ]);
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'logical_restore_latest',
+    ]);
+
+    $process = buildPgDumpProcess(new PgDumpDriver, $run);
+
+    expect($process->getCommandLine())->toContain($newerTracked)
+        ->and($process->getCommandLine())->not->toContain($filesystemNewest);
+});
+
+it('falls back to the next valid tracked export when the newest tracked artifact is stale', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgrestore-tracked-fallback-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary restore path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    $validTracked = $outputDir.'/logical-export-10';
+    $staleTracked = $outputDir.'/logical-export-11';
+
+    mkdir($validTracked, 0755, true);
+
+    config()->set('checkpoint.drivers.pgdump.restore_binary', 'pg_restore');
+    config()->set('checkpoint.drivers.pgdump.format', 'directory');
+    config()->set('checkpoint.drivers.pgdump.jobs', 4);
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.pgdump.output_prefix', 'logical-export');
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'artifact_path' => $validTracked,
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 0,
+        'finished_at' => now()->subMinutes(5),
+    ]);
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'artifact_path' => $staleTracked,
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 0,
+        'finished_at' => now()->subMinute(),
+    ]);
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'logical_restore_latest',
+    ]);
+
+    $process = buildPgDumpProcess(new PgDumpDriver, $run);
+
+    expect($process->getCommandLine())->toContain($validTracked)
+        ->and($process->getCommandLine())->not->toContain($staleTracked);
+});
+
 it('rejects logical_restore_latest when the newest matching export escapes via symlink', function (): void {
     if (! function_exists('symlink')) {
         test()->markTestSkipped('Symlinks are not supported in this environment.');
@@ -451,6 +551,15 @@ it('blocks logical_restore_latest when the newest export lacks a matching verifi
         'status' => CommandRunStatus::Succeeded,
         'attempts' => 0,
         'last_known_good_at' => now(),
+        'finished_at' => now()->subMinutes(5),
+    ]);
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'artifact_path' => $newer,
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 0,
+        'finished_at' => now()->subMinute(),
     ]);
 
     $run = CommandRun::query()->create([

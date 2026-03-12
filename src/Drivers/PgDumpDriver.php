@@ -313,6 +313,12 @@ final class PgDumpDriver implements BackupDriver
 
     private function latestBackupTarget(string $format): string
     {
+        $trackedTarget = $this->latestTrackedBackupTarget($format);
+
+        if ($trackedTarget !== null) {
+            return $trackedTarget;
+        }
+
         $candidates = glob($this->outputDir().'/'.$this->outputPrefix().'-*', GLOB_NOSORT) ?: [];
         $candidates = array_values(array_filter(
             $candidates,
@@ -326,6 +332,32 @@ final class PgDumpDriver implements BackupDriver
         usort($candidates, static fn (string $left, string $right): int => filemtime($right) <=> filemtime($left));
 
         return $this->validatedRestoreTarget($candidates[0], $format);
+    }
+
+    private function latestTrackedBackupTarget(string $format): ?string
+    {
+        $runs = CommandRun::query()
+            ->where('operation', 'logical_backup')
+            ->where('status', \AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus::Succeeded)
+            ->whereNotNull('artifact_path')
+            ->latest('finished_at')
+            ->latest('id')
+            ->limit(10)
+            ->get();
+
+        foreach ($runs as $run) {
+            if (! $run instanceof CommandRun || ! is_string($run->artifact_path) || trim($run->artifact_path) === '') {
+                continue;
+            }
+
+            try {
+                return $this->validatedRestoreTarget($run->artifact_path, $format);
+            } catch (ConfigurationException) {
+                continue;
+            }
+        }
+
+        return null;
     }
 
     private function restorePathFromArgument(CommandRun $run, string $format): string
