@@ -31,6 +31,7 @@ Important config groups in `config/checkpoint.php`:
 - `queue.connection`, `queue.name`, `queue.max_attempts`, `queue.retry_after`, `queue.timeout`, `queue.unique_for`, `queue.lock_store`, `queue.orphan_threshold`, `queue.orphan_claim_timeout`, `queue.orphan_batch_size`, `queue.orphan_event_max_ids`
 - `schedule.logical_backup_*`, `schedule.health_check_enabled`, `schedule.recover_orphans_enabled`, `schedule.prune_enabled`, `schedule.without_overlapping`, `schedule.overlap_expires_at`, `schedule.on_one_server`
 - `driver`, `drivers.shell.*`, `drivers.pgbackrest.*`, `drivers.pgdump.*`
+- `reporting.max_recent_runs`, `output.max_persisted_bytes`
 - `log_channel`
 - `custom_operations`
 
@@ -46,6 +47,7 @@ DB_OPS_QUEUE_ORPHAN_THRESHOLD=10
 DB_OPS_QUEUE_ORPHAN_CLAIM_TIMEOUT=61
 DB_OPS_QUEUE_ORPHAN_BATCH_SIZE=100
 DB_OPS_QUEUE_ORPHAN_EVENT_MAX_IDS=50
+DB_OPS_OUTPUT_MAX_PERSISTED_BYTES=65536
 DB_OPS_LOG_CHANNEL=stack
 
 DB_OPS_CMD_LOGICAL_BACKUP=
@@ -307,6 +309,13 @@ Reporting limits are configurable:
 
 - `reporting.max_recent_runs`: hard cap applied to `db-ops:status --format=json` and `db-ops:report`
 - `DB_OPS_REPORTING_MAX_RECENT_RUNS`: env override for the same cap
+
+Command output storage limits are configurable:
+
+- `output.max_persisted_bytes`: hard cap applied to persisted `command_output`
+- `DB_OPS_OUTPUT_MAX_PERSISTED_BYTES`: env override for the same cap
+- drivers stream output through a bounded capture buffer, so large command output no longer needs to be fully materialized in PHP just to persist run diagnostics
+- truncated runs expose `metadata.output_capture` with `truncated`, `original_bytes`, `persisted_bytes`, and the configured cap
 
 Backup drill observability thresholds are configurable:
 
