@@ -154,6 +154,27 @@ it('rejects observability anomaly factors that are not greater than one', functi
         ->toThrow(ConfigurationException::class, 'checkpoint.observability.backup_duration_anomaly_factor must be greater than 1.');
 });
 
+it('rejects a non-positive backup drill freshness threshold', function (): void {
+    config()->set('checkpoint.observability.max_backup_drill_age_days', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.observability.max_backup_drill_age_days must be greater than zero.');
+});
+
+it('rejects a non-positive backup drill pass rate window', function (): void {
+    config()->set('checkpoint.observability.backup_drill_pass_rate_window_days', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.observability.backup_drill_pass_rate_window_days must be greater than zero.');
+});
+
+it('rejects a backup drill minimum pass rate outside 0 to 100', function (): void {
+    config()->set('checkpoint.observability.backup_drill_min_pass_rate', 101.0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.observability.backup_drill_min_pass_rate must be between 0 and 100.');
+});
+
 it('rejects pgdump parallel jobs for non-directory formats', function (): void {
     config()->set('checkpoint.drivers.pgdump.format', 'custom');
     config()->set('checkpoint.drivers.pgdump.jobs', 4);

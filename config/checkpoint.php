@@ -65,6 +65,9 @@ return [
         'max_last_known_good_age_hours' => (int) $env('DB_OPS_MAX_LAST_KNOWN_GOOD_AGE_HOURS', 24),
         'backup_duration_anomaly_factor' => (float) $env('DB_OPS_BACKUP_DURATION_ANOMALY_FACTOR', 2.0),
         'backup_duration_min_samples' => (int) $env('DB_OPS_BACKUP_DURATION_MIN_SAMPLES', 3),
+        'max_backup_drill_age_days' => (int) $env('DB_OPS_MAX_BACKUP_DRILL_AGE_DAYS', 30),
+        'backup_drill_pass_rate_window_days' => (int) $env('DB_OPS_BACKUP_DRILL_PASS_RATE_WINDOW_DAYS', 30),
+        'backup_drill_min_pass_rate' => (float) $env('DB_OPS_BACKUP_DRILL_MIN_PASS_RATE', 100.0),
     ],
     'drivers' => [
         'shell' => [

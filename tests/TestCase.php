@@ -80,6 +80,9 @@ class TestCase extends Orchestra
                 'max_last_known_good_age_hours' => 24,
                 'backup_duration_anomaly_factor' => 2.0,
                 'backup_duration_min_samples' => 3,
+                'max_backup_drill_age_days' => 30,
+                'backup_drill_pass_rate_window_days' => 30,
+                'backup_drill_min_pass_rate' => 100.0,
             ],
             'drivers' => [
                 'shell' => [

@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFreshnessAlarmTriggered;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillFreshnessAlarmTriggered;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillPassRateAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
@@ -132,10 +134,69 @@ it('reports drill freshness and pass rate in machine-readable json', function ()
         ->and(collect($report['checks'])->contains(
             fn (array $check): bool => $check['check'] === 'Backup drills: pass rate'
                 && $check['status'] === 'warn'
-                && $check['notes'] === '1/2 passed in the last 30 days (50.0%)',
+                && $check['notes'] === '1/2 passed in the last 30 days (50.0%, threshold: 100.0%)',
         ))->toBeTrue();
 
     Date::setTestNow();
+});
+
+it('dispatches drill alarms when drill freshness and pass rate fall below threshold', function (): void {
+    Event::fake([BackupDrillFreshnessAlarmTriggered::class, BackupDrillPassRateAlarmTriggered::class]);
+    Date::setTestNow('2026-03-11 12:00:00');
+
+    config()->set('checkpoint.observability.max_backup_drill_age_days', 7);
+    config()->set('checkpoint.observability.backup_drill_pass_rate_window_days', 14);
+    config()->set('checkpoint.observability.backup_drill_min_pass_rate', 100.0);
+
+    $latestRun = BackupDrillRun::query()->create([
+        'run_uuid' => 'drill-fail-001',
+        'overall_result' => 'fail',
+        'executed_at' => now()->subDays(10),
+    ]);
+
+    BackupDrillRun::query()->create([
+        'run_uuid' => 'drill-pass-001',
+        'overall_result' => 'pass',
+        'executed_at' => now()->subDays(12),
+    ]);
+
+    checkpoint_artisan('db-ops:doctor')->assertSuccessful();
+
+    Event::assertDispatched(fn (BackupDrillFreshnessAlarmTriggered $event): bool => $event->reason === 'stale'
+        && $event->run?->is($latestRun) === true
+        && $event->ageDays === 10
+        && $event->thresholdDays === 7
+        && $event->version === 1);
+
+    Event::assertDispatched(fn (BackupDrillPassRateAlarmTriggered $event): bool => $event->latestRun?->is($latestRun) === true
+        && $event->windowDays === 14
+        && $event->passing === 1
+        && $event->total === 2
+        && $event->passRatePercent === 50.0
+        && $event->thresholdPercent === 100.0
+        && $event->version === 1);
+
+    Date::setTestNow();
+});
+
+it('dispatches drill alarms when no backup drills exist', function (): void {
+    Event::fake([BackupDrillFreshnessAlarmTriggered::class, BackupDrillPassRateAlarmTriggered::class]);
+
+    checkpoint_artisan('db-ops:doctor')->assertSuccessful();
+
+    Event::assertDispatched(fn (BackupDrillFreshnessAlarmTriggered $event): bool => $event->reason === 'missing'
+        && $event->run === null
+        && $event->ageDays === null
+        && $event->thresholdDays === 30
+        && $event->version === 1);
+
+    Event::assertDispatched(fn (BackupDrillPassRateAlarmTriggered $event): bool => $event->latestRun === null
+        && $event->windowDays === 30
+        && $event->passing === 0
+        && $event->total === 0
+        && $event->passRatePercent === 0.0
+        && $event->thresholdPercent === 100.0
+        && $event->version === 1);
 });
 
 it('returns a failed machine-readable json report for invalid config', function (): void {

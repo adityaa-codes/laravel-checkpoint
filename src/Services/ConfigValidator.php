@@ -419,6 +419,9 @@ final readonly class ConfigValidator
         $maxAge = $config['max_last_known_good_age_hours'] ?? null;
         $factor = $config['backup_duration_anomaly_factor'] ?? null;
         $minSamples = $config['backup_duration_min_samples'] ?? null;
+        $maxBackupDrillAgeDays = $config['max_backup_drill_age_days'] ?? null;
+        $backupDrillPassRateWindowDays = $config['backup_drill_pass_rate_window_days'] ?? null;
+        $backupDrillMinPassRate = $config['backup_drill_min_pass_rate'] ?? null;
 
         if (! is_int($maxAge) || $maxAge < 1) {
             throw new ConfigurationException('checkpoint.observability.max_last_known_good_age_hours must be greater than zero.');
@@ -434,6 +437,22 @@ final readonly class ConfigValidator
 
         if (! is_int($minSamples) || $minSamples < 2) {
             throw new ConfigurationException('checkpoint.observability.backup_duration_min_samples must be at least 2.');
+        }
+
+        if (! is_int($maxBackupDrillAgeDays) || $maxBackupDrillAgeDays < 1) {
+            throw new ConfigurationException('checkpoint.observability.max_backup_drill_age_days must be greater than zero.');
+        }
+
+        if (! is_int($backupDrillPassRateWindowDays) || $backupDrillPassRateWindowDays < 1) {
+            throw new ConfigurationException('checkpoint.observability.backup_drill_pass_rate_window_days must be greater than zero.');
+        }
+
+        if (! is_float($backupDrillMinPassRate) && ! is_int($backupDrillMinPassRate)) {
+            throw new ConfigurationException('checkpoint.observability.backup_drill_min_pass_rate must be numeric.');
+        }
+
+        if ((float) $backupDrillMinPassRate < 0.0 || (float) $backupDrillMinPassRate > 100.0) {
+            throw new ConfigurationException('checkpoint.observability.backup_drill_min_pass_rate must be between 0 and 100.');
         }
     }
 

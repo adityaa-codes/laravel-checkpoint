@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFreshnessAlarmTriggered;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillFreshnessAlarmTriggered;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillPassRateAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
@@ -225,16 +227,23 @@ final class DoctorCommand extends Command
      */
     private function backupDrillFreshnessRow(): array
     {
+        $thresholdDays = max(1, (int) $this->config->get('checkpoint.observability.max_backup_drill_age_days', 30));
         $latest = BackupDrillRun::query()
             ->recent()
             ->first();
 
         if (! $latest instanceof BackupDrillRun) {
+            event(new BackupDrillFreshnessAlarmTriggered(null, 'missing', null, $thresholdDays));
+
             return ['Backup drills: latest run', $this->statusWord('warn'), 'No backup drill recorded'];
         }
 
         $ageDays = max(0, (int) ceil($latest->executed_at->diffInHours(now()) / 24));
-        $level = $latest->executed_at->lt(now()->subDays(30)) ? 'warn' : 'pass';
+        $level = $latest->executed_at->lt(now()->subDays($thresholdDays)) ? 'warn' : 'pass';
+
+        if ($level === 'warn') {
+            event(new BackupDrillFreshnessAlarmTriggered($latest, 'stale', $ageDays, $thresholdDays));
+        }
 
         return [
             'Backup drills: latest run',
@@ -248,13 +257,20 @@ final class DoctorCommand extends Command
      */
     private function backupDrillPassRateRow(): array
     {
-        $windowStart = now()->subDays(30);
+        $windowDays = max(1, (int) $this->config->get('checkpoint.observability.backup_drill_pass_rate_window_days', 30));
+        $thresholdPercent = max(0.0, min(100.0, (float) $this->config->get('checkpoint.observability.backup_drill_min_pass_rate', 100.0)));
+        $windowStart = now()->subDays($windowDays);
         $total = BackupDrillRun::query()
             ->where('executed_at', '>=', $windowStart)
             ->count();
+        $latest = BackupDrillRun::query()
+            ->recent()
+            ->first();
 
         if ($total < 1) {
-            return ['Backup drills: pass rate', $this->statusWord('warn'), 'No backup drills in the last 30 days'];
+            event(new BackupDrillPassRateAlarmTriggered($windowDays, 0, 0, 0.0, $thresholdPercent, $latest));
+
+            return ['Backup drills: pass rate', $this->statusWord('warn'), sprintf('No backup drills in the last %d days', $windowDays)];
         }
 
         $passing = BackupDrillRun::query()
@@ -262,12 +278,16 @@ final class DoctorCommand extends Command
             ->where('overall_result', 'pass')
             ->count();
         $percent = round(($passing / $total) * 100, 1);
-        $level = $passing === $total ? 'pass' : 'warn';
+        $level = $percent >= $thresholdPercent ? 'pass' : 'warn';
+
+        if ($level === 'warn') {
+            event(new BackupDrillPassRateAlarmTriggered($windowDays, $passing, $total, $percent, $thresholdPercent, $latest));
+        }
 
         return [
             'Backup drills: pass rate',
             $this->statusWord($level),
-            sprintf('%d/%d passed in the last 30 days (%.1f%%)', $passing, $total, $percent),
+            sprintf('%d/%d passed in the last %d days (%.1f%%, threshold: %.1f%%)', $passing, $total, $windowDays, $percent, $thresholdPercent),
         ];
     }
 
