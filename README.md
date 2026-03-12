@@ -148,6 +148,8 @@ php artisan db-ops:enqueue-backup
 php artisan db-ops:enqueue logical_backup
 php artisan db-ops:status --limit=10
 php artisan db-ops:status --summary
+php artisan db-ops:status --format=json
+php artisan db-ops:status --summary --format=json
 php artisan db-ops:record-drill --run-uuid=... --overall-result=pass --executed-at=2026-03-11T10:30:00+00:00
 php artisan db-ops:health-check
 php artisan db-ops:recover-orphans
@@ -253,6 +255,7 @@ Behavior notes:
 - `pitr_restore` now rejects invalid restore target timestamps before command execution
 - restore commands fail early when the current environment or target database is not allowlisted
 - when verified-backup enforcement is enabled, restore commands require a matching `last_known_good_at` signal
+- `db-ops:status --format=json` mirrors both recent-run and summary views for automation use
 
 ### Observability Notes
 
