@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
+use Illuminate\Support\Facades\Artisan;
 
 it('renders the doctor health table', function (): void {
     checkpoint_artisan('db-ops:doctor')
@@ -78,4 +79,32 @@ it('shows selected remote repo hardening details without secrets', function (): 
         ->doesntExpectOutputToContain('hidden-secret')
         ->doesntExpectOutputToContain('hidden-passphrase')
         ->assertSuccessful();
+});
+
+it('renders a machine-readable json report', function (): void {
+    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+
+    $report = json_decode(Artisan::output(), true);
+
+    expect($report)->toBeArray()
+        ->and($report['ok'])->toBeTrue()
+        ->and($report['driver'])->toBe('shell')
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['check'] === 'Config: driver' && $check['status'] === 'pass',
+        ))->toBeTrue();
+});
+
+it('returns a failed machine-readable json report for invalid config', function (): void {
+    config()->set('checkpoint.queue.timeout', 3600);
+    config()->set('checkpoint.queue.retry_after', 300);
+
+    $exitCode = Artisan::call('db-ops:doctor', ['--format' => 'json']);
+    $report = json_decode(Artisan::output(), true);
+
+    expect($exitCode)->toBe(1)
+        ->and($report)->toBeArray()
+        ->and($report['ok'])->toBeFalse()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['check'] === 'Config validation' && $check['status'] === 'fail',
+        ))->toBeTrue();
 });

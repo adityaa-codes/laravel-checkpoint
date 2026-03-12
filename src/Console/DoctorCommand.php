@@ -15,7 +15,7 @@ use Symfony\Component\Process\ExecutableFinder;
 
 final class DoctorCommand extends Command
 {
-    protected $signature = 'db-ops:doctor';
+    protected $signature = 'db-ops:doctor {--format=table}';
 
     protected $description = 'Show checkpoint package health checks.';
 
@@ -30,11 +30,20 @@ final class DoctorCommand extends Command
     public function handle(): int
     {
         $rows = [];
+        $format = (string) $this->option('format');
+        $outputMode = in_array($format, ['table', 'json'], true) ? $format : 'table';
 
         try {
             $this->validator->validate();
         } catch (\Throwable $exception) {
             $rows[] = ['Config validation', $this->statusWord('fail'), $exception->getMessage()];
+
+            if ($outputMode === 'json') {
+                $this->line($this->jsonReport($rows, false));
+
+                return self::FAILURE;
+            }
+
             $this->table(['Check', 'Status', 'Notes'], $rows);
 
             return self::FAILURE;
@@ -62,6 +71,12 @@ final class DoctorCommand extends Command
         $rows[] = $this->tableRow('backup_drill_runs', (new BackupDrillRun)->getTable());
         $rows[] = ['Queue: '.$this->config->get('checkpoint.queue.name', 'db-ops'), $this->statusWord('warn'), 'Cannot verify queue without running worker'];
         $rows[] = ['Orphaned runs', $this->statusWord('pass'), sprintf('%d pending runs beyond threshold', $this->orphanedRunsCount())];
+
+        if ($outputMode === 'json') {
+            $this->line($this->jsonReport($rows, true));
+
+            return self::SUCCESS;
+        }
 
         $this->table(['Check', 'Status', 'Notes'], $rows);
 
@@ -224,5 +239,39 @@ final class DoctorCommand extends Command
             'warn' => (string) __('messages.cli.doctor_warn'),
             default => (string) __('messages.cli.doctor_fail'),
         };
+    }
+
+    private function statusLevel(string $statusWord): string
+    {
+        return match ($statusWord) {
+            (string) __('messages.cli.doctor_pass'), 'messages.cli.doctor_pass' => 'pass',
+            (string) __('messages.cli.doctor_warn'), 'messages.cli.doctor_warn' => 'warn',
+            default => 'fail',
+        };
+    }
+
+    /**
+     * @param  list<array{0:string,1:string,2:string}>  $rows
+     */
+    private function jsonReport(array $rows, bool $ok): string
+    {
+        $checks = array_map(function (array $row): array {
+            return [
+                'check' => $row[0],
+                'status' => $this->statusLevel($row[1]),
+                'notes' => $row[2],
+            ];
+        }, $rows);
+
+        $report = [
+            'ok' => $ok,
+            'driver' => (string) $this->config->get('checkpoint.driver'),
+            'generated_at' => now()->toIso8601String(),
+            'checks' => $checks,
+        ];
+
+        $json = json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+
+        return is_string($json) ? $json : '{"ok":false,"checks":[]}';
     }
 }
