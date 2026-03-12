@@ -367,7 +367,7 @@ Tasks:
 
 - `[x]` add machine-readable `doctor` output mode
 - `[x]` add structured log context for run ids, repo, stanza, type, duration
-- `[ ]` add events or hooks for stale backup alarms
+- `[x]` add events or hooks for stale backup alarms
 - `[x]` add age-of-last-success checks
 - `[x]` add backup duration anomaly checks
 - `[x]` add queue lag and orphan metrics hooks

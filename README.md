@@ -261,8 +261,9 @@ values are known for the current run.
 
 Event hooks now include:
 
-- `QueueLagDetected` when `db-ops:recover-orphans` finds stale pending work
-- `OrphanRunRedispatched` for each stale pending run that gets re-queued
+- `BackupFreshnessAlarmTriggered` when `db-ops:doctor` detects a missing or stale last-known-good backup
+- `QueueLagDetected` when `db-ops:recover-orphans` finds stale pending work, including oldest stale age and affected run ids
+- `OrphanRunRedispatched` for each stale pending run that gets re-queued, including queue and stale age context
 
 ### pgDump Large-Export Configuration
 
