@@ -402,37 +402,32 @@ Acceptance:
 
 ### Immediate Priority
 
-- `[ ]` fix timeout vs retry contract
-- `[ ]` add Redis-backed unique lock strategy
-- `[ ]` harden scheduler overlap and cluster behavior
-- `[ ]` scaffold `PgBackRestDriver`
-- `[ ]` add typed pgBackRest config
+- `[x]` all planned implementation phases are complete
+- `[x]` package-level verification and devil's-advocate review completed
+- `[ ]` optional hardening follow-ups can continue from post-plan audit findings
 
 ### Near-Term Production Milestones
 
-- `[ ]` add structured backup metadata
-- `[ ]` add verify/check/info parsing and reporting
-- `[ ]` add remote repository and encryption support
-- `[ ]` add restore safety gates
-- `[ ]` add machine-readable doctor output
+- `[x]` structured backup metadata and verification reporting
+- `[x]` pgBackRest repo hardening and remote repository support
+- `[x]` restore safety gates
+- `[x]` machine-readable doctor output
 
 ### Scale Milestones
 
-- `[ ]` add huge-database logical export mode with `pg_dump -Fd -j`
-- `[ ]` add multi-repo support
-- `[ ]` add long-run stress and concurrency tests
-- `[ ]` add operational guidance for large clusters
+- `[x]` huge-database logical export mode with `pg_dump -Fd -j`
+- `[x]` multi-repo support
+- `[x]` long-run stress and concurrency tests
+- `[x]` operational guidance for large clusters
 
 ## Recommended Next Implementation Step
 
-Start with **Phase 0** and execute these in one slice:
+The implementation plan is complete. Any next step should come from a fresh
+post-plan audit, with current candidates including:
 
-1. fix queue timeout / `retry_after` validation
-2. add doctor failures for unsafe queue settings
-3. add scheduler `withoutOverlapping()` and `onOneServer()`
-4. add Redis-backed uniqueness support to `ProcessCommandRunJob`
-
-Then start **Phase 1** immediately after with the `PgBackRestDriver` scaffold.
+1. stronger artifact-specific verified-restore binding
+2. secret redaction for shell and pgDump command lines
+3. optional integration coverage for shared cache / multi-node environments
 
 ## Source Notes
 
