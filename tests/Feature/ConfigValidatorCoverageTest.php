@@ -105,6 +105,20 @@ it('rejects an encrypted pgbackrest repo without a passphrase', function (): voi
         ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.repositories.1.encryption.passphrase must be a non-empty string when encryption is enabled.');
 });
 
+it('rejects non-array restore safety environment lists', function (): void {
+    config()->set('checkpoint.restore.allowed_environments', 'testing');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.restore.allowed_environments must be an array.');
+});
+
+it('rejects an empty restore confirmation phrase', function (): void {
+    config()->set('checkpoint.restore.confirmation_phrase', '');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.restore.confirmation_phrase must be a non-empty string.');
+});
+
 it('rejects pgdump parallel jobs for non-directory formats', function (): void {
     config()->set('checkpoint.drivers.pgdump.format', 'custom');
     config()->set('checkpoint.drivers.pgdump.jobs', 4);

@@ -26,6 +26,23 @@ return [
         'lock_store' => $env('DB_OPS_QUEUE_LOCK_STORE'),
     ],
 
+    'restore' => [
+        'allowed_environments' => array_values(array_filter(array_map(
+            static fn (string $value): string => trim($value),
+            explode(',', (string) $env('DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS', 'local,testing,staging')),
+        ), static fn (string $value): bool => $value !== '')),
+        'allowed_databases' => array_values(array_filter(array_map(
+            static fn (string $value): string => trim($value),
+            explode(',', (string) $env('DB_OPS_RESTORE_ALLOWED_DATABASES', '')),
+        ), static fn (string $value): bool => $value !== '')),
+        'require_confirmation' => (bool) $env('DB_OPS_RESTORE_REQUIRE_CONFIRMATION', true),
+        'confirmation_phrase' => $env('DB_OPS_RESTORE_CONFIRMATION_PHRASE', 'RESTORE'),
+        'confirmation_token' => $env('DB_OPS_RESTORE_CONFIRMATION'),
+        'allow_in_ci' => (bool) $env('DB_OPS_RESTORE_ALLOW_IN_CI', true),
+        'ci' => (bool) $env('CI', false),
+        'require_verified_backup' => (bool) $env('DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP', false),
+    ],
+
     'schedule' => [
         'logical_backup_enabled' => (bool) $env('DB_OPS_BACKUP_SCHEDULE_ENABLED', true),
         'logical_backup_daily_at' => $env('DB_OPS_BACKUP_DAILY_AT', '16:00'),

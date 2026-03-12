@@ -305,6 +305,22 @@ SH));
     Event::assertNotDispatched(BackupCompleted::class);
 });
 
+it('blocks pgbackrest restore execution in disallowed environments', function (): void {
+    config()->set('app.env', 'production');
+    config()->set('checkpoint.restore.allowed_environments', ['staging']);
+    config()->set('checkpoint.drivers.pgbackrest.binary', 'pgbackrest');
+
+    $run = CommandRun::query()->create([
+        'operation' => 'pgbackrest_restore',
+        'argument_text' => '20260312-010101F',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    expect(fn (): mixed => (new PgBackRestDriver)->execute($run))
+        ->toThrow(ConfigurationException::class, 'Restore operations are blocked in environment [production].');
+});
+
 function buildPgBackRestProcess(PgBackRestDriver $driver, CommandRun $run): Process
 {
     $method = new ReflectionMethod($driver, 'buildProcess');

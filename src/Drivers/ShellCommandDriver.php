@@ -11,6 +11,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Process\Process;
@@ -21,6 +22,8 @@ final class ShellCommandDriver implements BackupDriver
 {
     public function execute(CommandRun $run): void
     {
+        $this->restoreSafetyGuard()->ensureSafe($run, $this->plannedMetadata($run));
+
         if ($this->shouldCreatePreRestoreSnapshot($run)) {
             $snapshotRun = $this->createSnapshotRun($run);
             $this->runProcess($snapshotRun);
@@ -200,6 +203,11 @@ final class ShellCommandDriver implements BackupDriver
     private function logger(): LoggerInterface
     {
         return Log::channel(config('checkpoint.log_channel', 'stack'));
+    }
+
+    private function restoreSafetyGuard(): RestoreSafetyGuard
+    {
+        return resolve(RestoreSafetyGuard::class);
     }
 
     /**

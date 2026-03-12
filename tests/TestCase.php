@@ -63,6 +63,16 @@ class TestCase extends Orchestra
                 'unique_for' => 3660,
                 'lock_store' => 'array',
             ],
+            'restore' => [
+                'allowed_environments' => ['testing', 'workbench'],
+                'allowed_databases' => [':memory:'],
+                'require_confirmation' => false,
+                'confirmation_phrase' => 'RESTORE',
+                'confirmation_token' => null,
+                'allow_in_ci' => true,
+                'ci' => false,
+                'require_verified_backup' => false,
+            ],
             'drivers' => [
                 'shell' => [
                     'class' => ShellCommandDriver::class,

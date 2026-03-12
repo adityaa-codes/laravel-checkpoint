@@ -10,6 +10,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
@@ -24,6 +25,7 @@ final class PgBackRestDriver implements BackupDriver
         try {
             $process = $this->buildProcess($run);
             $plannedMetadata = $this->plannedMetadata($run);
+            $this->restoreSafetyGuard()->ensureSafe($run, $plannedMetadata);
             $displayCommandLine = $this->redactCommandLine($process->getCommandLine());
 
             $run->markAsRunning();
@@ -539,6 +541,11 @@ final class PgBackRestDriver implements BackupDriver
     private function logger(): LoggerInterface
     {
         return Log::channel(config('checkpoint.log_channel', 'stack'));
+    }
+
+    private function restoreSafetyGuard(): RestoreSafetyGuard
+    {
+        return resolve(RestoreSafetyGuard::class);
     }
 
     private function redactCommandLine(string $commandLine): string

@@ -181,6 +181,32 @@ SH));
     Event::assertNotDispatched(BackupFailed::class);
 });
 
+it('blocks logical restores when no verified backup signal is available', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgrestore-guard-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary restore guard path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+    mkdir($outputDir.'/logical-export-12', 0755, true);
+
+    config()->set('checkpoint.restore.require_verified_backup', true);
+    config()->set('checkpoint.drivers.pgdump.restore_binary', 'pg_restore');
+    config()->set('checkpoint.drivers.pgdump.format', 'directory');
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_restore_latest',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    expect(fn (): mixed => (new PgDumpDriver)->execute($run))
+        ->toThrow(ConfigurationException::class, 'Restore operation [logical_restore_latest] requires a verified backup signal before execution.');
+});
+
 function buildPgDumpProcess(PgDumpDriver $driver, CommandRun $run): Process
 {
     $method = new ReflectionMethod($driver, 'buildProcess');

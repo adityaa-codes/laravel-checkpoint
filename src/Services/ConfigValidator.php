@@ -21,6 +21,7 @@ final readonly class ConfigValidator
         $this->validatePgBackRestConfig();
         $this->validatePgDumpConfig();
         $this->validateQueueSettings();
+        $this->validateRestoreSettings();
         $this->validateLogChannel();
         $this->validateUserModel();
         $this->validateTablePrefix();
@@ -332,6 +333,40 @@ final readonly class ConfigValidator
             throw new ConfigurationException(
                 sprintf('checkpoint.queue.lock_store [%s] is not configured in cache.stores.', (string) $lockStore),
             );
+        }
+    }
+
+    private function validateRestoreSettings(): void
+    {
+        $config = $this->config->get('checkpoint.restore', []);
+
+        if (! is_array($config)) {
+            throw new ConfigurationException('checkpoint.restore must be an array.');
+        }
+
+        foreach (['allowed_environments', 'allowed_databases'] as $key) {
+            $value = $config[$key] ?? [];
+
+            if (! is_array($value)) {
+                throw new ConfigurationException(sprintf('checkpoint.restore.%s must be an array.', $key));
+            }
+        }
+
+        foreach (['require_confirmation', 'allow_in_ci', 'ci', 'require_verified_backup'] as $key) {
+            if (! is_bool($config[$key] ?? null)) {
+                throw new ConfigurationException(sprintf('checkpoint.restore.%s must be a boolean.', $key));
+            }
+        }
+
+        $confirmationPhrase = $config['confirmation_phrase'] ?? null;
+        $confirmationToken = $config['confirmation_token'] ?? null;
+
+        if (! is_string($confirmationPhrase) || trim($confirmationPhrase) === '') {
+            throw new ConfigurationException('checkpoint.restore.confirmation_phrase must be a non-empty string.');
+        }
+
+        if ($confirmationToken !== null && (! is_string($confirmationToken) || trim($confirmationToken) === '')) {
+            throw new ConfigurationException('checkpoint.restore.confirmation_token must be null or a non-empty string.');
         }
     }
 

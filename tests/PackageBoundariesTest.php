@@ -31,6 +31,7 @@ use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
+use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
 
 it('keeps package internals final by default with explicit seams', function (): void {
@@ -56,6 +57,7 @@ it('keeps package internals final by default with explicit seams', function (): 
         CommandRunPolicy::class,
         CommandRunCatalog::class,
         ConfigValidator::class,
+        RestoreSafetyGuard::class,
     ];
 
     foreach ($finalClasses as $class) {
@@ -76,6 +78,7 @@ it('keeps immutable payload and service objects readonly where appropriate', fun
         BackupDrillCompleted::class,
         LaravelCheckpoint::class,
         ConfigValidator::class,
+        RestoreSafetyGuard::class,
     ];
 
     foreach ($readonlyClasses as $class) {

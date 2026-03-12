@@ -10,6 +10,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Process\Process;
@@ -23,6 +24,7 @@ final class PgDumpDriver implements BackupDriver
         try {
             $process = $this->buildProcess($run);
             $plannedMetadata = $this->plannedMetadata($run);
+            $this->restoreSafetyGuard()->ensureSafe($run, $plannedMetadata);
 
             $run->markAsRunning();
             $run->forceFill([
@@ -474,5 +476,10 @@ final class PgDumpDriver implements BackupDriver
     private function logger(): LoggerInterface
     {
         return Log::channel(config('checkpoint.log_channel', 'stack'));
+    }
+
+    private function restoreSafetyGuard(): RestoreSafetyGuard
+    {
+        return resolve(RestoreSafetyGuard::class);
     }
 }

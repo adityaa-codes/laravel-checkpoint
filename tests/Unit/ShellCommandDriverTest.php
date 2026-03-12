@@ -7,6 +7,7 @@ use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupCompleted;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Event;
 
@@ -118,4 +119,22 @@ it('aborts restore operations when the pre-restore snapshot fails', function ():
     Event::assertDispatchedTimes(BackupStarted::class, 1);
     Event::assertDispatchedTimes(BackupCompleted::class, 0);
     Event::assertDispatchedTimes(BackupFailed::class, 2);
+});
+
+it('blocks restore execution when confirmation is missing', function (): void {
+    config()->set('checkpoint.restore.require_confirmation', true);
+    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.restore.confirmation_token', null);
+    config()->set('checkpoint.drivers.shell.pre_restore_snapshot', false);
+    config()->set('checkpoint.drivers.shell.commands.logical_restore_file', 'printf restore');
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_restore_file',
+        'argument_text' => 'archive.sql',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    expect(fn (): mixed => (new ShellCommandDriver)->execute($run))
+        ->toThrow(ConfigurationException::class, 'Restore confirmation is required.');
 });
