@@ -37,7 +37,7 @@ This plan is based on:
 - `[x]` backup execution now has first-class pgBackRest and pgDump drivers alongside the shell escape hatch
 - `[ ]` scheduler overlap and cluster guards are now implemented
 - `[x]` command runs now persist structured backup state, verification state, and last-known-good timestamps
-- `[!]` no object storage / multi-repository / encryption-first config model yet
+- `[x]` pgBackRest now supports typed repository configuration for local and S3-backed storage, including TLS and encryption settings
 - `[x]` huge-database logical export strategy now exists through the dedicated `pgdump` driver
 
 ## Key Learnings
@@ -318,16 +318,16 @@ Goal:
 Make the package safe for real repositories and remote storage.
 
 Status:
-- `[ ]` not started
+- `[x]` complete
 
 Tasks:
 
-- `[ ]` add config support for multiple repositories
-- `[ ]` add config support for S3/object-store repositories
-- `[ ]` add config support for repo encryption and TLS verification
-- `[ ]` redact secrets from stored command lines and logs
-- `[ ]` add doctor checks for required repo settings
-- `[ ]` add tests proving sensitive config never lands in persisted command lines
+- `[x]` add config support for multiple repositories
+- `[x]` add config support for S3/object-store repositories
+- `[x]` add config support for repo encryption and TLS verification
+- `[x]` redact secrets from stored command lines and logs
+- `[x]` add doctor checks for required repo settings
+- `[x]` add tests proving sensitive config never lands in persisted command lines
 
 Acceptance:
 

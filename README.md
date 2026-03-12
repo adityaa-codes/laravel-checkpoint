@@ -55,6 +55,11 @@ DB_OPS_CMD_PGBACKREST_INFO=
 
 DB_OPS_PGBACKREST_BINARY=pgbackrest
 DB_OPS_PGBACKREST_STANZA=main
+DB_OPS_PGBACKREST_REPO=1
+DB_OPS_PGBACKREST_REPO1_TYPE=posix
+DB_OPS_PGBACKREST_REPO1_PATH=/var/lib/pgbackrest/repo1
+DB_OPS_PGBACKREST_REPO1_TLS_VERIFY=true
+DB_OPS_PGBACKREST_REPO1_ENCRYPTION_ENABLED=false
 DB_OPS_PGDUMP_BINARY=pg_dump
 DB_OPS_PGRESTORE_BINARY=pg_restore
 DB_OPS_PGDUMP_FORMAT=directory
@@ -157,6 +162,47 @@ Logical exports are not the primary DR strategy for huge PostgreSQL systems. The
 
 1. use `pgbackrest` for regular backup, restore, and verification
 2. use `pgdump` only when you specifically need a logical export artifact
+
+### pgBackRest Repository Hardening
+
+The `pgbackrest` driver now models repositories explicitly instead of treating
+repo selection as a bare integer. Configure the active repo with
+`DB_OPS_PGBACKREST_REPO` and then define repo-specific settings under
+`drivers.pgbackrest.repositories`.
+
+Supported repository types:
+
+- `posix`: local or mounted filesystem path via `path`
+- `s3`: remote object storage via bucket, endpoint, region, access key, and secret
+
+Repository hardening fields:
+
+- `tls.verify` and optional `tls.ca_file`
+- `encryption.enabled`, `encryption.cipher_type`, and `encryption.passphrase`
+
+Example remote repo env:
+
+```env
+DB_OPS_DRIVER=pgbackrest
+DB_OPS_PGBACKREST_REPO=1
+DB_OPS_PGBACKREST_REPO1_TYPE=s3
+DB_OPS_PGBACKREST_REPO1_S3_BUCKET=checkpoint-backups
+DB_OPS_PGBACKREST_REPO1_S3_ENDPOINT=s3.example.com
+DB_OPS_PGBACKREST_REPO1_S3_REGION=ap-south-1
+DB_OPS_PGBACKREST_REPO1_S3_KEY=...
+DB_OPS_PGBACKREST_REPO1_S3_SECRET=...
+DB_OPS_PGBACKREST_REPO1_TLS_VERIFY=true
+DB_OPS_PGBACKREST_REPO1_TLS_CA_FILE=/etc/ssl/checkpoint.pem
+DB_OPS_PGBACKREST_REPO1_ENCRYPTION_ENABLED=true
+DB_OPS_PGBACKREST_REPO1_ENCRYPTION_CIPHER=aes-256-cbc
+DB_OPS_PGBACKREST_REPO1_ENCRYPTION_PASSPHRASE=...
+```
+
+Operational notes:
+
+- `db-ops:doctor` reports the active repo target, TLS verification state, and encryption mode
+- persisted `command_line` values redact S3 keys, S3 secrets, and cipher passphrases
+- doctor output never prints raw repository secrets
 
 ### pgDump Large-Export Configuration
 
