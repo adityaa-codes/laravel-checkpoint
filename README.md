@@ -280,7 +280,8 @@ Operational surfaces now include:
 `db-ops:status` also surfaces backup drill analytics:
 
 - `latest_backup_drill` and `latest_failed_backup_drill` identify the most recent drill outcomes
-- `backup_drill_pass_rate_30d` summarizes recent drill reliability for automation consumers
+- `backup_drill_pass_rate` summarizes recent drill reliability for automation consumers
+- `backup_drill_pass_rate_30d` remains available as a compatibility alias
 - the table summary mirrors those signals for operators without requiring JSON parsing
 
 `db-ops:report` is the preferred automation surface when you want one payload
