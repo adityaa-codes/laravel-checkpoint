@@ -43,6 +43,34 @@ it('rejects a missing configured user model', function (): void {
         ->toThrow(ConfigurationException::class, 'User model class App\\Missing\\User does not exist.');
 });
 
+it('rejects an invalid backup schedule time', function (): void {
+    config()->set('checkpoint.schedule.logical_backup_daily_at', '25:00');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.schedule.logical_backup_daily_at must use HH:MM 24-hour format.');
+});
+
+it('rejects an invalid backup schedule timezone', function (): void {
+    config()->set('checkpoint.schedule.logical_backup_timezone', 'Mars/Olympus');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.schedule.logical_backup_timezone must be a valid timezone identifier.');
+});
+
+it('rejects custom operations with invalid safety flags', function (): void {
+    config()->set('checkpoint.custom_operations.audit_snapshot', [
+        'label' => 'Audit Snapshot',
+        'argument_required' => false,
+        'argument_hint' => null,
+        'argument_validator' => null,
+        'destructive' => 'sometimes',
+        'exclusive' => true,
+    ]);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.custom_operations.audit_snapshot.destructive must be a boolean.');
+});
+
 it('rejects an empty pgbackrest stanza', function (): void {
     config()->set('checkpoint.drivers.pgbackrest.stanza', '');
 

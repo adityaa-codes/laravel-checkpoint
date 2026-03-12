@@ -22,7 +22,9 @@ final readonly class ConfigValidator
         $this->validatePgDumpConfig();
         $this->validateQueueSettings();
         $this->validateRestoreSettings();
+        $this->validateScheduleSettings();
         $this->validateObservabilitySettings();
+        $this->validateCustomOperations();
         $this->validateLogChannel();
         $this->validateUserModel();
         $this->validateTablePrefix();
@@ -397,6 +399,93 @@ final readonly class ConfigValidator
 
         if (! is_int($minSamples) || $minSamples < 2) {
             throw new ConfigurationException('checkpoint.observability.backup_duration_min_samples must be at least 2.');
+        }
+    }
+
+    private function validateScheduleSettings(): void
+    {
+        $config = $this->config->get('checkpoint.schedule', []);
+
+        if (! is_array($config)) {
+            throw new ConfigurationException('checkpoint.schedule must be an array.');
+        }
+
+        foreach ([
+            'logical_backup_enabled',
+            'health_check_enabled',
+            'recover_orphans_enabled',
+            'prune_enabled',
+            'without_overlapping',
+            'on_one_server',
+        ] as $key) {
+            if (! is_bool($config[$key] ?? null)) {
+                throw new ConfigurationException(sprintf('checkpoint.schedule.%s must be a boolean.', $key));
+            }
+        }
+
+        $dailyAt = $config['logical_backup_daily_at'] ?? null;
+
+        if (! is_string($dailyAt) || preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $dailyAt) !== 1) {
+            throw new ConfigurationException('checkpoint.schedule.logical_backup_daily_at must use HH:MM 24-hour format.');
+        }
+
+        $timezone = $config['logical_backup_timezone'] ?? null;
+
+        if (! is_string($timezone) || ! in_array($timezone, timezone_identifiers_list(), true)) {
+            throw new ConfigurationException('checkpoint.schedule.logical_backup_timezone must be a valid timezone identifier.');
+        }
+
+        foreach (['overlap_expires_at', 'prune_keep_days', 'prune_keep_failed_days'] as $key) {
+            if (! is_int($config[$key] ?? null) || $config[$key] < 1) {
+                throw new ConfigurationException(sprintf('checkpoint.schedule.%s must be greater than zero.', $key));
+            }
+        }
+    }
+
+    private function validateCustomOperations(): void
+    {
+        $operations = $this->config->get('checkpoint.custom_operations', []);
+
+        if (! is_array($operations)) {
+            throw new ConfigurationException('checkpoint.custom_operations must be an array.');
+        }
+
+        foreach ($operations as $name => $operation) {
+            $prefix = sprintf('checkpoint.custom_operations.%s', (string) $name);
+
+            if (! is_string($name) || trim($name) === '') {
+                throw new ConfigurationException('checkpoint.custom_operations keys must be non-empty strings.');
+            }
+
+            if (! is_array($operation)) {
+                throw new ConfigurationException(sprintf('%s must be an array.', $prefix));
+            }
+
+            if (! is_string($operation['label'] ?? null) || trim((string) $operation['label']) === '') {
+                throw new ConfigurationException(sprintf('%s.label must be a non-empty string.', $prefix));
+            }
+
+            if (! is_bool($operation['argument_required'] ?? null)) {
+                throw new ConfigurationException(sprintf('%s.argument_required must be a boolean.', $prefix));
+            }
+
+            $argumentHint = $operation['argument_hint'] ?? null;
+
+            if ($argumentHint !== null && (! is_string($argumentHint) || trim($argumentHint) === '')) {
+                throw new ConfigurationException(sprintf('%s.argument_hint must be null or a non-empty string.', $prefix));
+            }
+
+            $validator = $operation['argument_validator'] ?? null;
+
+            if ($validator !== null && ! is_callable($validator)) {
+                throw new ConfigurationException(sprintf('%s.argument_validator must be null or callable.', $prefix));
+            }
+
+            foreach (['destructive', 'exclusive'] as $flag) {
+                if (! is_bool($operation[$flag] ?? null)) {
+                    throw new ConfigurationException(sprintf('%s.%s must be a boolean.', $prefix, $flag));
+                }
+            }
         }
     }
 

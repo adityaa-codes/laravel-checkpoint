@@ -151,6 +151,12 @@ class TestCase extends Orchestra
                 ],
             ],
             'schedule' => [
+                'logical_backup_enabled' => true,
+                'logical_backup_daily_at' => '16:00',
+                'logical_backup_timezone' => 'UTC',
+                'health_check_enabled' => true,
+                'recover_orphans_enabled' => true,
+                'prune_enabled' => true,
                 'without_overlapping' => true,
                 'overlap_expires_at' => 180,
                 'on_one_server' => true,
