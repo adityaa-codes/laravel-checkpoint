@@ -383,16 +383,16 @@ Goal:
 Prove the package is safe under production stress.
 
 Status:
-- `[ ]` not started
+- `[x]` complete
 
 Tasks:
 
-- `[ ]` add large-dataset execution tests where feasible
-- `[ ]` add concurrency tests for unique backup operations
-- `[ ]` add tests for duplicate dispatch under multiple workers
-- `[ ]` add timeout / crash / partial-failure recovery tests
-- `[ ]` add resume-flow tests for pgBackRest backup retries
-- `[ ]` document operational load-testing procedure
+- `[x]` add large-dataset execution tests where feasible
+- `[x]` add concurrency tests for unique backup operations
+- `[x]` add tests for duplicate dispatch under multiple workers
+- `[x]` add timeout / crash / partial-failure recovery tests
+- `[x]` add resume-flow tests for pgBackRest backup retries
+- `[x]` document operational load-testing procedure
 
 Acceptance:
 

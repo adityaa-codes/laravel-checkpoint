@@ -268,6 +268,27 @@ Event hooks now include:
 Wire these events to your application listeners, metrics pipeline, or alerting
 provider to turn them into actual pages, notifications, or dashboards.
 
+### Operational Load Testing
+
+Use a non-production queue and database clone when validating long-running or
+partially failing workloads:
+
+1. enqueue a burst of non-destructive work such as `pgbackrest_info`,
+   `pgbackrest_check`, and `logical_backup`, plus at least two concurrent
+   exclusive backup requests
+2. run workers with the same timeout model used in production and confirm that
+   duplicate exclusive work is skipped rather than re-executed
+3. let a subset of runs age past `DB_OPS_QUEUE_ORPHAN_THRESHOLD`, then run
+   `php artisan db-ops:recover-orphans` and verify the lag events, stale-age
+   payloads, and re-dispatch logs
+4. simulate a timed-out worker and verify `php artisan db-ops:health-check`
+   marks the run failed with an alertable `BackupFailed` event
+5. run `php artisan db-ops:status --summary` and `php artisan db-ops:doctor
+   --format=json` to confirm backlog, freshness, and anomaly signals are still
+   coherent under load
+6. for pgBackRest backup retries, confirm retry command lines still include
+   `--resume` and `--start-fast` before declaring the environment ready
+
 ### pgDump Large-Export Configuration
 
 The bundled `pgdump` driver defaults to PostgreSQL directory format so large exports use parallel dump jobs:
