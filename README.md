@@ -66,6 +66,13 @@ DB_OPS_PGDUMP_FORMAT=directory
 DB_OPS_PGDUMP_JOBS=4
 DB_OPS_PGDUMP_COMPRESS_LEVEL=6
 DB_OPS_PGDUMP_OUTPUT_DIR=/var/app/checkpoint/logical-exports
+DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS=staging
+DB_OPS_RESTORE_ALLOWED_DATABASES=checkpoint_shadow
+DB_OPS_RESTORE_REQUIRE_CONFIRMATION=true
+DB_OPS_RESTORE_CONFIRMATION_PHRASE=RESTORE
+DB_OPS_RESTORE_CONFIRMATION=
+DB_OPS_RESTORE_ALLOW_IN_CI=true
+DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=true
 ```
 
 Command templates are configured as space-delimited argv-style strings and are parsed into Symfony Process argument arrays. User input is validated before it reaches the driver.
@@ -203,6 +210,38 @@ Operational notes:
 - `db-ops:doctor` reports the active repo target, TLS verification state, and encryption mode
 - persisted `command_line` values redact S3 keys, S3 secrets, and cipher passphrases
 - doctor output never prints raw repository secrets
+
+### Restore Safety Guardrails
+
+Restore operations are now gated by explicit safety config before any shell,
+`pg_restore`, or pgBackRest restore command runs.
+
+Safety controls:
+
+- `restore.allowed_environments`: allowlist for environments where restore commands may run
+- `restore.allowed_databases`: optional allowlist for database names that may receive restore traffic
+- `restore.require_confirmation`: requires `restore.confirmation_token` to match `restore.confirmation_phrase` outside CI
+- `restore.allow_in_ci`: lets CI bypass the confirmation token when explicitly enabled
+- `restore.require_verified_backup`: requires a prior `last_known_good_at` signal before restore execution
+
+Example guarded restore env:
+
+```env
+DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS=staging
+DB_OPS_RESTORE_ALLOWED_DATABASES=checkpoint_shadow
+DB_OPS_RESTORE_REQUIRE_CONFIRMATION=true
+DB_OPS_RESTORE_CONFIRMATION_PHRASE=RESTORE
+DB_OPS_RESTORE_CONFIRMATION=RESTORE
+DB_OPS_RESTORE_ALLOW_IN_CI=true
+DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=true
+```
+
+Behavior notes:
+
+- `logical_restore_file`, `logical_restore_latest`, `pitr_restore`, and `pgbackrest_restore` all use the same guard service
+- `pitr_restore` now rejects invalid restore target timestamps before command execution
+- restore commands fail early when the current environment or target database is not allowlisted
+- when verified-backup enforcement is enabled, restore commands require a matching `last_known_good_at` signal
 
 ### pgDump Large-Export Configuration
 

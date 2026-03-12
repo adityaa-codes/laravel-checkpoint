@@ -38,6 +38,7 @@ This plan is based on:
 - `[ ]` scheduler overlap and cluster guards are now implemented
 - `[x]` command runs now persist structured backup state, verification state, and last-known-good timestamps
 - `[x]` pgBackRest now supports typed repository configuration for local and S3-backed storage, including TLS and encryption settings
+- `[x]` restore operations now enforce confirmation, environment/database allowlists, PITR target validation, and optional verified-backup signals
 - `[x]` huge-database logical export strategy now exists through the dedicated `pgdump` driver
 
 ## Key Learnings
@@ -339,16 +340,16 @@ Goal:
 Reduce blast radius for destructive operations.
 
 Status:
-- `[ ]` not started
+- `[x]` complete
 
 Tasks:
 
-- `[ ]` make restore operations require explicit confirmation strategy in non-CI contexts
-- `[ ]` add restore target validation for PITR-style operations
-- `[ ]` require a valid pre-restore verification signal before restore when configured
-- `[ ]` add environment-level restore safety flags
-- `[ ]` add guardrails for restoring into the wrong database or environment
-- `[ ]` add failure-path tests for all restore blocks
+- `[x]` make restore operations require explicit confirmation strategy in non-CI contexts
+- `[x]` add restore target validation for PITR-style operations
+- `[x]` require a valid pre-restore verification signal before restore when configured
+- `[x]` add environment-level restore safety flags
+- `[x]` add guardrails for restoring into the wrong database or environment
+- `[x]` add failure-path tests for all restore blocks
 
 Acceptance:
 
