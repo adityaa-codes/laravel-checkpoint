@@ -249,6 +249,8 @@ Behavior notes:
 Operational surfaces now include:
 
 - `db-ops:doctor --format=json` for machine-readable health checks
+- `db-ops:doctor` freshness warnings for stale last-known-good backups
+- `db-ops:doctor` duration anomaly warnings for unusually slow backup runs
 - structured log context across drivers, queue job failures, and health checks
 
 Structured log fields include `run_id`, `driver`, `backup_type`,
