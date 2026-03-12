@@ -50,6 +50,63 @@ it('uses the configured driver to process a command run', function (): void {
     Event::assertNotDispatched(BackupFailed::class);
 });
 
+it('skips duplicate delivery when the command run is already running', function (): void {
+    Log::shouldReceive('channel->warning')
+        ->once()
+        ->with('ProcessCommandRunJob skipped duplicate delivery', Mockery::on(
+            fn (array $context): bool => $context['run_id'] > 0
+                && $context['operation'] === 'logical_backup'
+                && $context['driver'] === 'fake'
+                && $context['status'] === 'running'
+        ));
+
+    $driver = new FakeDriver;
+
+    app()->instance(FakeDriver::class, $driver);
+    config()->set('checkpoint.driver', 'fake');
+    config()->set('checkpoint.drivers.fake.class', FakeDriver::class);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Running,
+        'attempts' => 1,
+        'started_at' => now()->subMinute(),
+    ]);
+
+    (new ProcessCommandRunJob($run))->handle();
+
+    expect($driver->calls())->toHaveCount(0);
+});
+
+it('skips duplicate delivery after the command run has already completed', function (): void {
+    Log::shouldReceive('channel->warning')
+        ->once()
+        ->with('ProcessCommandRunJob skipped duplicate delivery', Mockery::on(
+            fn (array $context): bool => $context['run_id'] > 0
+                && $context['operation'] === 'pgbackrest_info'
+                && $context['driver'] === 'fake'
+                && $context['status'] === 'succeeded'
+        ));
+
+    $driver = new FakeDriver;
+
+    app()->instance(FakeDriver::class, $driver);
+    config()->set('checkpoint.driver', 'fake');
+    config()->set('checkpoint.drivers.fake.class', FakeDriver::class);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'pgbackrest_info',
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 1,
+        'exit_code' => 0,
+        'finished_at' => now()->subMinute(),
+    ]);
+
+    (new ProcessCommandRunJob($run))->handle();
+
+    expect($driver->calls())->toHaveCount(0);
+});
+
 it('returns an exclusive unique id for exclusive operations', function (): void {
     $run = CommandRun::query()->create([
         'operation' => 'logical_backup',

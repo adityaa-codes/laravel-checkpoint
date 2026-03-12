@@ -35,7 +35,18 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
 
     public function handle(): void
     {
-        $this->resolveDriver()->execute($this->run->fresh() ?? $this->run);
+        $run = $this->run->fresh() ?? $this->run;
+
+        if ($run->status !== \AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus::Pending) {
+            Log::channel(config('checkpoint.log_channel', 'stack'))
+                ->warning('ProcessCommandRunJob skipped duplicate delivery', $this->logContext($run, [
+                    'status' => $run->status->value,
+                ]));
+
+            return;
+        }
+
+        $this->resolveDriver()->execute($run);
     }
 
     public function uniqueId(): string
