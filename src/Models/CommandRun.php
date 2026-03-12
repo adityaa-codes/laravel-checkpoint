@@ -178,10 +178,18 @@ class CommandRun extends Model
 
     public function markAsRunning(): self
     {
-        $this->forceFill([
-            'status' => CommandRunStatus::Running,
-            'started_at' => now(),
-        ])->save();
+        $now = now();
+
+        static::query()
+            ->whereKey($this->getKey())
+            ->where('status', CommandRunStatus::Pending)
+            ->update([
+                'status' => CommandRunStatus::Running,
+                'started_at' => $now,
+                'updated_at' => $now,
+            ]);
+
+        $this->refresh();
 
         return $this;
     }
@@ -190,13 +198,19 @@ class CommandRun extends Model
     {
         $finishedAt = now();
 
-        $this->forceFill([
-            'status' => CommandRunStatus::Succeeded,
-            'exit_code' => $exitCode,
-            'command_output' => $output,
-            'finished_at' => $finishedAt,
-            ...$this->timingMetrics($finishedAt),
-        ])->save();
+        static::query()
+            ->whereKey($this->getKey())
+            ->where('status', CommandRunStatus::Running)
+            ->update([
+                'status' => CommandRunStatus::Succeeded,
+                'exit_code' => $exitCode,
+                'command_output' => $output,
+                'finished_at' => $finishedAt,
+                'updated_at' => $finishedAt,
+                ...$this->timingMetrics($finishedAt),
+            ]);
+
+        $this->refresh();
 
         return $this;
     }
@@ -205,13 +219,19 @@ class CommandRun extends Model
     {
         $finishedAt = now();
 
-        $this->forceFill([
-            'status' => CommandRunStatus::Failed,
-            'exit_code' => $exitCode,
-            'command_output' => $output,
-            'finished_at' => $finishedAt,
-            ...$this->timingMetrics($finishedAt),
-        ])->save();
+        static::query()
+            ->whereKey($this->getKey())
+            ->whereIn('status', [CommandRunStatus::Pending, CommandRunStatus::Running])
+            ->update([
+                'status' => CommandRunStatus::Failed,
+                'exit_code' => $exitCode,
+                'command_output' => $output,
+                'finished_at' => $finishedAt,
+                'updated_at' => $finishedAt,
+                ...$this->timingMetrics($finishedAt),
+            ]);
+
+        $this->refresh();
 
         return $this;
     }

@@ -29,6 +29,11 @@ final class PgBackRestDriver implements BackupDriver
             $displayCommandLine = $this->redactCommandLine($process->getCommandLine());
 
             $run->markAsRunning();
+
+            if ($run->status !== \AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus::Running) {
+                return;
+            }
+
             $run->forceFill([
                 'command_line' => $displayCommandLine,
             ])->save();

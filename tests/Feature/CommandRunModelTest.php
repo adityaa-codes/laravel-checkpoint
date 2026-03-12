@@ -76,10 +76,37 @@ it('updates status metadata through markAs helper methods', function (): void {
     $run->markAsFailed(2, 'broken');
     $run->refresh();
 
+    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+        ->and($run->exit_code)->toBe(0)
+        ->and($run->command_output)->toBe('done')
+        ->and($run->finished_at?->toDateTimeString())->toBe('2026-03-11 12:05:00');
+
+    Date::setTestNow();
+});
+
+it('claims pending runs atomically and does not reopen terminal runs', function (): void {
+    Date::setTestNow('2026-03-11 12:00:00');
+
+    $run = CommandRun::factory()->pending()->create();
+
+    $run->markAsRunning();
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Running);
+
+    $staleCopy = CommandRun::query()->findOrFail($run->getKey());
+
+    $run->markAsFailed(1, 'timed out');
+    $run->refresh();
+
     expect($run->status)->toBe(CommandRunStatus::Failed)
-        ->and($run->exit_code)->toBe(2)
-        ->and($run->command_output)->toBe('broken')
-        ->and($run->finished_at?->toDateTimeString())->toBe('2026-03-11 12:10:00');
+        ->and($run->command_output)->toBe('timed out');
+
+    $staleCopy->markAsSucceeded(0, 'late success');
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Failed)
+        ->and($run->command_output)->toBe('timed out');
 
     Date::setTestNow();
 });

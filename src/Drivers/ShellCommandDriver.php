@@ -27,6 +27,7 @@ final class ShellCommandDriver implements BackupDriver
         if ($this->shouldCreatePreRestoreSnapshot($run)) {
             $snapshotRun = $this->createSnapshotRun($run);
             $this->runProcess($snapshotRun);
+            $snapshotRun = $snapshotRun->fresh() ?? $snapshotRun;
 
             if ($snapshotRun->status === CommandRunStatus::Failed) {
                 $message = __('messages.errors.pre_restore_failed');
@@ -54,6 +55,11 @@ final class ShellCommandDriver implements BackupDriver
             $plannedMetadata = $this->plannedMetadata($run);
 
             $run->markAsRunning();
+
+            if ($run->status !== CommandRunStatus::Running) {
+                return;
+            }
+
             $run->forceFill([
                 'command_line' => $process->getCommandLine(),
             ])->save();

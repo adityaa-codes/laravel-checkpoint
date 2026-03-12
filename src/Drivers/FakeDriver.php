@@ -66,6 +66,11 @@ final class FakeDriver implements BackupDriver
         ];
 
         $run->markAsRunning();
+
+        if ($run->status !== \AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus::Running) {
+            return;
+        }
+
         event(new BackupStarted($run));
 
         if ($outcome['type'] === 'throw') {
