@@ -75,6 +75,12 @@ return [
     ],
     'output' => [
         'max_persisted_bytes' => (int) $env('DB_OPS_OUTPUT_MAX_PERSISTED_BYTES', 65536),
+        'storage' => $env('DB_OPS_OUTPUT_STORAGE', 'database'),
+        'filesystem' => [
+            'disk' => $env('DB_OPS_OUTPUT_FILESYSTEM_DISK', 'local'),
+            'path_prefix' => $env('DB_OPS_OUTPUT_FILESYSTEM_PATH_PREFIX', 'checkpoint/command-output'),
+            'inline_bytes' => (int) $env('DB_OPS_OUTPUT_FILESYSTEM_INLINE_BYTES', 2048),
+        ],
     ],
     'drivers' => [
         'shell' => [

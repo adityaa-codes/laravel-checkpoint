@@ -89,6 +89,12 @@ class TestCase extends Orchestra
             ],
             'output' => [
                 'max_persisted_bytes' => 65536,
+                'storage' => 'database',
+                'filesystem' => [
+                    'disk' => 'local',
+                    'path_prefix' => 'checkpoint/command-output',
+                    'inline_bytes' => 2048,
+                ],
             ],
             'drivers' => [
                 'shell' => [
@@ -183,6 +189,12 @@ class TestCase extends Orchestra
         $app['config']->set('cache.stores.array', [
             'driver' => 'array',
             'serialize' => false,
+        ]);
+        $app['config']->set('filesystems.default', 'local');
+        $app['config']->set('filesystems.disks.local', [
+            'driver' => 'local',
+            'root' => storage_path('app'),
+            'throw' => false,
         ]);
     }
 

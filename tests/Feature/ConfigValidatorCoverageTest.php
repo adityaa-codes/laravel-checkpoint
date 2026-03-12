@@ -227,6 +227,30 @@ it('rejects an output capture limit that is too large', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.output.max_persisted_bytes must not exceed 1048576.');
 });
 
+it('rejects an unsupported output storage backend', function (): void {
+    config()->set('checkpoint.output.storage', 's3');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.output.storage must be either database or filesystem.');
+});
+
+it('rejects filesystem inline bytes larger than the captured output limit', function (): void {
+    config()->set('checkpoint.output.storage', 'filesystem');
+    config()->set('checkpoint.output.max_persisted_bytes', 64);
+    config()->set('checkpoint.output.filesystem.inline_bytes', 65);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.output.filesystem.inline_bytes must not exceed checkpoint.output.max_persisted_bytes.');
+});
+
+it('rejects a missing filesystem output disk', function (): void {
+    config()->set('checkpoint.output.storage', 'filesystem');
+    config()->set('checkpoint.output.filesystem.disk', 'missing-disk');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.output.filesystem.disk [missing-disk] is not configured.');
+});
+
 it('rejects pgdump parallel jobs for non-directory formats', function (): void {
     config()->set('checkpoint.drivers.pgdump.format', 'custom');
     config()->set('checkpoint.drivers.pgdump.jobs', 4);

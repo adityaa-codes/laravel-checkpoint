@@ -11,6 +11,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Log;
@@ -24,6 +25,8 @@ final class PgBackRestDriver implements BackupDriver
     public function execute(CommandRun $run): void
     {
         $tempConfigPath = null;
+        $storedOutputMetadata = null;
+        $outputSession = null;
 
         try {
             $process = $this->buildProcess($run);
@@ -49,12 +52,29 @@ final class PgBackRestDriver implements BackupDriver
                 'command_line' => $displayCommandLine,
             ]));
 
-            $capturedOutput = $this->outputCapture()->captureProcess($process);
+            $outputSession = $this->outputStore()->startCapture($run);
+            $capturedOutput = $this->outputCapture()->captureProcess(
+                $process,
+                fn (string $chunk, string $type): null => $this->outputStore()->appendCaptureChunk($outputSession, $chunk),
+            );
             $output = $capturedOutput['output'];
             $exitCode = $process->getExitCode() ?? -1;
             $summary = $this->operationSummary($run->operation, $output, $exitCode);
             $normalizedOutput = $this->normalizeOutput($summary, $output);
-            $completedMetadata = $this->completedMetadata($run, $plannedMetadata, $summary, $exitCode, $capturedOutput['metadata']);
+            $storedOutput = $this->outputStore()->finishCapture($run, $normalizedOutput, $outputSession);
+            $outputSession = null;
+            $storedOutputMetadata = $storedOutput['metadata']['output_storage'] ?? null;
+            $normalizedOutput = $storedOutput['command_output'];
+            $completedMetadata = $this->completedMetadata(
+                $run,
+                $plannedMetadata,
+                $summary,
+                $exitCode,
+                [
+                    ...$capturedOutput['metadata'],
+                    ...$storedOutput['metadata'],
+                ],
+            );
 
             $run->forceFill([
                 'command_output' => $normalizedOutput,
@@ -83,6 +103,12 @@ final class PgBackRestDriver implements BackupDriver
                 'exit_code' => $exitCode,
             ]));
         } catch (Throwable $exception) {
+            if (is_array($storedOutputMetadata)) {
+                $this->outputStore()->cleanupMetadata($storedOutputMetadata);
+            }
+
+            $this->outputStore()->discardCaptureSession($outputSession);
+
             $run->markAsFailed(output: $exception->getMessage());
             $run = $run->fresh() ?? $run;
             event(new BackupFailed($run, -1, $exception->getMessage(), $exception));
@@ -708,5 +734,10 @@ final class PgBackRestDriver implements BackupDriver
     private function outputCapture(): CommandOutputCapture
     {
         return resolve(CommandOutputCapture::class);
+    }
+
+    private function outputStore(): CommandOutputStore
+    {
+        return resolve(CommandOutputStore::class);
     }
 }

@@ -34,18 +34,21 @@ final readonly class CommandOutputCapture
     /**
      * @return array{output:string,metadata:array<string,mixed>}
      */
-    public function captureProcess(Process $process): array
+    public function captureProcess(Process $process, ?callable $tap = null): array
     {
         $maxBytes = $this->maxPersistedBytes();
         $prefix = '';
         $suffix = '';
         $originalBytes = 0;
 
-        $process->run(function (string $type, string $chunk) use (&$prefix, &$suffix, &$originalBytes, $maxBytes): void {
+        $process->run(function (string $type, string $chunk) use (&$prefix, &$suffix, &$originalBytes, $maxBytes, $tap): void {
             if ($chunk === '') {
                 return;
             }
 
+            if ($tap !== null) {
+                $tap($chunk, $type);
+            }
             $originalBytes += strlen($chunk);
 
             if (strlen($prefix) < $maxBytes) {

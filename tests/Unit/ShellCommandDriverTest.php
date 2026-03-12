@@ -11,6 +11,7 @@ use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Psr\Log\LoggerInterface;
 
 it('executes argv tokens without shell interpretation', function (): void {
@@ -244,4 +245,49 @@ it('truncates persisted shell command output and records capture metadata', func
                 'max_persisted_bytes' => 40,
             ],
         ]);
+});
+
+it('externalizes shell command output to filesystem storage with an inline preview', function (): void {
+    Storage::fake('local');
+    Event::fake([BackupCompleted::class]);
+
+    config()->set('checkpoint.output.max_persisted_bytes', 64);
+    config()->set('checkpoint.output.storage', 'filesystem');
+    config()->set('checkpoint.output.filesystem.disk', 'local');
+    config()->set('checkpoint.output.filesystem.path_prefix', 'checkpoint/test-output');
+    config()->set('checkpoint.output.filesystem.inline_bytes', 24);
+    config()->set('checkpoint.drivers.shell.commands.logical_backup', 'printf '.str_repeat('A', 120));
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new ShellCommandDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+        ->and(strlen((string) $run->command_output))->toBeLessThanOrEqual(24)
+        ->and($run->metadata)->toMatchArray([
+            'output_capture' => [
+                'truncated' => true,
+                'original_bytes' => 120,
+                'persisted_bytes' => 64,
+                'max_persisted_bytes' => 64,
+            ],
+            'output_storage' => [
+                'driver' => 'filesystem',
+                'externalized' => true,
+                'disk' => 'local',
+                'path' => 'checkpoint/test-output/command-run-'.$run->getKey().'.log',
+                'stored_bytes' => 120,
+                'inline_bytes' => strlen((string) $run->command_output),
+            ],
+        ])
+        ->and($run->resolvedCommandOutput())->toBe(str_repeat('A', 120));
+
+    Storage::disk('local')->assertExists('checkpoint/test-output/command-run-'.$run->getKey().'.log');
+    Event::assertDispatched(BackupCompleted::class, fn (BackupCompleted $event): bool => $event->output === (string) $run->command_output);
 });

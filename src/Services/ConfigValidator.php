@@ -494,6 +494,45 @@ final readonly class ConfigValidator
         if ($maxPersistedBytes > 1048576) {
             throw new ConfigurationException('checkpoint.output.max_persisted_bytes must not exceed 1048576.');
         }
+
+        $storage = $config['storage'] ?? null;
+
+        if (! is_string($storage) || ! in_array($storage, ['database', 'filesystem'], true)) {
+            throw new ConfigurationException('checkpoint.output.storage must be either database or filesystem.');
+        }
+
+        $filesystem = $config['filesystem'] ?? [];
+
+        if (! is_array($filesystem)) {
+            throw new ConfigurationException('checkpoint.output.filesystem must be an array.');
+        }
+
+        $inlineBytes = $filesystem['inline_bytes'] ?? null;
+
+        if (! is_int($inlineBytes) || $inlineBytes < 0) {
+            throw new ConfigurationException('checkpoint.output.filesystem.inline_bytes must be zero or greater.');
+        }
+
+        if ($inlineBytes > $maxPersistedBytes) {
+            throw new ConfigurationException('checkpoint.output.filesystem.inline_bytes must not exceed checkpoint.output.max_persisted_bytes.');
+        }
+
+        if ($storage === 'filesystem') {
+            $disk = $filesystem['disk'] ?? null;
+            $pathPrefix = $filesystem['path_prefix'] ?? null;
+
+            if (! is_string($disk) || trim($disk) === '') {
+                throw new ConfigurationException('checkpoint.output.filesystem.disk must be a non-empty string.');
+            }
+
+            if (! array_key_exists($disk, (array) config('filesystems.disks', []))) {
+                throw new ConfigurationException(sprintf('checkpoint.output.filesystem.disk [%s] is not configured.', $disk));
+            }
+
+            if (! is_string($pathPrefix) || trim($pathPrefix) === '') {
+                throw new ConfigurationException('checkpoint.output.filesystem.path_prefix must be a non-empty string.');
+            }
+        }
     }
 
     private function validateScheduleSettings(): void

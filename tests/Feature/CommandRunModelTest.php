@@ -7,6 +7,7 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Foundation\Auth\User;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\Storage;
 
 it('filters command runs through the status scopes', function (): void {
     $pendingRun = CommandRun::factory()->pending()->create();
@@ -197,4 +198,45 @@ it('exposes a polymorphic requester relation', function (): void {
     ]);
 
     expect($run->requestedBy())->toBeInstanceOf(MorphTo::class);
+});
+
+it('prunes externalized command output artifacts with the command run rows', function (): void {
+    Storage::fake('local');
+
+    config()->set('checkpoint.output.storage', 'filesystem');
+    config()->set('checkpoint.output.filesystem.disk', 'local');
+    config()->set('checkpoint.output.filesystem.path_prefix', 'checkpoint/pruned-output');
+    config()->set('checkpoint.schedule.prune_keep_days', 30);
+    config()->set('checkpoint.schedule.prune_keep_failed_days', 365);
+
+    $prunable = CommandRun::factory()->succeeded()->create([
+        'created_at' => Date::now()->subDays(45),
+        'updated_at' => Date::now()->subDays(45),
+        'command_output' => 'preview',
+        'metadata' => [
+            'output_storage' => [
+                'driver' => 'filesystem',
+                'externalized' => true,
+                'disk' => 'local',
+                'path' => 'checkpoint/pruned-output/command-run-100.log',
+                'stored_bytes' => 128,
+                'inline_bytes' => 7,
+            ],
+        ],
+    ]);
+
+    Storage::disk('local')->put('checkpoint/pruned-output/command-run-100.log', 'full artifact');
+
+    $retained = CommandRun::factory()->failed()->create([
+        'created_at' => Date::now()->subDays(5),
+        'updated_at' => Date::now()->subDays(5),
+    ]);
+
+    $deleted = (new CommandRun)->pruneAll();
+
+    expect($deleted)->toBe(1)
+        ->and(CommandRun::query()->find($prunable->getKey()))->toBeNull()
+        ->and(CommandRun::query()->find($retained->getKey()))->not->toBeNull();
+
+    Storage::disk('local')->assertMissing('checkpoint/pruned-output/command-run-100.log');
 });

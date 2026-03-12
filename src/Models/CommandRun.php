@@ -6,10 +6,10 @@ namespace AdityaaCodes\LaravelCheckpoint\Models;
 
 use AdityaaCodes\LaravelCheckpoint\Database\Factories\CommandRunFactory;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
@@ -52,8 +52,6 @@ class CommandRun extends Model
 {
     /** @use HasFactory<CommandRunFactory> */
     use HasFactory;
-
-    use MassPrunable;
 
     /** @var array<int, string> */
     protected $guarded = [];
@@ -315,6 +313,38 @@ class CommandRun extends Model
             });
     }
 
+    public function pruneAll(): int
+    {
+        $deleted = 0;
+
+        $this->prunable()
+            ->select(['id', 'metadata'])
+            ->orderBy('id')
+            ->chunkById(250, function ($runs) use (&$deleted): void {
+                $ids = [];
+
+                foreach ($runs as $run) {
+                    if (! $run instanceof self) {
+                        continue;
+                    }
+
+                    $this->outputStore()->cleanup($run);
+                    $ids[] = $run->getKey();
+                }
+
+                if ($ids !== []) {
+                    $deleted += static::query()->whereKey($ids)->delete();
+                }
+            });
+
+        return $deleted;
+    }
+
+    public function resolvedCommandOutput(): ?string
+    {
+        return $this->outputStore()->resolve($this);
+    }
+
     /**
      * @return array{duration_seconds:int|null,throughput_bytes_per_second:int|null}
      */
@@ -336,5 +366,10 @@ class CommandRun extends Model
             'duration_seconds' => $durationSeconds,
             'throughput_bytes_per_second' => $throughput,
         ];
+    }
+
+    private function outputStore(): CommandOutputStore
+    {
+        return resolve(CommandOutputStore::class);
     }
 }
