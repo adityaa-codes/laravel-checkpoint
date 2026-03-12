@@ -284,6 +284,8 @@ events continue to reflect stuck pending work instead of lease timestamps.
 `QueueLagDetected::staleRunIds` is intentionally capped by
 `DB_OPS_QUEUE_ORPHAN_EVENT_MAX_IDS`; use `staleRunCount` as the authoritative
 total and treat the ids array as a sample for debugging.
+Observable event payloads expose a `version` field so downstream consumers can
+branch safely if new fields are added later. Current payload version: `1`.
 
 Wire these events to your application listeners, metrics pipeline, or alerting
 provider to turn them into actual pages, notifications, or dashboards.
