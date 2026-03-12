@@ -10,14 +10,22 @@ use Illuminate\Support\Carbon;
 
 final class StatusCommand extends Command
 {
-    protected $signature = 'db-ops:status {--limit=10} {--summary : Show an operator-facing summary instead of recent runs.}';
+    protected $signature = 'db-ops:status {--limit=10} {--summary : Show an operator-facing summary instead of recent runs.} {--format=table : Output format: table or json.}';
 
     protected $description = 'Show recent checkpoint command runs.';
 
     public function handle(): int
     {
+        $format = (string) $this->option('format');
+
+        if (! in_array($format, ['table', 'json'], true)) {
+            $this->error('The --format option must be table or json.');
+
+            return self::FAILURE;
+        }
+
         if ((bool) $this->option('summary')) {
-            $this->renderSummary();
+            $this->renderSummary($format);
 
             return self::SUCCESS;
         }
@@ -29,25 +37,34 @@ final class StatusCommand extends Command
             ->limit($limit)
             ->get();
 
-        $this->table(
-            ['ID', 'Operation', 'Status', 'Exit', 'Backup', 'Verify', 'Last Good', 'Started', 'Finished'],
-            $runs->map(fn (CommandRun $run): array => [
-                (string) $run->getKey(),
-                $run->operation,
-                $this->coloredStatus((string) $run->status->value),
-                $run->exit_code !== null ? (string) $run->exit_code : '-',
-                $this->backupSummary($run),
-                $run->verification_state ?? '-',
-                $run->last_known_good_at?->format('Y-m-d H:i:s') ?? '-',
-                $run->started_at?->format('Y-m-d H:i:s') ?? '-',
-                $run->finished_at?->format('Y-m-d H:i:s') ?? '-',
-            ])->all(),
-        );
+        if ($format === 'json') {
+            $this->line(json_encode([
+                'mode' => 'runs',
+                'limit' => $limit,
+                'runs' => $runs->map(fn (CommandRun $run): array => $this->runPayload($run))->all(),
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
+            return self::SUCCESS;
+        }
+
+        $this->table([
+            'ID', 'Operation', 'Status', 'Exit', 'Backup', 'Verify', 'Last Good', 'Started', 'Finished',
+        ], $runs->map(fn (CommandRun $run): array => [
+            (string) $run->getKey(),
+            $run->operation,
+            $this->coloredStatus((string) $run->status->value),
+            $run->exit_code !== null ? (string) $run->exit_code : '-',
+            $this->backupSummary($run),
+            $run->verification_state ?? '-',
+            $run->last_known_good_at?->format('Y-m-d H:i:s') ?? '-',
+            $run->started_at?->format('Y-m-d H:i:s') ?? '-',
+            $run->finished_at?->format('Y-m-d H:i:s') ?? '-',
+        ])->all());
 
         return self::SUCCESS;
     }
 
-    private function renderSummary(): void
+    private function renderSummary(string $format): void
     {
         $lastKnownGood = CommandRun::query()
             ->whereNotNull('last_known_good_at')
@@ -67,17 +84,32 @@ final class StatusCommand extends Command
             ->latest('id')
             ->first();
 
-        $this->table(
-            ['Signal', 'Value'],
-            [
-                ['Pending runs', (string) CommandRun::query()->pending()->count()],
-                ['Running runs', (string) CommandRun::query()->running()->count()],
-                ['Failed runs (24h)', (string) CommandRun::query()->failed()->where('created_at', '>=', now()->subDay())->count()],
-                ['Last known good backup', $this->summaryRunValue($lastKnownGood, 'last_known_good_at')],
-                ['Latest verified backup', $this->summaryRunValue($latestVerified, 'verified_at')],
-                ['Latest restore failure', $this->restoreFailureSummary($latestRestoreFailure)],
-            ],
-        );
+        $summary = [
+            'pending_runs' => CommandRun::query()->pending()->count(),
+            'running_runs' => CommandRun::query()->running()->count(),
+            'failed_runs_24h' => CommandRun::query()->failed()->where('created_at', '>=', now()->subDay())->count(),
+            'last_known_good_backup' => $this->summarySignalPayload($lastKnownGood, 'last_known_good_at'),
+            'latest_verified_backup' => $this->summarySignalPayload($latestVerified, 'verified_at'),
+            'latest_restore_failure' => $this->restoreFailurePayload($latestRestoreFailure),
+        ];
+
+        if ($format === 'json') {
+            $this->line(json_encode([
+                'mode' => 'summary',
+                'summary' => $summary,
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
+            return;
+        }
+
+        $this->table(['Signal', 'Value'], [
+            ['Pending runs', (string) $summary['pending_runs']],
+            ['Running runs', (string) $summary['running_runs']],
+            ['Failed runs (24h)', (string) $summary['failed_runs_24h']],
+            ['Last known good backup', $this->summaryRunValue($lastKnownGood, 'last_known_good_at')],
+            ['Latest verified backup', $this->summaryRunValue($latestVerified, 'verified_at')],
+            ['Latest restore failure', $this->restoreFailureSummary($latestRestoreFailure)],
+        ]);
     }
 
     private function coloredStatus(string $status): string
@@ -159,5 +191,70 @@ final class StatusCommand extends Command
         }
 
         return sprintf('%s at %s', $summary, $run->finished_at->format('Y-m-d H:i:s'));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function runPayload(CommandRun $run): array
+    {
+        return [
+            'id' => (int) $run->getKey(),
+            'operation' => $run->operation,
+            'status' => (string) $run->status->value,
+            'exit_code' => $run->exit_code,
+            'backup' => $this->backupSummary($run),
+            'verification_state' => $run->verification_state,
+            'last_known_good_at' => $run->last_known_good_at?->format('Y-m-d H:i:s'),
+            'started_at' => $run->started_at?->format('Y-m-d H:i:s'),
+            'finished_at' => $run->finished_at?->format('Y-m-d H:i:s'),
+        ];
+    }
+
+    /**
+     * @return array{label:string,timestamp:string|null,operation:string|null}
+     */
+    private function summarySignalPayload(?CommandRun $run, string $timestampField): array
+    {
+        if (! $run instanceof CommandRun) {
+            return [
+                'label' => '-',
+                'timestamp' => null,
+                'operation' => null,
+            ];
+        }
+
+        /** @var Carbon|null $timestamp */
+        $timestamp = $run->{$timestampField};
+
+        return [
+            'label' => $this->summaryRunValue($run, $timestampField),
+            'timestamp' => $timestamp?->format('Y-m-d H:i:s'),
+            'operation' => $run->operation,
+        ];
+    }
+
+    /**
+     * @return array{label:string,timestamp:string|null,operation:string|null,target:string|null}
+     */
+    private function restoreFailurePayload(?CommandRun $run): array
+    {
+        if (! $run instanceof CommandRun) {
+            return [
+                'label' => '-',
+                'timestamp' => null,
+                'operation' => null,
+                'target' => null,
+            ];
+        }
+
+        $target = $run->restore_target ?? $run->argument_text;
+
+        return [
+            'label' => $this->restoreFailureSummary($run),
+            'timestamp' => $run->finished_at?->format('Y-m-d H:i:s'),
+            'operation' => $run->operation,
+            'target' => $target,
+        ];
     }
 }
