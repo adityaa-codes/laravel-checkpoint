@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "surface": "status",
+  "mode": "summary",
+  "summary": {
+    "pending_runs": 1,
+    "running_runs": 0,
+    "failed_runs_24h": 1,
+    "last_known_good_backup": {
+      "label": "full:20260311-010101F at 2026-03-11 11:50:00",
+      "timestamp": "2026-03-11 11:50:00",
+      "operation": "pgbackrest_backup_full"
+    },
+    "latest_verified_backup": {
+      "label": "full:20260311-010101F at 2026-03-11 11:55:00",
+      "timestamp": "2026-03-11 11:55:00",
+      "operation": "pgbackrest_backup_full"
+    },
+    "latest_backup_drill": {
+      "label": "drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00",
+      "timestamp": "2026-03-11 09:00:00",
+      "run_uuid": "drill-fail-001",
+      "overall_result": "fail",
+      "executed_by": "ops-user"
+    },
+    "latest_failed_backup_drill": {
+      "label": "drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00",
+      "timestamp": "2026-03-11 09:00:00",
+      "run_uuid": "drill-fail-001",
+      "overall_result": "fail",
+      "executed_by": "ops-user"
+    },
+    "backup_drill_pass_rate": {
+      "label": "0/1 (0.0%)",
+      "window_days": 30,
+      "total": 1,
+      "passing": 0,
+      "pass_rate_percent": 0
+    },
+    "latest_restore_run": {
+      "label": "logical_restore_file [failed] (nightly.sql) {confirm=token, verified_run=2} at 2026-03-11 11:42:00",
+      "timestamp": "2026-03-11 11:42:00",
+      "operation": "logical_restore_file",
+      "status": "failed",
+      "target": "nightly.sql",
+      "audit": {
+        "environment": "testing",
+        "database": ":memory:",
+        "target": "nightly.sql",
+        "confirmation_required": true,
+        "confirmation_satisfied_via": "token",
+        "verified_backup_required": true,
+        "verified_signal_run_id": 2
+      }
+    },
+    "latest_restore_failure": {
+      "label": "logical_restore_file (nightly.sql) at 2026-03-11 11:42:00",
+      "timestamp": "2026-03-11 11:42:00",
+      "operation": "logical_restore_file",
+      "target": "nightly.sql"
+    },
+    "backup_drill_pass_rate_30d": {
+      "label": "0/1 (0.0%)",
+      "window_days": 30,
+      "total": 1,
+      "passing": 0,
+      "pass_rate_percent": 0
+    }
+  }
+}

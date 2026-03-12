@@ -1,0 +1,119 @@
+{
+  "ok": true,
+  "driver": "shell",
+  "generated_at": "2026-03-11T12:00:00+00:00",
+  "checks": [
+    {
+      "check": "Config: driver",
+      "status": "pass",
+      "notes": "shell"
+    },
+    {
+      "check": "Config: queue.name",
+      "status": "pass",
+      "notes": "db-ops"
+    },
+    {
+      "check": "Config: log_channel",
+      "status": "pass",
+      "notes": "stack"
+    },
+    {
+      "check": "Config: pgbackrest.stanza",
+      "status": "pass",
+      "notes": "main"
+    },
+    {
+      "check": "Config: pgbackrest.repo",
+      "status": "pass",
+      "notes": "1"
+    },
+    {
+      "check": "Config: pgbackrest.repositories",
+      "status": "pass",
+      "notes": "1"
+    },
+    {
+      "check": "Config: pgbackrest.process_max",
+      "status": "pass",
+      "notes": "2"
+    },
+    {
+      "check": "Repo: pgbackrest.active",
+      "status": "pass",
+      "notes": "repo1 (posix)"
+    },
+    {
+      "check": "Repo: pgbackrest.target",
+      "status": "pass",
+      "notes": "/tmp/checkpoint-pgbackrest-repo1"
+    },
+    {
+      "check": "Repo: pgbackrest.tls",
+      "status": "pass",
+      "notes": "verify enabled"
+    },
+    {
+      "check": "Repo: pgbackrest.encryption",
+      "status": "warn",
+      "notes": "disabled"
+    },
+    {
+      "check": "Binary: pg_dump",
+      "status": "warn",
+      "notes": "pg_dump not found on PATH"
+    },
+    {
+      "check": "Binary: pgBackRest",
+      "status": "warn",
+      "notes": "pgbackrest not found on PATH"
+    },
+    {
+      "check": "Binary: gzip",
+      "status": "warn",
+      "notes": "gzip not found on PATH"
+    },
+    {
+      "check": "DB: command_runs table",
+      "status": "pass",
+      "notes": "3 rows"
+    },
+    {
+      "check": "DB: backup_drill_runs table",
+      "status": "pass",
+      "notes": "1 rows"
+    },
+    {
+      "check": "Queue: db-ops",
+      "status": "warn",
+      "notes": "Cannot verify queue without running worker"
+    },
+    {
+      "check": "Orphaned runs",
+      "status": "pass",
+      "notes": "0 pending runs beyond threshold"
+    },
+    {
+      "check": "Backups: last known good",
+      "status": "pass",
+      "notes": "1 hours old (threshold: 24)"
+    },
+    {
+      "check": "Backups: duration anomaly",
+      "status": "warn",
+      "notes": "Not enough successful backup samples"
+    },
+    {
+      "check": "Backup drills: latest run",
+      "status": "pass",
+      "notes": "FAIL 1 days old (drill-fail-001)"
+    },
+    {
+      "check": "Backup drills: pass rate",
+      "status": "warn",
+      "notes": "0/1 passed in the last 14 days (0.0%, threshold: 100.0%)"
+    }
+  ],
+  "version": 1,
+  "surface": "doctor"
+}

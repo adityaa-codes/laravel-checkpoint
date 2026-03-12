@@ -1,0 +1,222 @@
+{
+  "generated_at": "2026-03-11T12:00:00+00:00",
+  "driver": "shell",
+  "recent_runs": [
+    {
+      "id": 3,
+      "operation": "logical_restore_file",
+      "status": "failed",
+      "exit_code": 1,
+      "backup": "-",
+      "verification_state": "failed",
+      "restore_target": "nightly.sql",
+      "restore_audit": {
+        "environment": "testing",
+        "database": ":memory:",
+        "target": "nightly.sql",
+        "confirmation_required": true,
+        "confirmation_satisfied_via": "token",
+        "verified_backup_required": true,
+        "verified_signal_run_id": 2
+      },
+      "last_known_good_at": null,
+      "started_at": null,
+      "finished_at": "2026-03-11 11:42:00"
+    },
+    {
+      "id": 2,
+      "operation": "pgbackrest_backup_full",
+      "status": "succeeded",
+      "exit_code": 0,
+      "backup": "full:20260311-010101F",
+      "verification_state": "verified",
+      "restore_target": null,
+      "restore_audit": null,
+      "last_known_good_at": "2026-03-11 11:50:00",
+      "started_at": null,
+      "finished_at": null
+    }
+  ],
+  "summary": {
+    "pending_runs": 1,
+    "running_runs": 0,
+    "failed_runs_24h": 1,
+    "last_known_good_backup": {
+      "label": "full:20260311-010101F at 2026-03-11 11:50:00",
+      "timestamp": "2026-03-11 11:50:00",
+      "operation": "pgbackrest_backup_full"
+    },
+    "latest_verified_backup": {
+      "label": "full:20260311-010101F at 2026-03-11 11:55:00",
+      "timestamp": "2026-03-11 11:55:00",
+      "operation": "pgbackrest_backup_full"
+    },
+    "latest_backup_drill": {
+      "label": "drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00",
+      "timestamp": "2026-03-11 09:00:00",
+      "run_uuid": "drill-fail-001",
+      "overall_result": "fail",
+      "executed_by": "ops-user"
+    },
+    "latest_failed_backup_drill": {
+      "label": "drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00",
+      "timestamp": "2026-03-11 09:00:00",
+      "run_uuid": "drill-fail-001",
+      "overall_result": "fail",
+      "executed_by": "ops-user"
+    },
+    "backup_drill_pass_rate": {
+      "label": "0/1 (0.0%)",
+      "window_days": 14,
+      "total": 1,
+      "passing": 0,
+      "pass_rate_percent": 0
+    },
+    "latest_restore_run": {
+      "label": "logical_restore_file [failed] (nightly.sql) {confirm=token, verified_run=2} at 2026-03-11 11:42:00",
+      "timestamp": "2026-03-11 11:42:00",
+      "operation": "logical_restore_file",
+      "status": "failed",
+      "target": "nightly.sql",
+      "audit": {
+        "environment": "testing",
+        "database": ":memory:",
+        "target": "nightly.sql",
+        "confirmation_required": true,
+        "confirmation_satisfied_via": "token",
+        "verified_backup_required": true,
+        "verified_signal_run_id": 2
+      }
+    },
+    "latest_restore_failure": {
+      "label": "logical_restore_file (nightly.sql) at 2026-03-11 11:42:00",
+      "timestamp": "2026-03-11 11:42:00",
+      "operation": "logical_restore_file",
+      "target": "nightly.sql"
+    },
+    "backup_drill_pass_rate_30d": {
+      "label": "0/1 (0.0%)",
+      "window_days": 14,
+      "total": 1,
+      "passing": 0,
+      "pass_rate_percent": 0
+    }
+  },
+  "health": {
+    "ok": false,
+    "checks": [
+      {
+        "check": "Config: driver",
+        "status": "pass",
+        "notes": "shell"
+      },
+      {
+        "check": "Config: queue.name",
+        "status": "pass",
+        "notes": "db-ops"
+      },
+      {
+        "check": "Config: log_channel",
+        "status": "pass",
+        "notes": "stack"
+      },
+      {
+        "check": "Config: pgbackrest.stanza",
+        "status": "pass",
+        "notes": "main"
+      },
+      {
+        "check": "Config: pgbackrest.repo",
+        "status": "pass",
+        "notes": "1"
+      },
+      {
+        "check": "Config: pgbackrest.repositories",
+        "status": "pass",
+        "notes": "1"
+      },
+      {
+        "check": "Config: pgbackrest.process_max",
+        "status": "pass",
+        "notes": "2"
+      },
+      {
+        "check": "Repo: pgbackrest.active",
+        "status": "pass",
+        "notes": "repo1 (posix)"
+      },
+      {
+        "check": "Repo: pgbackrest.target",
+        "status": "pass",
+        "notes": "/tmp/checkpoint-pgbackrest-repo1"
+      },
+      {
+        "check": "Repo: pgbackrest.tls",
+        "status": "pass",
+        "notes": "verify enabled"
+      },
+      {
+        "check": "Repo: pgbackrest.encryption",
+        "status": "warn",
+        "notes": "disabled"
+      },
+      {
+        "check": "Binary: pg_dump",
+        "status": "warn",
+        "notes": "pg_dump not found on PATH"
+      },
+      {
+        "check": "Binary: pgBackRest",
+        "status": "warn",
+        "notes": "pgbackrest not found on PATH"
+      },
+      {
+        "check": "Binary: gzip",
+        "status": "warn",
+        "notes": "gzip not found on PATH"
+      },
+      {
+        "check": "DB: command_runs table",
+        "status": "pass",
+        "notes": "3 rows"
+      },
+      {
+        "check": "DB: backup_drill_runs table",
+        "status": "pass",
+        "notes": "1 rows"
+      },
+      {
+        "check": "Queue: db-ops",
+        "status": "warn",
+        "notes": "Cannot verify queue without running worker"
+      },
+      {
+        "check": "Orphaned runs",
+        "status": "pass",
+        "notes": "0 pending runs beyond threshold"
+      },
+      {
+        "check": "Backups: last known good",
+        "status": "pass",
+        "notes": "1 hours old (threshold: 24)"
+      },
+      {
+        "check": "Backups: duration anomaly",
+        "status": "warn",
+        "notes": "Not enough successful backup samples"
+      },
+      {
+        "check": "Backup drills: latest run",
+        "status": "pass",
+        "notes": "FAIL 1 days old (drill-fail-001)"
+      },
+      {
+        "check": "Backup drills: pass rate",
+        "status": "warn",
+        "notes": "0/1 passed in the last 14 days (0.0%, threshold: 100.0%)"
+      }
+    ]
+  },
+  "version": 1,
+  "surface": "report"
+}
