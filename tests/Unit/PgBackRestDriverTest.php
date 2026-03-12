@@ -134,6 +134,24 @@ it('adds restore options from structured config and the optional backup set argu
         ->and($process->getCommandLine())->toContain('--target-action=promote');
 });
 
+it('keeps resume and start-fast enabled for pgbackrest backup retries', function (): void {
+    config()->set('checkpoint.drivers.pgbackrest.binary', 'pgbackrest');
+    config()->set('checkpoint.drivers.pgbackrest.resume', true);
+    config()->set('checkpoint.drivers.pgbackrest.start_fast', true);
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'pgbackrest_backup_diff',
+        'attempts' => 2,
+    ]);
+
+    $process = buildPgBackRestProcess(new PgBackRestDriver, $run);
+
+    expect($process->getCommandLine())->toContain('backup')
+        ->and($process->getCommandLine())->toContain('--type=diff')
+        ->and($process->getCommandLine())->toContain('--resume')
+        ->and($process->getCommandLine())->toContain('--start-fast');
+});
+
 it('rejects an empty pgbackrest binary configuration', function (): void {
     config()->set('checkpoint.drivers.pgbackrest.binary', '');
 

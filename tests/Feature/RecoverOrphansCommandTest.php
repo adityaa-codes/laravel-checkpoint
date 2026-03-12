@@ -65,3 +65,47 @@ it('re-dispatches stale pending runs and leaves recent pending runs untouched', 
 
     Date::setTestNow();
 });
+
+it('re-dispatches large stale batches with aggregate lag details', function (): void {
+    Date::setTestNow('2026-03-12 10:00:00');
+
+    Bus::fake();
+    Event::fake([QueueLagDetected::class, OrphanRunRedispatched::class]);
+    Log::shouldReceive('channel->warning')->times(25);
+
+    config()->set('checkpoint.queue.orphan_threshold', 10);
+
+    $staleRuns = collect(range(1, 25))->map(fn (int $index): CommandRun => CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'created_at' => Date::now()->subMinutes(20 + $index),
+        'updated_at' => Date::now()->subMinutes(20 + $index),
+    ]));
+
+    CommandRun::query()->create([
+        'operation' => 'pgbackrest_info',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'created_at' => Date::now()->subMinutes(5),
+        'updated_at' => Date::now()->subMinutes(5),
+    ]);
+
+    checkpoint_artisan('db-ops:recover-orphans')->assertSuccessful();
+
+    Bus::assertDispatchedTimes(ProcessCommandRunJob::class, 25);
+    $lagEvents = Event::dispatched(QueueLagDetected::class);
+    expect($lagEvents)->toHaveCount(1);
+
+    /** @var QueueLagDetected $lagEvent */
+    $lagEvent = $lagEvents->first()[0];
+
+    expect($lagEvent->queue)->toBe('db-ops')
+        ->and($lagEvent->staleRunCount)->toBe(25)
+        ->and($lagEvent->thresholdMinutes)->toBe(10)
+        ->and($lagEvent->oldestStaleAgeMinutes)->toBeGreaterThanOrEqual(45)
+        ->and($lagEvent->staleRunIds)->toHaveCount(25);
+    Event::assertDispatchedTimes(OrphanRunRedispatched::class, 25);
+
+    Date::setTestNow();
+});
