@@ -22,6 +22,7 @@ final readonly class ConfigValidator
         $this->validatePgDumpConfig();
         $this->validateQueueSettings();
         $this->validateRestoreSettings();
+        $this->validateObservabilitySettings();
         $this->validateLogChannel();
         $this->validateUserModel();
         $this->validateTablePrefix();
@@ -367,6 +368,35 @@ final readonly class ConfigValidator
 
         if ($confirmationToken !== null && (! is_string($confirmationToken) || trim($confirmationToken) === '')) {
             throw new ConfigurationException('checkpoint.restore.confirmation_token must be null or a non-empty string.');
+        }
+    }
+
+    private function validateObservabilitySettings(): void
+    {
+        $config = $this->config->get('checkpoint.observability', []);
+
+        if (! is_array($config)) {
+            throw new ConfigurationException('checkpoint.observability must be an array.');
+        }
+
+        $maxAge = $config['max_last_known_good_age_hours'] ?? null;
+        $factor = $config['backup_duration_anomaly_factor'] ?? null;
+        $minSamples = $config['backup_duration_min_samples'] ?? null;
+
+        if (! is_int($maxAge) || $maxAge < 1) {
+            throw new ConfigurationException('checkpoint.observability.max_last_known_good_age_hours must be greater than zero.');
+        }
+
+        if (! is_float($factor) && ! is_int($factor)) {
+            throw new ConfigurationException('checkpoint.observability.backup_duration_anomaly_factor must be numeric.');
+        }
+
+        if ((float) $factor <= 1.0) {
+            throw new ConfigurationException('checkpoint.observability.backup_duration_anomaly_factor must be greater than 1.');
+        }
+
+        if (! is_int($minSamples) || $minSamples < 2) {
+            throw new ConfigurationException('checkpoint.observability.backup_duration_min_samples must be at least 2.');
         }
     }
 

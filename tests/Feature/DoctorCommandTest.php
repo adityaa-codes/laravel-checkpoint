@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
+use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Support\Facades\Artisan;
 
@@ -20,6 +21,8 @@ it('renders the doctor health table', function (): void {
         ->expectsOutputToContain('DB: command_runs table')
         ->expectsOutputToContain('DB: backup_drill_runs table')
         ->expectsOutputToContain('Orphaned runs')
+        ->expectsOutputToContain('Backups: last known good')
+        ->expectsOutputToContain('Backups: duration anomaly')
         ->assertSuccessful();
 });
 
@@ -106,5 +109,58 @@ it('returns a failed machine-readable json report for invalid config', function 
         ->and($report['ok'])->toBeFalse()
         ->and(collect($report['checks'])->contains(
             fn (array $check): bool => $check['check'] === 'Config validation' && $check['status'] === 'fail',
+        ))->toBeTrue();
+});
+
+it('warns when the last known good backup is stale and the latest run is anomalously slow', function (): void {
+    config()->set('checkpoint.observability.max_last_known_good_age_hours', 12);
+    config()->set('checkpoint.observability.backup_duration_anomaly_factor', 2.0);
+    config()->set('checkpoint.observability.backup_duration_min_samples', 3);
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'backup_type' => 'logical_export',
+        'status' => 'succeeded',
+        'attempts' => 0,
+        'duration_seconds' => 900,
+        'last_known_good_at' => now()->subHours(30),
+    ]);
+    CommandRun::query()->create([
+        'operation' => 'pgbackrest_backup_full',
+        'backup_type' => 'full',
+        'status' => 'succeeded',
+        'attempts' => 0,
+        'duration_seconds' => 300,
+        'last_known_good_at' => now()->subHours(8),
+    ]);
+    CommandRun::query()->create([
+        'operation' => 'pgbackrest_backup_diff',
+        'backup_type' => 'diff',
+        'status' => 'succeeded',
+        'attempts' => 0,
+        'duration_seconds' => 320,
+        'last_known_good_at' => now()->subHours(7),
+    ]);
+    CommandRun::query()->create([
+        'operation' => 'pgbackrest_backup_incr',
+        'backup_type' => 'incr',
+        'status' => 'succeeded',
+        'attempts' => 0,
+        'duration_seconds' => 900,
+        'last_known_good_at' => now()->subHours(6),
+    ]);
+
+    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+
+    $report = json_decode(Artisan::output(), true);
+
+    expect($report)->toBeArray()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['check'] === 'Backups: last known good'
+                && str_contains($check['notes'], 'threshold: 12'),
+        ))->toBeTrue()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['check'] === 'Backups: duration anomaly'
+                && str_contains($check['notes'], 'factor: 2.0'),
         ))->toBeTrue();
 });

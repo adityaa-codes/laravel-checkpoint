@@ -71,6 +71,8 @@ final class DoctorCommand extends Command
         $rows[] = $this->tableRow('backup_drill_runs', (new BackupDrillRun)->getTable());
         $rows[] = ['Queue: '.$this->config->get('checkpoint.queue.name', 'db-ops'), $this->statusWord('warn'), 'Cannot verify queue without running worker'];
         $rows[] = ['Orphaned runs', $this->statusWord('pass'), sprintf('%d pending runs beyond threshold', $this->orphanedRunsCount())];
+        $rows[] = $this->lastKnownGoodRow();
+        $rows[] = $this->backupDurationAnomalyRow();
 
         if ($outputMode === 'json') {
             $this->line($this->jsonReport($rows, true));
@@ -139,6 +141,68 @@ final class DoctorCommand extends Command
             ->pending()
             ->where('created_at', '<', now()->subMinutes($thresholdMinutes))
             ->count();
+    }
+
+    /**
+     * @return array{0:string,1:string,2:string}
+     */
+    private function lastKnownGoodRow(): array
+    {
+        $maxAgeHours = max(1, (int) $this->config->get('checkpoint.observability.max_last_known_good_age_hours', 24));
+        $latest = CommandRun::query()
+            ->whereNotNull('last_known_good_at')
+            ->latest('last_known_good_at')
+            ->first();
+
+        if (! $latest instanceof CommandRun || $latest->last_known_good_at === null) {
+            return ['Backups: last known good', $this->statusWord('warn'), 'No last-known-good backup recorded'];
+        }
+
+        $ageHours = max(0, (int) ceil(now()->diffInMinutes($latest->last_known_good_at) / 60));
+        $level = $ageHours > $maxAgeHours ? 'warn' : 'pass';
+
+        return [
+            'Backups: last known good',
+            $this->statusWord($level),
+            sprintf('%d hours old (threshold: %d)', $ageHours, $maxAgeHours),
+        ];
+    }
+
+    /**
+     * @return array{0:string,1:string,2:string}
+     */
+    private function backupDurationAnomalyRow(): array
+    {
+        $minSamples = max(2, (int) $this->config->get('checkpoint.observability.backup_duration_min_samples', 3));
+        $factor = max(1.1, (float) $this->config->get('checkpoint.observability.backup_duration_anomaly_factor', 2.0));
+        $runs = CommandRun::query()
+            ->whereNotNull('backup_type')
+            ->whereNotNull('duration_seconds')
+            ->where('status', 'succeeded')
+            ->latest('id')
+            ->limit($minSamples)
+            ->get();
+
+        if ($runs->count() < $minSamples) {
+            return ['Backups: duration anomaly', $this->statusWord('warn'), 'Not enough successful backup samples'];
+        }
+
+        $latest = $runs->first();
+        $baseline = $runs->slice(1)->pluck('duration_seconds')->filter()->sort()->values();
+
+        if (! $latest instanceof CommandRun || $baseline->isEmpty()) {
+            return ['Backups: duration anomaly', $this->statusWord('warn'), 'Not enough successful backup samples'];
+        }
+
+        $medianSeconds = (int) $baseline->get((int) floor(($baseline->count() - 1) / 2));
+        $latestSeconds = (int) $latest->duration_seconds;
+        $level = $latestSeconds > (int) ceil($medianSeconds * $factor) ? 'warn' : 'pass';
+
+        return [
+            'Backups: duration anomaly',
+            $this->statusWord($level),
+            sprintf('latest %ds vs median %ds (factor: %.1f)', $latestSeconds, $medianSeconds, $factor),
+        ];
     }
 
     /**

@@ -119,6 +119,13 @@ it('rejects an empty restore confirmation phrase', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.restore.confirmation_phrase must be a non-empty string.');
 });
 
+it('rejects observability anomaly factors that are not greater than one', function (): void {
+    config()->set('checkpoint.observability.backup_duration_anomaly_factor', 1.0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.observability.backup_duration_anomaly_factor must be greater than 1.');
+});
+
 it('rejects pgdump parallel jobs for non-directory formats', function (): void {
     config()->set('checkpoint.drivers.pgdump.format', 'custom');
     config()->set('checkpoint.drivers.pgdump.jobs', 4);

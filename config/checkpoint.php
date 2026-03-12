@@ -58,6 +58,11 @@ return [
     ],
 
     'driver' => $env('DB_OPS_DRIVER', 'shell'),
+    'observability' => [
+        'max_last_known_good_age_hours' => (int) $env('DB_OPS_MAX_LAST_KNOWN_GOOD_AGE_HOURS', 24),
+        'backup_duration_anomaly_factor' => (float) $env('DB_OPS_BACKUP_DURATION_ANOMALY_FACTOR', 2.0),
+        'backup_duration_min_samples' => (int) $env('DB_OPS_BACKUP_DURATION_MIN_SAMPLES', 3),
+    ],
     'drivers' => [
         'shell' => [
             'class' => ShellCommandDriver::class,

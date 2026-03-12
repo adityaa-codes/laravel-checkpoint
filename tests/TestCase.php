@@ -73,6 +73,11 @@ class TestCase extends Orchestra
                 'ci' => false,
                 'require_verified_backup' => false,
             ],
+            'observability' => [
+                'max_last_known_good_age_hours' => 24,
+                'backup_duration_anomaly_factor' => 2.0,
+                'backup_duration_min_samples' => 3,
+            ],
             'drivers' => [
                 'shell' => [
                     'class' => ShellCommandDriver::class,
