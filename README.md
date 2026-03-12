@@ -274,6 +274,12 @@ Operational surfaces now include:
 - `db-ops:status --summary` includes `latest_restore_run` alongside the existing latest restore failure signal
 - `latest_restore_run.audit` gives automation consumers the persisted restore guard decision that was in effect when the run started
 
+`db-ops:status` also surfaces backup drill analytics:
+
+- `latest_backup_drill` and `latest_failed_backup_drill` identify the most recent drill outcomes
+- `backup_drill_pass_rate_30d` summarizes recent drill reliability for automation consumers
+- the table summary mirrors those signals for operators without requiring JSON parsing
+
 Structured log fields include `run_id`, `driver`, `backup_type`,
 `restore_target`, `repository`, `stanza`, and `duration_seconds` when those
 values are known for the current run.
