@@ -299,6 +299,9 @@ final readonly class ConfigValidator
     {
         $timeout = (int) $this->config->get('checkpoint.queue.timeout', 0);
         $retryAfter = (int) $this->config->get('checkpoint.queue.retry_after', 0);
+        $orphanThreshold = (int) $this->config->get('checkpoint.queue.orphan_threshold', 0);
+        $orphanClaimTimeout = (int) $this->config->get('checkpoint.queue.orphan_claim_timeout', 0);
+        $orphanBatchSize = (int) $this->config->get('checkpoint.queue.orphan_batch_size', 0);
         $uniqueFor = (int) $this->config->get('checkpoint.queue.unique_for', 0);
         $lockStore = $this->config->get('checkpoint.queue.lock_store');
 
@@ -314,6 +317,29 @@ final readonly class ConfigValidator
             throw new ConfigurationException(
                 'checkpoint.queue.retry_after must be greater than checkpoint.queue.timeout to avoid duplicate job processing.',
             );
+        }
+
+        if ($orphanThreshold < 1) {
+            throw new ConfigurationException('checkpoint.queue.orphan_threshold must be greater than zero.');
+        }
+
+        if ($orphanClaimTimeout < 1) {
+            throw new ConfigurationException('checkpoint.queue.orphan_claim_timeout must be greater than zero.');
+        }
+
+        $minimumClaimTimeout = (int) ceil($retryAfter / 60);
+
+        if ($orphanClaimTimeout < $minimumClaimTimeout) {
+            throw new ConfigurationException(
+                sprintf(
+                    'checkpoint.queue.orphan_claim_timeout must be greater than or equal to %d minutes to align with checkpoint.queue.retry_after.',
+                    $minimumClaimTimeout,
+                ),
+            );
+        }
+
+        if ($orphanBatchSize < 1) {
+            throw new ConfigurationException('checkpoint.queue.orphan_batch_size must be greater than zero.');
         }
 
         if ($uniqueFor < 1) {

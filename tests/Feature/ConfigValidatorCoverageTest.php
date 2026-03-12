@@ -197,6 +197,38 @@ it('rejects a non-positive queue retry_after', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.queue.retry_after must be greater than zero.');
 });
 
+it('rejects a non-positive orphan queue threshold', function (): void {
+    config()->set('checkpoint.queue.orphan_threshold', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.queue.orphan_threshold must be greater than zero.');
+});
+
+it('rejects a non-positive orphan claim timeout', function (): void {
+    config()->set('checkpoint.queue.orphan_claim_timeout', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.queue.orphan_claim_timeout must be greater than zero.');
+});
+
+it('rejects an orphan claim timeout shorter than the queue retry window', function (): void {
+    config()->set('checkpoint.queue.retry_after', 3660);
+    config()->set('checkpoint.queue.orphan_claim_timeout', 60);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(
+            ConfigurationException::class,
+            'checkpoint.queue.orphan_claim_timeout must be greater than or equal to 61 minutes to align with checkpoint.queue.retry_after.',
+        );
+});
+
+it('rejects a non-positive orphan recovery batch size', function (): void {
+    config()->set('checkpoint.queue.orphan_batch_size', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.queue.orphan_batch_size must be greater than zero.');
+});
+
 it('rejects a non-positive unique queue lock duration', function (): void {
     config()->set('checkpoint.queue.unique_for', 0);
 

@@ -115,18 +115,29 @@ it('claims orphaned pending runs once using the updated heartbeat', function ():
     Date::setTestNow('2026-03-11 12:00:00');
 
     $run = CommandRun::factory()->pending()->create([
-        'created_at' => Date::now()->subMinutes(30),
+        'created_at' => Date::now()->subMinutes(45),
         'updated_at' => Date::now()->subMinutes(30),
     ]);
 
     $threshold = Date::now()->subMinutes(10);
+    $claimExpiresBefore = Date::now()->subMinute();
 
-    expect($run->claimForOrphanRecovery($threshold, Date::now()))->toBeTrue();
+    expect($run->claimForOrphanRecovery($threshold, $claimExpiresBefore, Date::now()))->toBeTrue();
 
     $run->refresh();
 
-    expect($run->updated_at?->toDateTimeString())->toBe('2026-03-11 12:00:00')
-        ->and($run->claimForOrphanRecovery($threshold, Date::now()->addMinute()))->toBeFalse();
+    expect($run->updated_at?->toDateTimeString())->toBe('2026-03-11 11:30:00')
+        ->and($run->orphan_recovery_claimed_at?->toDateTimeString())->toBe('2026-03-11 12:00:00')
+        ->and($run->claimForOrphanRecovery($threshold, $claimExpiresBefore, Date::now()->addMinute()))->toBeFalse();
+
+    $run->releaseOrphanRecoveryClaim(Date::now());
+    $run->refresh();
+
+    expect($run->orphan_recovery_claimed_at)->toBeNull();
+
+    Date::setTestNow('2026-03-11 12:02:00');
+
+    expect($run->claimForOrphanRecovery($threshold, Date::now()->subMinute(), Date::now()))->toBeTrue();
 
     Date::setTestNow();
 });
@@ -134,7 +145,9 @@ it('claims orphaned pending runs once using the updated heartbeat', function ():
 it('allows only one pending execution claimant across stale copies', function (): void {
     Date::setTestNow('2026-03-11 12:00:00');
 
-    $run = CommandRun::factory()->pending()->create();
+    $run = CommandRun::factory()->pending()->create([
+        'orphan_recovery_claimed_at' => Date::now()->subMinute(),
+    ]);
     $staleCopy = CommandRun::query()->findOrFail($run->getKey());
 
     expect($run->claimPendingExecution())->toBeTrue()
@@ -143,7 +156,8 @@ it('allows only one pending execution claimant across stale copies', function ()
     $run->refresh();
 
     expect($run->status)->toBe(CommandRunStatus::Running)
-        ->and($run->started_at?->toDateTimeString())->toBe('2026-03-11 12:00:00');
+        ->and($run->started_at?->toDateTimeString())->toBe('2026-03-11 12:00:00')
+        ->and($run->orphan_recovery_claimed_at)->toBeNull();
 
     Date::setTestNow();
 });

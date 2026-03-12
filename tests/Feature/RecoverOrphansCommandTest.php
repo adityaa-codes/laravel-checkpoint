@@ -37,7 +37,7 @@ it('re-dispatches stale pending runs and leaves recent pending runs untouched', 
         'operation' => 'logical_backup',
         'status' => CommandRunStatus::Pending,
         'attempts' => 0,
-        'created_at' => Date::now()->subMinutes(20),
+        'created_at' => Date::now()->subMinutes(45),
         'updated_at' => Date::now()->subMinutes(20),
     ]);
 
@@ -76,6 +76,7 @@ it('re-dispatches large stale batches with aggregate lag details', function (): 
     Log::shouldReceive('channel->warning')->times(25);
 
     config()->set('checkpoint.queue.orphan_threshold', 10);
+    config()->set('checkpoint.queue.orphan_batch_size', 4);
 
     $staleRuns = collect(range(1, 25))->map(fn (int $index): CommandRun => CommandRun::query()->create([
         'operation' => 'logical_backup',
@@ -143,7 +144,8 @@ it('does not redispatch the same orphan twice across overlapping recover runs', 
 
     $run->refresh();
 
-    expect($run->updated_at?->toDateTimeString())->toBe('2026-03-12 10:00:00');
+    expect($run->updated_at?->toDateTimeString())->toBe('2026-03-12 09:40:00');
+    expect($run->orphan_recovery_claimed_at?->toDateTimeString())->toBe('2026-03-12 10:00:00');
 
     Date::setTestNow();
 });
@@ -177,10 +179,84 @@ it('releases orphan claims when redispatch throws so the run stays recoverable',
     $run->refresh();
 
     expect($run->status)->toBe(CommandRunStatus::Pending)
-        ->and($run->updated_at?->lt(Date::now()->subMinutes(10)))->toBeTrue();
+        ->and($run->updated_at?->lt(Date::now()->subMinutes(10)))->toBeTrue()
+        ->and($run->orphan_recovery_claimed_at)->toBeNull();
 
     Event::assertDispatchedTimes(QueueLagDetected::class, 1);
     Event::assertNotDispatched(OrphanRunRedispatched::class);
+
+    Date::setTestNow();
+});
+
+it('reclaims expired orphan recovery claims during overlapping recover runs', function (): void {
+    Date::setTestNow('2026-03-12 10:00:00');
+
+    config()->set('checkpoint.queue.orphan_threshold', 10);
+    config()->set('checkpoint.queue.orphan_claim_timeout', 1);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'created_at' => Date::now()->subMinutes(30),
+        'updated_at' => Date::now()->subMinutes(20),
+        'orphan_recovery_claimed_at' => Date::now()->subMinutes(2),
+    ]);
+
+    expect($run->claimForOrphanRecovery(
+        Date::now()->subMinutes(10),
+        Date::now()->subMinute(),
+        Date::now(),
+    ))->toBeTrue();
+
+    $run->refresh();
+
+    expect($run->orphan_recovery_claimed_at?->toDateTimeString())->toBe('2026-03-12 10:00:00');
+
+    Date::setTestNow();
+});
+
+it('suppresses duplicate redispatch when a nested recover command sees the same stale snapshot', function (): void {
+    Date::setTestNow('2026-03-12 10:00:00');
+
+    Event::fake([QueueLagDetected::class, OrphanRunRedispatched::class]);
+    Log::shouldReceive('channel->warning')->once();
+
+    config()->set('checkpoint.queue.orphan_threshold', 10);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'created_at' => Date::now()->subMinutes(30),
+        'updated_at' => Date::now()->subMinutes(20),
+    ]);
+
+    $redispatched = false;
+    $dispatcher = Mockery::mock(Dispatcher::class);
+    $dispatcher->shouldReceive('dispatch')
+        ->once()
+        ->andReturnUsing(function (ProcessCommandRunJob $job) use (&$redispatched): ProcessCommandRunJob {
+            if (! $redispatched) {
+                $redispatched = true;
+                app(RecoverOrphansCommand::class)->handle();
+            }
+
+            return $job;
+        });
+
+    app()->instance(Dispatcher::class, $dispatcher);
+
+    checkpoint_artisan('db-ops:recover-orphans')
+        ->expectsOutput(sprintf('Re-dispatched orphaned run #%d.', $run->id))
+        ->assertSuccessful();
+
+    Event::assertDispatchedTimes(QueueLagDetected::class, 1);
+    Event::assertDispatchedTimes(OrphanRunRedispatched::class, 1);
+
+    $run->refresh();
+
+    expect($run->orphan_recovery_claimed_at?->toDateTimeString())->toBe('2026-03-12 10:00:00');
 
     Date::setTestNow();
 });

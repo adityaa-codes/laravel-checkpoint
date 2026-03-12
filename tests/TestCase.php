@@ -60,6 +60,8 @@ class TestCase extends Orchestra
                 'retry_after' => 3660,
                 'timeout' => 3600,
                 'orphan_threshold' => 10,
+                'orphan_claim_timeout' => 61,
+                'orphan_batch_size' => 100,
                 'unique_for' => 3660,
                 'lock_store' => 'array',
             ],
@@ -182,6 +184,11 @@ class TestCase extends Orchestra
 
         if (! Schema::hasColumn('db_ops_command_runs', 'backup_type')) {
             $migration = require __DIR__.'/../database/migrations/add_checkpoint_metadata_to_command_runs_table.php.stub';
+            $migration->up();
+        }
+
+        if (! Schema::hasColumn('db_ops_command_runs', 'orphan_recovery_claimed_at')) {
+            $migration = require __DIR__.'/../database/migrations/add_orphan_recovery_claim_to_command_runs_table.php.stub';
             $migration->up();
         }
 

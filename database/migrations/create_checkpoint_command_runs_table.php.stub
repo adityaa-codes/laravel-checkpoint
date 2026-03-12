@@ -33,9 +33,11 @@ return new class extends Migration
             $table->unsignedInteger('attempts')->default(0);
             $table->timestamp('started_at')->nullable();
             $table->timestamp('finished_at')->nullable();
+            $table->timestamp('orphan_recovery_claimed_at')->nullable();
             $table->timestamps();
 
             $table->index(['operation', 'status']);
+            $table->index(['status', 'orphan_recovery_claimed_at', 'updated_at'], $this->orphanRecoveryIndexName());
             $table->index('last_known_good_at');
             $table->index('created_at');
         });
@@ -52,5 +54,10 @@ return new class extends Migration
             '%scommand_runs',
             config('checkpoint.table_prefix', 'db_ops_'),
         );
+    }
+
+    private function orphanRecoveryIndexName(): string
+    {
+        return $this->tableName().'_orphan_recovery_index';
     }
 };

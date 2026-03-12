@@ -42,6 +42,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $finished_at
  * @property Carbon|null $verified_at
  * @property Carbon|null $last_known_good_at
+ * @property Carbon|null $orphan_recovery_claimed_at
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  *
@@ -76,6 +77,7 @@ class CommandRun extends Model
             'status' => CommandRunStatus::class,
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
+            'orphan_recovery_claimed_at' => 'datetime',
             'throughput_bytes_per_second' => 'integer',
             'verified_at' => 'datetime',
             'last_known_good_at' => 'datetime',
@@ -194,6 +196,7 @@ class CommandRun extends Model
                 'status' => CommandRunStatus::Running,
                 'started_at' => $startedAt,
                 'updated_at' => $startedAt,
+                'orphan_recovery_claimed_at' => null,
             ]);
 
         $this->refresh();
@@ -213,6 +216,7 @@ class CommandRun extends Model
                 'exit_code' => $exitCode,
                 'command_output' => $output,
                 'finished_at' => $finishedAt,
+                'orphan_recovery_claimed_at' => null,
                 'updated_at' => $finishedAt,
                 ...$this->timingMetrics($finishedAt),
             ]);
@@ -234,6 +238,7 @@ class CommandRun extends Model
                 'exit_code' => $exitCode,
                 'command_output' => $output,
                 'finished_at' => $finishedAt,
+                'orphan_recovery_claimed_at' => null,
                 'updated_at' => $finishedAt,
                 ...$this->timingMetrics($finishedAt),
             ]);
@@ -243,34 +248,41 @@ class CommandRun extends Model
         return $this;
     }
 
-    public function claimForOrphanRecovery(Carbon $threshold, ?Carbon $claimedAt = null): bool
+    public function claimForOrphanRecovery(Carbon $threshold, Carbon $claimExpiresBefore, ?Carbon $claimedAt = null): bool
     {
         $claimedAt ??= now();
 
-        $updated = static::query()
-            ->whereKey($this->getKey())
-            ->where('status', CommandRunStatus::Pending)
-            ->where('updated_at', '<', $threshold)
-            ->update([
-                'updated_at' => $claimedAt,
-            ]);
+        $updated = static::withoutTimestamps(function () use ($claimExpiresBefore, $claimedAt, $threshold): int {
+            return static::query()
+                ->whereKey($this->getKey())
+                ->where('status', CommandRunStatus::Pending)
+                ->where('updated_at', '<', $threshold)
+                ->where(function (Builder $query) use ($claimExpiresBefore): void {
+                    $query
+                        ->whereNull('orphan_recovery_claimed_at')
+                        ->orWhere('orphan_recovery_claimed_at', '<', $claimExpiresBefore);
+                })
+                ->update([
+                    'orphan_recovery_claimed_at' => $claimedAt,
+                ]);
+        });
 
         $this->refresh();
 
         return $updated === 1;
     }
 
-    public function releaseOrphanRecoveryClaim(Carbon $claimedAt, ?Carbon $releasedAt = null): bool
+    public function releaseOrphanRecoveryClaim(Carbon $claimedAt): bool
     {
-        $releasedAt ??= now()->subSecond();
-
-        $updated = static::query()
-            ->whereKey($this->getKey())
-            ->where('status', CommandRunStatus::Pending)
-            ->where('updated_at', $claimedAt)
-            ->update([
-                'updated_at' => $releasedAt,
-            ]);
+        $updated = static::withoutTimestamps(function () use ($claimedAt): int {
+            return static::query()
+                ->whereKey($this->getKey())
+                ->where('status', CommandRunStatus::Pending)
+                ->where('orphan_recovery_claimed_at', $claimedAt)
+                ->update([
+                    'orphan_recovery_claimed_at' => null,
+                ]);
+        });
 
         $this->refresh();
 
