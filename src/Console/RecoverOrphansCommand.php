@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
+use AdityaaCodes\LaravelCheckpoint\Events\OrphanRunRedispatched;
+use AdityaaCodes\LaravelCheckpoint\Events\QueueLagDetected;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Events\Dispatcher as EventDispatcher;
 use Illuminate\Log\LogManager;
 
 final class RecoverOrphansCommand extends Command
@@ -20,6 +23,7 @@ final class RecoverOrphansCommand extends Command
     public function __construct(
         private readonly Repository $config,
         private readonly Dispatcher $dispatcher,
+        private readonly EventDispatcher $events,
         private readonly LogManager $logs,
     ) {
         parent::__construct();
@@ -29,15 +33,22 @@ final class RecoverOrphansCommand extends Command
     {
         $thresholdMinutes = max(1, (int) $this->config->get('checkpoint.queue.orphan_threshold', 10));
         $threshold = now()->subMinutes($thresholdMinutes);
-
-        CommandRun::query()
+        $queue = (string) $this->config->get('checkpoint.queue.name', 'db-ops');
+        $staleRuns = CommandRun::query()
             ->pending()
             ->where('created_at', '<', $threshold)
-            ->each(function (CommandRun $run): void {
+            ->get();
+
+        if ($staleRuns->isNotEmpty()) {
+            $this->events->dispatch(new QueueLagDetected($queue, $staleRuns->count(), $thresholdMinutes));
+        }
+
+        $staleRuns->each(function (CommandRun $run) use ($queue, $thresholdMinutes): void {
                 $job = new ProcessCommandRunJob($run)
-                    ->onQueue((string) $this->config->get('checkpoint.queue.name', 'db-ops'));
+                    ->onQueue($queue);
 
                 $this->dispatcher->dispatch($job);
+                $this->events->dispatch(new OrphanRunRedispatched($run, $thresholdMinutes));
 
                 $this->logs->channel((string) $this->config->get('checkpoint.log_channel', 'stack'))
                     ->warning('Recover orphans re-dispatched command run', [

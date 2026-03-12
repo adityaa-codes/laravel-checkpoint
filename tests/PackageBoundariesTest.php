@@ -19,6 +19,8 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillCompleted;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupQueued;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
+use AdityaaCodes\LaravelCheckpoint\Events\OrphanRunRedispatched;
+use AdityaaCodes\LaravelCheckpoint\Events\QueueLagDetected;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidOperationException;
@@ -76,6 +78,8 @@ it('keeps immutable payload and service objects readonly where appropriate', fun
         BackupCompleted::class,
         BackupFailed::class,
         BackupDrillCompleted::class,
+        OrphanRunRedispatched::class,
+        QueueLagDetected::class,
         LaravelCheckpoint::class,
         ConfigValidator::class,
         RestoreSafetyGuard::class,
@@ -110,6 +114,8 @@ it('exposes public properties only for intentional payload seams', function (): 
         BackupCompleted::class => ['run', 'exitCode', 'output'],
         BackupFailed::class => ['run', 'exitCode', 'output', 'exception'],
         BackupDrillCompleted::class => ['run'],
+        OrphanRunRedispatched::class => ['run', 'thresholdMinutes'],
+        QueueLagDetected::class => ['queue', 'staleRunCount', 'thresholdMinutes'],
     ];
 
     foreach ($allowedPublicProperties as $class => $allowedProperties) {

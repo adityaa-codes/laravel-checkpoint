@@ -2,15 +2,19 @@
 
 declare(strict_types=1);
 
+use AdityaaCodes\LaravelCheckpoint\Events\OrphanRunRedispatched;
+use AdityaaCodes\LaravelCheckpoint\Events\QueueLagDetected;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 
 it('re-dispatches stale pending runs and leaves recent pending runs untouched', function (): void {
     Bus::fake();
+    Event::fake([QueueLagDetected::class, OrphanRunRedispatched::class]);
 
     Log::shouldReceive('channel->warning')
         ->once()
@@ -43,4 +47,9 @@ it('re-dispatches stale pending runs and leaves recent pending runs untouched', 
 
     Bus::assertDispatched(fn (ProcessCommandRunJob $job): bool => $job->run->is($staleRun));
     Bus::assertNotDispatched(ProcessCommandRunJob::class, fn (ProcessCommandRunJob $job): bool => $job->run->is($freshRun));
+    Event::assertDispatched(fn (QueueLagDetected $event): bool => $event->queue === 'db-ops'
+        && $event->staleRunCount === 1
+        && $event->thresholdMinutes === 10);
+    Event::assertDispatched(fn (OrphanRunRedispatched $event): bool => $event->run->is($staleRun)
+        && $event->thresholdMinutes === 10);
 });
