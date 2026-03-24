@@ -17,7 +17,7 @@
     ],
     "require": {
         "php": "^8.4",
-        "illuminate/contracts": "^12.0",
+        "illuminate/contracts": "^12.0|^13.0",
         "spatie/laravel-package-tools": "^1.16",
         "symfony/process": "^7.0"
     },
@@ -26,7 +26,7 @@
         "infection/infection": "^0.31.0",
         "larastan/larastan": "^3.0",
         "laravel/pint": "^1.14",
-        "orchestra/testbench": "^10.0",
+        "orchestra/testbench": "^10.0|^11.0",
         "pestphp/pest": "^4.0",
         "pestphp/pest-plugin-arch": "^4.0",
         "pestphp/pest-plugin-laravel": "^4.0",
