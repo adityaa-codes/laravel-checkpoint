@@ -8,6 +8,36 @@ use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Foundation\Auth\User;
 
+it('defaults restore verification requirement outside local and testing environments', function (): void {
+    putenv('APP_ENV=production');
+    putenv('DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP');
+
+    $config = require __DIR__.'/../../config/checkpoint.php';
+
+    expect($config['restore']['require_verified_backup'])->toBeTrue();
+
+    putenv('APP_ENV');
+});
+
+it('defaults restore verification requirement off in testing environment', function (): void {
+    putenv('APP_ENV=testing');
+    putenv('DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP');
+
+    $config = require __DIR__.'/../../config/checkpoint.php';
+
+    expect($config['restore']['require_verified_backup'])->toBeFalse();
+
+    putenv('APP_ENV');
+});
+
+it('disables ci restore bypass by default', function (): void {
+    putenv('DB_OPS_RESTORE_ALLOW_IN_CI');
+
+    $config = require __DIR__.'/../../config/checkpoint.php';
+
+    expect($config['restore']['allow_in_ci'])->toBeFalse();
+});
+
 it('rejects a missing configured driver', function (): void {
     config()->set('checkpoint.driver', 'missing');
 

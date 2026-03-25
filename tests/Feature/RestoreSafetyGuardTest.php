@@ -38,6 +38,22 @@ it('allows restore execution in ci when the ci bypass is enabled', function (): 
         ->not->toThrow(ConfigurationException::class);
 });
 
+it('blocks restore execution in ci when ci bypass is disabled', function (): void {
+    config()->set('checkpoint.restore.require_confirmation', true);
+    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.restore.confirmation_token', null);
+    config()->set('checkpoint.restore.allow_in_ci', false);
+    config()->set('checkpoint.restore.ci', true);
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'logical_restore_file',
+        'argument_text' => 'nightly.sql',
+    ]);
+
+    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, ['restore_target' => 'nightly.sql']))
+        ->toThrow(ConfigurationException::class, 'Restore confirmation is required.');
+});
+
 it('blocks restore execution in disallowed environments', function (): void {
     config()->set('app.env', 'production');
     config()->set('checkpoint.restore.allowed_environments', ['staging']);

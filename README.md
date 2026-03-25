@@ -291,8 +291,8 @@ Safety controls:
 - `restore.allowed_environments`: allowlist for environments where restore commands may run
 - `restore.allowed_databases`: optional allowlist for database names that may receive restore traffic
 - `restore.require_confirmation`: requires `restore.confirmation_token` to match `restore.confirmation_phrase` outside CI
-- `restore.allow_in_ci`: lets CI bypass the confirmation token when explicitly enabled
-- `restore.require_verified_backup`: requires a prior verified restore signal before restore execution
+- `restore.allow_in_ci`: defaults to `false`; when explicitly enabled it lets CI bypass the confirmation token
+- `restore.require_verified_backup`: defaults to `true` outside `local`/`testing` (and `false` in local/testing), requiring a prior verified restore signal before restore execution
 
 Example guarded restore env:
 
@@ -302,7 +302,7 @@ DB_OPS_RESTORE_ALLOWED_DATABASES=checkpoint_shadow
 DB_OPS_RESTORE_REQUIRE_CONFIRMATION=true
 DB_OPS_RESTORE_CONFIRMATION_PHRASE=RESTORE
 DB_OPS_RESTORE_CONFIRMATION=RESTORE
-DB_OPS_RESTORE_ALLOW_IN_CI=true
+DB_OPS_RESTORE_ALLOW_IN_CI=false
 DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=true
 ```
 

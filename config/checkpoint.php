@@ -10,6 +10,8 @@ use Illuminate\Foundation\Auth\User;
 
 /** @phpstan-ignore-next-line */
 $env = static fn (string $key, mixed $default = null): mixed => env($key, $default);
+$appEnv = (string) $env('APP_ENV', 'production');
+$nonLocalPosture = ! in_array($appEnv, ['local', 'testing'], true);
 
 return [
     'user_model' => $env('DB_OPS_USER_MODEL', User::class),
@@ -42,9 +44,9 @@ return [
         'require_confirmation' => (bool) $env('DB_OPS_RESTORE_REQUIRE_CONFIRMATION', true),
         'confirmation_phrase' => $env('DB_OPS_RESTORE_CONFIRMATION_PHRASE', 'RESTORE'),
         'confirmation_token' => $env('DB_OPS_RESTORE_CONFIRMATION'),
-        'allow_in_ci' => (bool) $env('DB_OPS_RESTORE_ALLOW_IN_CI', true),
+        'allow_in_ci' => (bool) $env('DB_OPS_RESTORE_ALLOW_IN_CI', false),
         'ci' => (bool) $env('CI', false),
-        'require_verified_backup' => (bool) $env('DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP', false),
+        'require_verified_backup' => (bool) $env('DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP', $nonLocalPosture),
     ],
 
     'schedule' => [
