@@ -71,7 +71,7 @@ final readonly class CommandOutputStore
             return null;
         }
 
-        $tempPath = tempnam(sys_get_temp_dir(), 'checkpoint-output-');
+        $tempPath = tempnam($this->tempDir(), 'checkpoint-output-');
 
         if ($tempPath === false) {
             throw new ConfigurationException('Unable to allocate temporary command output storage.');
@@ -228,6 +228,25 @@ final readonly class CommandOutputStore
     private function inlineBytes(): int
     {
         return max(0, (int) $this->config->get('checkpoint.output.filesystem.inline_bytes', 2048));
+    }
+
+    private function tempDir(): string
+    {
+        $configured = trim((string) $this->config->get('checkpoint.temp_dir', storage_path('app/checkpoint/tmp')));
+
+        if ($configured === '') {
+            throw new ConfigurationException('checkpoint.temp_dir must be a non-empty string.');
+        }
+
+        if (file_exists($configured) && ! is_dir($configured)) {
+            throw new ConfigurationException(sprintf('Unable to create checkpoint temp directory [%s].', $configured));
+        }
+
+        if (! is_dir($configured) && ! @mkdir($configured, 0700, true) && ! is_dir($configured)) {
+            throw new ConfigurationException(sprintf('Unable to create checkpoint temp directory [%s].', $configured));
+        }
+
+        return $configured;
     }
 
     private function pathFor(CommandRun $run): string

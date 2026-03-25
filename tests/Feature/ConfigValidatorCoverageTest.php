@@ -251,6 +251,13 @@ it('rejects a missing filesystem output disk', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.output.filesystem.disk [missing-disk] is not configured.');
 });
 
+it('rejects an empty checkpoint temp directory path', function (): void {
+    config()->set('checkpoint.temp_dir', '');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.temp_dir must be a non-empty string.');
+});
+
 it('rejects pgdump parallel jobs for non-directory formats', function (): void {
     config()->set('checkpoint.drivers.pgdump.format', 'custom');
     config()->set('checkpoint.drivers.pgdump.jobs', 4);

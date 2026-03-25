@@ -32,6 +32,7 @@ final readonly class ConfigValidator
         $this->validateLogChannel();
         $this->validateUserModel();
         $this->validateTablePrefix();
+        $this->validateTempDirectory();
     }
 
     private function validateDriver(): void
@@ -771,6 +772,15 @@ final readonly class ConfigValidator
 
         if (! is_string($tablePrefix) || trim($tablePrefix) === '') {
             throw new ConfigurationException('checkpoint.table_prefix must be a non-empty string.');
+        }
+    }
+
+    private function validateTempDirectory(): void
+    {
+        $tempDir = $this->config->get('checkpoint.temp_dir');
+
+        if (! is_string($tempDir) || trim($tempDir) === '') {
+            throw new ConfigurationException('checkpoint.temp_dir must be a non-empty string.');
         }
     }
 }

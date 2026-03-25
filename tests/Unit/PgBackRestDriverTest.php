@@ -372,6 +372,16 @@ SH));
 });
 
 it('cleans up temporary pgbackrest secret config files after execution', function (): void {
+    $tempDir = tempnam(sys_get_temp_dir(), 'checkpoint-tempdir-');
+
+    if ($tempDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary checkpoint temp directory path.');
+    }
+
+    unlink($tempDir);
+    mkdir($tempDir, 0755, true);
+
+    config()->set('checkpoint.temp_dir', $tempDir);
     config()->set('checkpoint.drivers.pgbackrest.repositories', [
         1 => [
             'type' => 's3',
@@ -408,6 +418,7 @@ it('cleans up temporary pgbackrest secret config files after execution', functio
     preg_match('/--config=([^\s]+)/', (string) $run->fresh()?->command_line, $matches);
 
     expect($matches[1] ?? null)->toBeString()
+        ->and(str_starts_with((string) ($matches[1] ?? ''), rtrim($tempDir, '/').'/'))->toBeTrue()
         ->and(is_file((string) $matches[1]))->toBeFalse();
 });
 

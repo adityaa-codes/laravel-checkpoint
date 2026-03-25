@@ -192,7 +192,7 @@ final class MysqlDriver implements BackupDriver
             ];
         }
 
-        $binlogOutputPath = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-pitr-');
+        $binlogOutputPath = tempnam($this->tempDir(), 'checkpoint-mysql-pitr-');
 
         if ($binlogOutputPath === false) {
             throw new ConfigurationException('Unable to allocate temporary mysql PITR binlog output path.');
@@ -493,6 +493,29 @@ final class MysqlDriver implements BackupDriver
         }
 
         return rtrim($outputDir, '/');
+    }
+
+    private function tempDir(): string
+    {
+        $configured = trim((string) config('checkpoint.temp_dir', storage_path('app/checkpoint/tmp')));
+
+        if ($configured === '') {
+            throw new ConfigurationException('checkpoint.temp_dir must be a non-empty string.');
+        }
+
+        if (file_exists($configured) && ! is_dir($configured)) {
+            throw new ConfigurationException(
+                sprintf('Unable to create checkpoint temp directory [%s].', $configured),
+            );
+        }
+
+        if (! is_dir($configured) && ! @mkdir($configured, 0700, true) && ! is_dir($configured)) {
+            throw new ConfigurationException(
+                sprintf('Unable to create checkpoint temp directory [%s].', $configured),
+            );
+        }
+
+        return $configured;
     }
 
     private function outputPrefix(): string

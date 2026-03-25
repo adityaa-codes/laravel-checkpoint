@@ -45,6 +45,16 @@ it('builds mysqldump backup commands from structured config', function (): void 
 });
 
 it('builds mysqlbinlog commands for pitr restore targets', function (): void {
+    $tempDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-tempdir-');
+
+    if ($tempDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary mysql temp directory path.');
+    }
+
+    unlink($tempDir);
+    mkdir($tempDir, 0755, true);
+
+    config()->set('checkpoint.temp_dir', $tempDir);
     config()->set('checkpoint.drivers.mysql.mysqlbinlog_binary', 'mysqlbinlog');
     config()->set('checkpoint.drivers.mysql.pitr.binlog_files', ['/var/lib/mysql/binlog.000001', '/var/lib/mysql/binlog.000002']);
     config()->set('checkpoint.drivers.mysql.extra_args.pitr_binlog', ['--read-from-remote-server']);
@@ -63,6 +73,22 @@ it('builds mysqlbinlog commands for pitr restore targets', function (): void {
         ->and($process->getCommandLine())->toContain('--read-from-remote-server')
         ->and($process->getCommandLine())->toContain('/var/lib/mysql/binlog.000001')
         ->and($process->getCommandLine())->toContain('/var/lib/mysql/binlog.000002');
+});
+
+it('rejects mysql temp directory paths that cannot be used for temp files', function (): void {
+    $tempDirFile = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-temp-file-');
+
+    if ($tempDirFile === false) {
+        throw new RuntimeException('Unable to allocate a temporary checkpoint temp-dir file path.');
+    }
+
+    config()->set('checkpoint.temp_dir', $tempDirFile);
+
+    $driver = new MysqlDriver;
+    $method = new ReflectionMethod($driver, 'tempDir');
+
+    expect(fn (): mixed => $method->invoke($driver))
+        ->toThrow(ConfigurationException::class, sprintf('Unable to create checkpoint temp directory [%s].', $tempDirFile));
 });
 
 it('rejects restore paths outside the configured mysql output directory', function (): void {

@@ -74,6 +74,7 @@ DB_OPS_PGDUMP_FORMAT=directory
 DB_OPS_PGDUMP_JOBS=4
 DB_OPS_PGDUMP_COMPRESS_LEVEL=6
 DB_OPS_PGDUMP_OUTPUT_DIR=/var/app/checkpoint/logical-exports
+DB_OPS_TEMP_DIR=/var/app/checkpoint/tmp
 DB_OPS_MYSQL_DUMP_BINARY=mysqldump
 DB_OPS_MYSQL_BINARY=mysql
 DB_OPS_MYSQL_BINLOG_BINARY=mysqlbinlog
@@ -277,6 +278,7 @@ Operational notes:
 - `db-ops:doctor` reports the active repo target, TLS verification state, and encryption mode
 - persisted `command_line` values redact S3 keys, S3 secrets, and cipher passphrases
 - shell and `pgdump` command lines also redact inline credentials, separated secret flags, and connection-URI passwords before persistence and logging
+- temporary package artifacts (output capture streams, pgBackRest secret config files, mysql PITR binlog extraction files) are created under `DB_OPS_TEMP_DIR` rather than shared system temp paths
 - doctor output never prints raw repository secrets
 
 ### Restore Safety Guardrails

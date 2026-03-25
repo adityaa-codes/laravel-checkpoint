@@ -98,6 +98,7 @@ class TestCase extends Orchestra
                     'inline_bytes' => 2048,
                 ],
             ],
+            'temp_dir' => sys_get_temp_dir().'/checkpoint-tmp',
             'drivers' => [
                 'shell' => [
                     'class' => ShellCommandDriver::class,

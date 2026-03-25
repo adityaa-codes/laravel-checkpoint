@@ -83,6 +83,7 @@ return [
             'inline_bytes' => (int) $env('DB_OPS_OUTPUT_FILESYSTEM_INLINE_BYTES', 2048),
         ],
     ],
+    'temp_dir' => $env('DB_OPS_TEMP_DIR', storage_path('app/checkpoint/tmp')),
     'drivers' => [
         'shell' => [
             'class' => ShellCommandDriver::class,
