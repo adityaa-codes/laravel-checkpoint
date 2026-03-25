@@ -321,9 +321,11 @@ it('requires pitr restore verification to match mysql provenance', function (): 
 
     expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
         'restore_target' => '2026-03-24T11:00:00+00:00',
+        'pitr_base_target' => '/tmp/checkpoint-tests/mysql-baseline.sql',
         'metadata' => [
             'driver' => 'mysql',
             'database' => ':memory:',
+            'binlog_files' => ['/var/lib/mysql/binlog.000001'],
         ],
     ]))->toThrow(ConfigurationException::class, 'Restore operation [pitr_restore] requires a verified backup signal before execution.');
 });
@@ -337,6 +339,7 @@ it('accepts pitr restore verification when provenance matches mysql backup metad
     CommandRun::query()->create([
         'operation' => 'logical_backup',
         'driver_name' => 'mysql',
+        'artifact_path' => '/tmp/checkpoint-tests/mysql-baseline.sql',
         'status' => CommandRunStatus::Succeeded,
         'attempts' => 0,
         'last_known_good_at' => now(),
@@ -353,11 +356,43 @@ it('accepts pitr restore verification when provenance matches mysql backup metad
 
     expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
         'restore_target' => '2026-03-24T11:00:00+00:00',
+        'pitr_base_target' => '/tmp/checkpoint-tests/mysql-baseline.sql',
+        'metadata' => [
+            'driver' => 'mysql',
+            'database' => ':memory:',
+            'binlog_files' => ['/var/lib/mysql/binlog.000001', '/var/lib/mysql/binlog.000002'],
+        ],
+    ]))->not->toThrow(ConfigurationException::class);
+});
+
+it('requires pitr verification to include a baseline artifact and binlog chain context', function (): void {
+    config()->set('checkpoint.restore.require_verified_backup', true);
+    config()->set('checkpoint.restore.require_confirmation', true);
+    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'pitr_restore',
+        'argument_text' => '2026-03-24T11:00:00+00:00',
+    ]);
+
+    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
+        'restore_target' => '2026-03-24T11:00:00+00:00',
         'metadata' => [
             'driver' => 'mysql',
             'database' => ':memory:',
         ],
-    ]))->not->toThrow(ConfigurationException::class);
+    ]))->toThrow(ConfigurationException::class, 'pitr_restore requires a baseline logical backup artifact when checkpoint.restore.require_verified_backup is enabled.');
+
+    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
+        'restore_target' => '2026-03-24T11:00:00+00:00',
+        'pitr_base_target' => '/tmp/checkpoint-tests/mysql-baseline.sql',
+        'metadata' => [
+            'driver' => 'mysql',
+            'database' => ':memory:',
+            'binlog_files' => [],
+        ],
+    ]))->toThrow(ConfigurationException::class, 'pitr_restore requires a non-empty binlog chain when checkpoint.restore.require_verified_backup is enabled.');
 });
 
 it('requires pgbackrest verification to match driver provenance', function (): void {

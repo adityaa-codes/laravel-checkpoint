@@ -208,6 +208,50 @@ SH
         ]);
 });
 
+it('captures pitr baseline and binlog chain metadata during planning', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-pitr-meta-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary mysql PITR metadata path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    $baseline = $outputDir.'/mysql-export-100.sql';
+    file_put_contents($baseline, 'baseline');
+
+    config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.mysql.output_prefix', 'mysql-export');
+    config()->set('checkpoint.drivers.mysql.file_extension', 'sql');
+    config()->set('checkpoint.drivers.mysql.pitr.binlog_files', [
+        '/var/lib/mysql/binlog.000111',
+        '/var/lib/mysql/binlog.000112',
+    ]);
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'artifact_path' => $baseline,
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 0,
+        'last_known_good_at' => now(),
+    ]);
+
+    $driver = new MysqlDriver;
+    $run = CommandRun::factory()->make([
+        'operation' => 'pitr_restore',
+        'argument_text' => '2026-03-24 11:00:00',
+    ]);
+
+    $plannedMetadata = plannedMysqlMetadata($driver, $run);
+
+    expect($plannedMetadata['pitr_base_target'])->toBe($baseline)
+        ->and($plannedMetadata['metadata']['binlog_files'])->toBe([
+            '/var/lib/mysql/binlog.000111',
+            '/var/lib/mysql/binlog.000112',
+        ]);
+});
+
 it('redacts mysql command lines before persisting and logging them', function (): void {
     $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-redact-');
 

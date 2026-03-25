@@ -37,6 +37,8 @@ final readonly class RestoreSafetyGuard
                 'environment' => $environment,
                 'database' => $database !== '' ? $database : null,
                 'target' => $restoreTarget !== '' ? $restoreTarget : null,
+                'pitr_base_target' => $this->pitrBaseTarget($context),
+                'pitr_binlog_files' => $this->pitrBinlogFiles($context),
                 'confirmation_required' => $confirmation['required'],
                 'confirmation_satisfied_via' => $confirmation['satisfied_via'],
                 'verified_backup_required' => $verificationSignal['required'],
@@ -312,7 +314,24 @@ final readonly class RestoreSafetyGuard
         \Illuminate\Database\Eloquent\Builder $query,
         array $context,
     ): ?CommandRun {
-        $query->where('operation', 'logical_backup');
+        $baseTarget = $this->pitrBaseTarget($context);
+        $binlogFiles = $this->pitrBinlogFiles($context);
+
+        if ($baseTarget === null || $baseTarget === '') {
+            throw new ConfigurationException(
+                'pitr_restore requires a baseline logical backup artifact when checkpoint.restore.require_verified_backup is enabled.',
+            );
+        }
+
+        if ($binlogFiles === []) {
+            throw new ConfigurationException(
+                'pitr_restore requires a non-empty binlog chain when checkpoint.restore.require_verified_backup is enabled.',
+            );
+        }
+
+        $query
+            ->where('operation', 'logical_backup')
+            ->where('artifact_path', $baseTarget);
 
         /** @var \Illuminate\Support\Collection<int, CommandRun> $candidates */
         $candidates = $query->limit(10)->get();
@@ -370,5 +389,40 @@ final readonly class RestoreSafetyGuard
         }
 
         return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     * @return list<string>
+     */
+    private function pitrBinlogFiles(array $context): array
+    {
+        $contextMetadata = is_array($context['metadata'] ?? null) ? $context['metadata'] : [];
+        $value = $contextMetadata['binlog_files'] ?? [];
+
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(
+            static fn (mixed $item): string => is_string($item) ? trim($item) : '',
+            $value,
+        ), static fn (string $item): bool => $item !== ''));
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private function pitrBaseTarget(array $context): ?string
+    {
+        $baseTarget = $context['pitr_base_target'] ?? null;
+
+        if (! is_string($baseTarget)) {
+            return null;
+        }
+
+        $baseTarget = trim($baseTarget);
+
+        return $baseTarget !== '' ? $baseTarget : null;
     }
 }
