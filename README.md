@@ -54,6 +54,7 @@ DB_OPS_PRUNE_KEEP_DAYS=90
 DB_OPS_PRUNE_KEEP_FAILED_DAYS=365
 DB_OPS_PRUNE_KEEP_BACKUP_DRILL_DAYS=365
 DB_OPS_LOG_CHANNEL=stack
+DB_OPS_ALERT_COOLDOWN_SECONDS=300
 
 DB_OPS_CMD_LOGICAL_BACKUP=
 DB_OPS_CMD_RESTORE_LATEST=
@@ -287,6 +288,7 @@ Operational notes:
 - shell and `pgdump` command lines also redact inline credentials, separated secret flags, and connection-URI passwords before persistence and logging
 - temporary package artifacts (output capture streams, pgBackRest secret config files, mysql PITR binlog extraction files) are created under `DB_OPS_TEMP_DIR` rather than shared system temp paths
 - doctor output never prints raw repository secrets
+- observability alarms are deduplicated for `DB_OPS_ALERT_COOLDOWN_SECONDS` to reduce repeated pages for the same condition
 
 ### Restore Safety Guardrails
 

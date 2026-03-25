@@ -13,6 +13,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\Process\ExecutableFinder;
 
 /** @internal */
@@ -527,7 +528,12 @@ final readonly class OperationalReportBuilder
             ->first();
 
         if (! $latest instanceof CommandRun || $latest->last_known_good_at === null) {
-            event(new BackupFreshnessAlarmTriggered(null, 'missing', null, $maxAgeHours));
+            $this->dispatchWithCooldown(
+                sprintf('backup.last_known_good:missing:%d', $maxAgeHours),
+                function () use ($maxAgeHours): void {
+                    event(new BackupFreshnessAlarmTriggered(null, 'missing', null, $maxAgeHours));
+                },
+            );
 
             return $this->checkRow('backup.last_known_good', 'Backups: last known good', 'warn', 'No last-known-good backup recorded', [
                 'age_hours' => null,
@@ -540,7 +546,12 @@ final readonly class OperationalReportBuilder
         $isStale = $latest->last_known_good_at->lt(now()->subHours($maxAgeHours));
 
         if ($isStale) {
-            event(new BackupFreshnessAlarmTriggered($latest, 'stale', $ageHours, $maxAgeHours));
+            $this->dispatchWithCooldown(
+                sprintf('backup.last_known_good:stale:%d:%d', (int) $latest->getKey(), $maxAgeHours),
+                function () use ($latest, $ageHours, $maxAgeHours): void {
+                    event(new BackupFreshnessAlarmTriggered($latest, 'stale', $ageHours, $maxAgeHours));
+                },
+            );
         }
 
         return $this->checkRow(
@@ -621,7 +632,12 @@ final readonly class OperationalReportBuilder
         $thresholdDays = max(1, (int) $this->config->get('checkpoint.observability.max_backup_drill_age_days', 30));
 
         if (! $latest instanceof BackupDrillRun) {
-            event(new BackupDrillFreshnessAlarmTriggered(null, 'missing', null, $thresholdDays));
+            $this->dispatchWithCooldown(
+                sprintf('backup_drill.latest_run:missing:%d', $thresholdDays),
+                function () use ($thresholdDays): void {
+                    event(new BackupDrillFreshnessAlarmTriggered(null, 'missing', null, $thresholdDays));
+                },
+            );
 
             return $this->checkRow('backup_drill.latest_run', 'Backup drills: latest run', 'warn', 'No backup drill recorded', [
                 'run_uuid' => null,
@@ -636,7 +652,12 @@ final readonly class OperationalReportBuilder
         $isStale = $latest->executed_at->lt(now()->subDays($thresholdDays));
 
         if ($isStale) {
-            event(new BackupDrillFreshnessAlarmTriggered($latest, 'stale', $ageDays, $thresholdDays));
+            $this->dispatchWithCooldown(
+                sprintf('backup_drill.latest_run:stale:%s:%d', $latest->run_uuid, $thresholdDays),
+                function () use ($latest, $ageDays, $thresholdDays): void {
+                    event(new BackupDrillFreshnessAlarmTriggered($latest, 'stale', $ageDays, $thresholdDays));
+                },
+            );
         }
 
         return $this->checkRow(
@@ -669,7 +690,12 @@ final readonly class OperationalReportBuilder
         $latest = $summary['latest'];
 
         if ($total < 1) {
-            event(new BackupDrillPassRateAlarmTriggered($windowDays, 0, 0, 0.0, $thresholdPercent, $latest));
+            $this->dispatchWithCooldown(
+                sprintf('backup_drill.pass_rate:missing:%d:%.1f', $windowDays, $thresholdPercent),
+                function () use ($windowDays, $thresholdPercent, $latest): void {
+                    event(new BackupDrillPassRateAlarmTriggered($windowDays, 0, 0, 0.0, $thresholdPercent, $latest));
+                },
+            );
 
             return $this->checkRow('backup_drill.pass_rate', 'Backup drills: pass rate', 'warn', sprintf('No backup drills in the last %d days', $windowDays), [
                 'window_days' => $windowDays,
@@ -686,7 +712,13 @@ final readonly class OperationalReportBuilder
         $isBelowThreshold = $percent < $thresholdPercent;
 
         if ($isBelowThreshold) {
-            event(new BackupDrillPassRateAlarmTriggered($windowDays, $passing, $total, $percent, $thresholdPercent, $latest));
+            $latestId = $latest?->getKey();
+            $this->dispatchWithCooldown(
+                sprintf('backup_drill.pass_rate:stale:%s:%d:%.1f', $latestId !== null ? (string) $latestId : 'none', $windowDays, $thresholdPercent),
+                function () use ($windowDays, $passing, $total, $percent, $thresholdPercent, $latest): void {
+                    event(new BackupDrillPassRateAlarmTriggered($windowDays, $passing, $total, $percent, $thresholdPercent, $latest));
+                },
+            );
         }
 
         return $this->checkRow(
@@ -882,5 +914,26 @@ final readonly class OperationalReportBuilder
             'notes' => $notes,
             'data' => $data,
         ];
+    }
+
+    private function dispatchWithCooldown(string $key, callable $dispatch): void
+    {
+        $cooldown = max(0, (int) $this->config->get('checkpoint.observability.alert_cooldown_seconds', 300));
+
+        if ($cooldown === 0) {
+            $dispatch();
+
+            return;
+        }
+
+        $cacheKey = 'checkpoint:alert-cooldown:'.sha1($key);
+        $lockStore = $this->config->get('checkpoint.queue.lock_store');
+        $cache = is_string($lockStore) && $lockStore !== '' ? Cache::store($lockStore) : Cache::store();
+
+        if (! $cache->add($cacheKey, now()->timestamp, $cooldown)) {
+            return;
+        }
+
+        $dispatch();
     }
 }

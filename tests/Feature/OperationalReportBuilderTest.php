@@ -3,10 +3,17 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillPassRateAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\Event;
+
+beforeEach(function (): void {
+    Cache::store((string) config('checkpoint.queue.lock_store', 'array'))->flush();
+});
 
 it('builds shared summary payloads with compatibility aliases', function (): void {
     Date::setTestNow('2026-03-11 12:00:00');
@@ -53,6 +60,33 @@ it('marks shared health output as not ok when warnings are present', function ()
     $checks = app(OperationalReportBuilder::class)->healthChecks();
 
     expect(app(OperationalReportBuilder::class)->healthOk($checks))->toBeFalse();
+});
+
+it('deduplicates backup drill pass-rate alarm dispatches within cooldown windows', function (): void {
+    Event::fake([BackupDrillPassRateAlarmTriggered::class]);
+    Date::setTestNow('2026-03-11 12:00:00');
+
+    config()->set('checkpoint.observability.alert_cooldown_seconds', 300);
+    config()->set('checkpoint.observability.backup_drill_pass_rate_window_days', 14);
+    config()->set('checkpoint.observability.backup_drill_min_pass_rate', 100.0);
+
+    BackupDrillRun::query()->create([
+        'run_uuid' => 'drill-fail-001',
+        'overall_result' => 'fail',
+        'executed_at' => now()->subDays(1),
+    ]);
+
+    app(OperationalReportBuilder::class)->healthChecks();
+    app(OperationalReportBuilder::class)->healthChecks();
+
+    Event::assertDispatchedTimes(BackupDrillPassRateAlarmTriggered::class, 1);
+
+    Date::setTestNow('2026-03-11 12:06:00');
+    app(OperationalReportBuilder::class)->healthChecks();
+
+    Event::assertDispatchedTimes(BackupDrillPassRateAlarmTriggered::class, 2);
+
+    Date::setTestNow();
 });
 
 it('builds a combined report payload from a shared snapshot', function (): void {

@@ -74,6 +74,7 @@ return [
         'max_backup_drill_age_days' => (int) $env('DB_OPS_MAX_BACKUP_DRILL_AGE_DAYS', 30),
         'backup_drill_pass_rate_window_days' => (int) $env('DB_OPS_BACKUP_DRILL_PASS_RATE_WINDOW_DAYS', 30),
         'backup_drill_min_pass_rate' => (float) $env('DB_OPS_BACKUP_DRILL_MIN_PASS_RATE', 100.0),
+        'alert_cooldown_seconds' => (int) $env('DB_OPS_ALERT_COOLDOWN_SECONDS', 300),
     ],
     'reporting' => [
         'max_recent_runs' => (int) $env('DB_OPS_REPORTING_MAX_RECENT_RUNS', 100),

@@ -184,6 +184,13 @@ it('rejects observability anomaly factors that are not greater than one', functi
         ->toThrow(ConfigurationException::class, 'checkpoint.observability.backup_duration_anomaly_factor must be greater than 1.');
 });
 
+it('rejects a negative alert cooldown window', function (): void {
+    config()->set('checkpoint.observability.alert_cooldown_seconds', -1);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.observability.alert_cooldown_seconds must be greater than or equal to zero.');
+});
+
 it('rejects a non-positive backup drill freshness threshold', function (): void {
     config()->set('checkpoint.observability.max_backup_drill_age_days', 0);
 

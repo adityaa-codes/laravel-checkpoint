@@ -87,6 +87,7 @@ class TestCase extends Orchestra
                 'max_backup_drill_age_days' => 30,
                 'backup_drill_pass_rate_window_days' => 30,
                 'backup_drill_min_pass_rate' => 100.0,
+                'alert_cooldown_seconds' => 300,
             ],
             'reporting' => [
                 'max_recent_runs' => 100,

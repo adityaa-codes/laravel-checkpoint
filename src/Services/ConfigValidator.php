@@ -555,6 +555,7 @@ final readonly class ConfigValidator
         $maxBackupDrillAgeDays = $config['max_backup_drill_age_days'] ?? null;
         $backupDrillPassRateWindowDays = $config['backup_drill_pass_rate_window_days'] ?? null;
         $backupDrillMinPassRate = $config['backup_drill_min_pass_rate'] ?? null;
+        $alertCooldownSeconds = $config['alert_cooldown_seconds'] ?? null;
 
         if (! is_int($maxAge) || $maxAge < 1) {
             throw new ConfigurationException('checkpoint.observability.max_last_known_good_age_hours must be greater than zero.');
@@ -586,6 +587,10 @@ final readonly class ConfigValidator
 
         if ((float) $backupDrillMinPassRate < 0.0 || (float) $backupDrillMinPassRate > 100.0) {
             throw new ConfigurationException('checkpoint.observability.backup_drill_min_pass_rate must be between 0 and 100.');
+        }
+
+        if (! is_int($alertCooldownSeconds) || $alertCooldownSeconds < 0) {
+            throw new ConfigurationException('checkpoint.observability.alert_cooldown_seconds must be greater than or equal to zero.');
         }
     }
 
