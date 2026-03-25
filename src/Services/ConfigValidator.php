@@ -20,6 +20,7 @@ final readonly class ConfigValidator
         $this->validateDriver();
         $this->validatePgBackRestConfig();
         $this->validatePgDumpConfig();
+        $this->validateMysqlConfig();
         $this->validateQueueSettings();
         $this->validateRestoreSettings();
         $this->validateScheduleSettings();
@@ -297,6 +298,71 @@ final readonly class ConfigValidator
         }
     }
 
+    private function validateMysqlConfig(): void
+    {
+        $config = $this->config->get('checkpoint.drivers.mysql', []);
+
+        if (! is_array($config)) {
+            throw new ConfigurationException('checkpoint.drivers.mysql must be an array.');
+        }
+
+        foreach (['dump_binary', 'mysql_binary', 'mysqlbinlog_binary', 'output_dir', 'output_prefix', 'file_extension'] as $key) {
+            $value = $config[$key] ?? null;
+
+            if (! is_string($value) || trim($value) === '') {
+                throw new ConfigurationException(sprintf('checkpoint.drivers.mysql.%s must be a non-empty string.', $key));
+            }
+        }
+
+        foreach (['single_transaction', 'quick', 'skip_lock_tables'] as $key) {
+            if (! is_bool($config[$key] ?? null)) {
+                throw new ConfigurationException(sprintf('checkpoint.drivers.mysql.%s must be a boolean.', $key));
+            }
+        }
+
+        if (! is_string($config['drill_command'] ?? null)) {
+            throw new ConfigurationException('checkpoint.drivers.mysql.drill_command must be a string.');
+        }
+
+        $timeout = $config['command_timeout_seconds'] ?? null;
+
+        if (! is_int($timeout) || $timeout < 1) {
+            throw new ConfigurationException('checkpoint.drivers.mysql.command_timeout_seconds must be greater than zero.');
+        }
+
+        $pitr = $config['pitr'] ?? [];
+
+        if (! is_array($pitr)) {
+            throw new ConfigurationException('checkpoint.drivers.mysql.pitr must be an array.');
+        }
+
+        $binlogFiles = $pitr['binlog_files'] ?? [];
+
+        if (! is_array($binlogFiles)) {
+            throw new ConfigurationException('checkpoint.drivers.mysql.pitr.binlog_files must be an array.');
+        }
+
+        foreach ($binlogFiles as $binlogFile) {
+            if (! is_string($binlogFile) || trim($binlogFile) === '') {
+                throw new ConfigurationException('checkpoint.drivers.mysql.pitr.binlog_files values must be non-empty strings.');
+            }
+        }
+
+        $extraArgs = $config['extra_args'] ?? [];
+
+        if (! is_array($extraArgs)) {
+            throw new ConfigurationException('checkpoint.drivers.mysql.extra_args must be an array.');
+        }
+
+        foreach (['backup', 'restore', 'pitr_binlog', 'pitr_replay', 'drill'] as $key) {
+            if (! array_key_exists($key, $extraArgs) || ! is_array($extraArgs[$key])) {
+                throw new ConfigurationException(
+                    sprintf('checkpoint.drivers.mysql.extra_args.%s must be an array.', $key),
+                );
+            }
+        }
+    }
+
     private function validateQueueSettings(): void
     {
         $timeout = (int) $this->config->get('checkpoint.queue.timeout', 0);
@@ -372,6 +438,20 @@ final readonly class ConfigValidator
         if (! is_string($lockStore) || ! is_array($stores) || ! array_key_exists($lockStore, $stores)) {
             throw new ConfigurationException(
                 sprintf('checkpoint.queue.lock_store [%s] is not configured in cache.stores.', (string) $lockStore),
+            );
+        }
+
+        $store = $stores[$lockStore];
+        $environment = (string) $this->config->get('app.env', 'production');
+        $driver = is_array($store) ? (string) ($store['driver'] ?? '') : '';
+
+        if (! in_array($environment, ['local', 'testing'], true) && in_array($driver, ['array', 'file'], true)) {
+            throw new ConfigurationException(
+                sprintf(
+                    'checkpoint.queue.lock_store [%s] uses cache driver [%s], which is not safe for production queue uniqueness or clustered scheduler coordination.',
+                    $lockStore,
+                    $driver,
+                ),
             );
         }
     }

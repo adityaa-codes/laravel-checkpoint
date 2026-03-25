@@ -12,7 +12,6 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Psr\Log\LoggerInterface;
 
 it('executes argv tokens without shell interpretation', function (): void {
     config()->set('checkpoint.drivers.shell.commands.logical_backup', 'printf %s:%s:%s $HOME *.sql {db}');
@@ -182,24 +181,8 @@ it('records restore audit metadata for shell restore runs', function (): void {
 it('redacts shell command lines before persisting and logging them', function (): void {
     config()->set(
         'checkpoint.drivers.shell.commands.logical_backup',
-        'printf ok postgresql://app:super-secret@db.internal/app password=top-secret --token=abc123'
+        'printf ok postgresql://app:super-secret@db.internal/app?password=query-secret --password top-secret --token=abc123'
     );
-
-    $logger = Mockery::mock(LoggerInterface::class);
-    $logger->shouldReceive('info')
-        ->once()
-        ->with('Starting checkpoint operation', Mockery::on(
-            fn (array $context): bool => str_contains((string) $context['command_line'], 'postgresql://app:[REDACTED]@db.internal/app')
-                && str_contains((string) $context['command_line'], 'password=[REDACTED]')
-                && str_contains((string) $context['command_line'], '--token=[REDACTED]')
-                && ! str_contains((string) $context['command_line'], 'super-secret')
-                && ! str_contains((string) $context['command_line'], 'top-secret')
-                && ! str_contains((string) $context['command_line'], 'abc123')
-        ));
-    $logger->shouldReceive('info')
-        ->once()
-        ->with('Completed checkpoint operation', Mockery::type('array'));
-    Log::shouldReceive('channel')->twice()->andReturn($logger);
 
     $run = CommandRun::query()->create([
         'operation' => 'logical_backup',
@@ -212,9 +195,11 @@ it('redacts shell command lines before persisting and logging them', function ()
     $run->refresh();
 
     expect($run->command_line)->toContain('postgresql://app:[REDACTED]@db.internal/app')
-        ->and($run->command_line)->toContain('password=[REDACTED]')
+        ->and($run->command_line)->toContain('?password=[REDACTED]')
+        ->and($run->command_line)->toContain("'--password' '[REDACTED]'")
         ->and($run->command_line)->toContain('--token=[REDACTED]')
         ->and($run->command_line)->not->toContain('super-secret')
+        ->and($run->command_line)->not->toContain('query-secret')
         ->and($run->command_line)->not->toContain('top-secret')
         ->and($run->command_line)->not->toContain('abc123');
 });

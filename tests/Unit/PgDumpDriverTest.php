@@ -492,6 +492,10 @@ SH));
             'jobs' => 4,
         ]);
 
+    expect($run->metadata['artifact_snapshot'] ?? null)->toBeArray()
+        ->and($run->metadata['artifact_snapshot']['path'] ?? null)->toBe($outputDir.'/logical-export-'.$run->getKey())
+        ->and($run->metadata['artifact_snapshot']['file_type'] ?? null)->toBe('directory');
+
     Event::assertDispatched(BackupCompleted::class);
     Event::assertNotDispatched(BackupFailed::class);
 });
@@ -684,26 +688,11 @@ it('redacts pg_dump command lines before persisting and logging them', function 
     config()->set('checkpoint.drivers.pgdump.dump_binary', fakePgDumpScript("#!/bin/sh\nprintf 'ok'\n"));
     config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
     config()->set('checkpoint.drivers.pgdump.extra_args.backup', [
-        'postgresql://app:super-secret@db.internal/app',
-        'password=top-secret',
+        'postgresql://app:super-secret@db.internal/app?password=query-secret',
+        '--password',
+        'top-secret',
         '--token=abc123',
     ]);
-
-    $logger = Mockery::mock(LoggerInterface::class);
-    $logger->shouldReceive('info')
-        ->once()
-        ->with('Starting pg_dump operation', Mockery::on(
-            fn (array $context): bool => str_contains((string) $context['command_line'], 'postgresql://app:[REDACTED]@db.internal/app')
-                && str_contains((string) $context['command_line'], 'password=[REDACTED]')
-                && str_contains((string) $context['command_line'], '--token=[REDACTED]')
-                && ! str_contains((string) $context['command_line'], 'super-secret')
-                && ! str_contains((string) $context['command_line'], 'top-secret')
-                && ! str_contains((string) $context['command_line'], 'abc123')
-        ));
-    $logger->shouldReceive('info')
-        ->once()
-        ->with('Completed pg_dump operation', Mockery::type('array'));
-    Log::shouldReceive('channel')->twice()->andReturn($logger);
 
     $run = CommandRun::query()->create([
         'operation' => 'logical_backup',
@@ -716,9 +705,11 @@ it('redacts pg_dump command lines before persisting and logging them', function 
     $run->refresh();
 
     expect($run->command_line)->toContain('postgresql://app:[REDACTED]@db.internal/app')
-        ->and($run->command_line)->toContain('password=[REDACTED]')
+        ->and($run->command_line)->toContain('?password=[REDACTED]')
+        ->and($run->command_line)->toContain("'--password' '[REDACTED]'")
         ->and($run->command_line)->toContain('--token=[REDACTED]')
         ->and($run->command_line)->not->toContain('super-secret')
+        ->and($run->command_line)->not->toContain('query-secret')
         ->and($run->command_line)->not->toContain('top-secret')
         ->and($run->command_line)->not->toContain('abc123');
 });

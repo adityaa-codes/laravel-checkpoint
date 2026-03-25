@@ -7,6 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Tests;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpointServiceProvider;
 use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -40,6 +41,7 @@ class TestCase extends Orchestra
 
     public function getEnvironmentSetUp($app): void
     {
+        $app['config']->set('app.env', 'testing');
         $app['config']->set('database.default', 'testing');
         $app['config']->set('database.connections.testing', [
             'driver' => 'sqlite',
@@ -165,6 +167,30 @@ class TestCase extends Orchestra
                     'extra_args' => [
                         'backup' => [],
                         'restore' => [],
+                    ],
+                ],
+                'mysql' => [
+                    'class' => MysqlDriver::class,
+                    'dump_binary' => 'mysqldump',
+                    'mysql_binary' => 'mysql',
+                    'mysqlbinlog_binary' => 'mysqlbinlog',
+                    'single_transaction' => true,
+                    'quick' => true,
+                    'skip_lock_tables' => true,
+                    'output_dir' => sys_get_temp_dir().'/checkpoint-mysql-exports',
+                    'output_prefix' => 'mysql-export',
+                    'file_extension' => 'sql',
+                    'drill_command' => '',
+                    'command_timeout_seconds' => 5,
+                    'pitr' => [
+                        'binlog_files' => [],
+                    ],
+                    'extra_args' => [
+                        'backup' => [],
+                        'restore' => [],
+                        'pitr_binlog' => [],
+                        'pitr_replay' => [],
+                        'drill' => [],
                     ],
                 ],
             ],

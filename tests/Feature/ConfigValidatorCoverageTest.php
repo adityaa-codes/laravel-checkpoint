@@ -269,6 +269,27 @@ it('rejects pgdump compression levels outside the supported range', function ():
         ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgdump.compress_level must be between 0 and 9.');
 });
 
+it('rejects mysql pitr binlog file lists that are not arrays', function (): void {
+    config()->set('checkpoint.drivers.mysql.pitr.binlog_files', 'binlog.000001');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.mysql.pitr.binlog_files must be an array.');
+});
+
+it('rejects mysql pitr binlog file lists with empty entries', function (): void {
+    config()->set('checkpoint.drivers.mysql.pitr.binlog_files', ['binlog.000001', '']);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.mysql.pitr.binlog_files values must be non-empty strings.');
+});
+
+it('rejects non-array mysql extra args', function (): void {
+    config()->set('checkpoint.drivers.mysql.extra_args.drill', '--flag');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.mysql.extra_args.drill must be an array.');
+});
+
 it('rejects a queue timeout that is not lower than retry_after', function (): void {
     config()->set('checkpoint.queue.timeout', 3600);
     config()->set('checkpoint.queue.retry_after', 3600);
@@ -372,4 +393,17 @@ it('accepts a valid fake driver configuration', function (): void {
     config()->set('checkpoint.queue.lock_store', 'array');
 
     expect(fn () => resolve(ConfigValidator::class)->validate())->not->toThrow(ConfigurationException::class);
+});
+
+it('rejects local-only queue lock stores outside local and testing environments', function (): void {
+    $originalEnvironment = (string) config('app.env', 'testing');
+    config()->set('app.env', 'production');
+    config()->set('checkpoint.queue.lock_store', 'array');
+
+    try {
+        expect(fn () => resolve(ConfigValidator::class)->validate())
+            ->toThrow(ConfigurationException::class, 'checkpoint.queue.lock_store [array] uses cache driver [array], which is not safe for production queue uniqueness or clustered scheduler coordination.');
+    } finally {
+        config()->set('app.env', $originalEnvironment);
+    }
 });

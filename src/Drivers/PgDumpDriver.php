@@ -12,6 +12,7 @@ use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
@@ -463,7 +464,13 @@ final class PgDumpDriver implements BackupDriver
     {
         clearstatcache(true, $realTargetPath);
 
-        $stats = stat($realTargetPath);
+        if (! file_exists($realTargetPath)) {
+            throw new ConfigurationException(
+                sprintf('Configured logical restore target [%s] does not exist.', $realTargetPath),
+            );
+        }
+
+        $stats = @stat($realTargetPath);
 
         if ($stats === false) {
             throw new ConfigurationException(
@@ -644,6 +651,10 @@ final class PgDumpDriver implements BackupDriver
             $completed['backup_size_bytes'] = $backupSize;
 
             if ($exitCode === 0) {
+                if (is_string($artifactPath)) {
+                    $completed['metadata']['artifact_snapshot'] = $this->artifactSnapshot($artifactPath, (string) ($metadata['format'] ?? $this->format()));
+                }
+
                 $completed['last_known_good_at'] = now();
             }
         }
@@ -693,17 +704,7 @@ final class PgDumpDriver implements BackupDriver
 
     private function redactCommandLine(string $commandLine): string
     {
-        $patterns = [
-            '/(\b(?:password|pass|token|secret|apikey|api_key|pgpassword)=)([^\s]+)/i',
-            '/(--(?:password|pass|token|secret|apikey|api-key)=)([^\s]+)/i',
-            '/(postgres(?:ql)?:\/\/[^:\s]+:)([^@\/\s]+)(@)/i',
-        ];
-
-        foreach ($patterns as $pattern) {
-            $commandLine = (string) preg_replace($pattern, '$1[REDACTED]$3', $commandLine);
-        }
-
-        return $commandLine;
+        return $this->commandLineRedactor()->redact($commandLine);
     }
 
     private function restoreSafetyGuard(): RestoreSafetyGuard
@@ -760,5 +761,22 @@ final class PgDumpDriver implements BackupDriver
     private function outputStore(): CommandOutputStore
     {
         return resolve(CommandOutputStore::class);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function artifactSnapshot(string $path, string $format): ?array
+    {
+        try {
+            return $this->restoreTargetSnapshot($path, $format);
+        } catch (ConfigurationException) {
+            return null;
+        }
+    }
+
+    private function commandLineRedactor(): CommandLineRedactor
+    {
+        return resolve(CommandLineRedactor::class);
     }
 }

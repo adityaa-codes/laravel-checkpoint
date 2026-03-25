@@ -36,6 +36,7 @@ it('matches the status summary json fixture', function (): void {
 it('matches the doctor json fixture', function (): void {
     CommandJsonFixtureSupport::freezeTime();
     config()->set('checkpoint.observability.backup_drill_pass_rate_window_days', 14);
+    CommandJsonFixtureSupport::seedMysqlDoctorInputs();
     CommandJsonFixtureSupport::seedOperatorState();
 
     CommandJsonFixtureSupport::withEmptyPath(function (): void {

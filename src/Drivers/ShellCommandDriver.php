@@ -13,6 +13,7 @@ use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
@@ -233,17 +234,7 @@ final class ShellCommandDriver implements BackupDriver
 
     private function redactCommandLine(string $commandLine): string
     {
-        $patterns = [
-            '/(\b(?:password|pass|token|secret|apikey|api_key|pgpassword)=)([^\s]+)/i',
-            '/(--(?:password|pass|token|secret|apikey|api-key)=)([^\s]+)/i',
-            '/(postgres(?:ql)?:\/\/[^:\s]+:)([^@\/\s]+)(@)/i',
-        ];
-
-        foreach ($patterns as $pattern) {
-            $commandLine = (string) preg_replace($pattern, '$1[REDACTED]$3', $commandLine);
-        }
-
-        return $commandLine;
+        return $this->commandLineRedactor()->redact($commandLine);
     }
 
     /**
@@ -338,6 +329,11 @@ final class ShellCommandDriver implements BackupDriver
     private function outputCapture(): CommandOutputCapture
     {
         return resolve(CommandOutputCapture::class);
+    }
+
+    private function commandLineRedactor(): CommandLineRedactor
+    {
+        return resolve(CommandLineRedactor::class);
     }
 
     private function outputStore(): CommandOutputStore

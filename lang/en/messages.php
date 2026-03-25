@@ -15,6 +15,7 @@ return [
     'operations.pgbackrest_verify' => 'pgBackRest Verify',
     'operations.pgbackrest_check' => 'pgBackRest Check',
     'operations.pgbackrest_info' => 'pgBackRest Info',
+    'operations.mysql_pitr_replay' => 'MySQL PITR Replay',
 
     'status.pending' => 'Pending',
     'status.running' => 'Running',

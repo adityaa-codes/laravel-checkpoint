@@ -5,6 +5,7 @@ declare(strict_types=1);
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
 use Illuminate\Foundation\Auth\User;
 
 /** @phpstan-ignore-next-line */
@@ -159,6 +160,33 @@ return [
             'extra_args' => [
                 'backup' => [],
                 'restore' => [],
+            ],
+        ],
+        'mysql' => [
+            'class' => MysqlDriver::class,
+            'dump_binary' => $env('DB_OPS_MYSQL_DUMP_BINARY', 'mysqldump'),
+            'mysql_binary' => $env('DB_OPS_MYSQL_BINARY', 'mysql'),
+            'mysqlbinlog_binary' => $env('DB_OPS_MYSQL_BINLOG_BINARY', 'mysqlbinlog'),
+            'single_transaction' => (bool) $env('DB_OPS_MYSQL_SINGLE_TRANSACTION', true),
+            'quick' => (bool) $env('DB_OPS_MYSQL_QUICK', true),
+            'skip_lock_tables' => (bool) $env('DB_OPS_MYSQL_SKIP_LOCK_TABLES', true),
+            'output_dir' => $env('DB_OPS_MYSQL_OUTPUT_DIR', storage_path('app/checkpoint/mysql/logical-exports')),
+            'output_prefix' => $env('DB_OPS_MYSQL_OUTPUT_PREFIX', 'mysql-export'),
+            'file_extension' => $env('DB_OPS_MYSQL_FILE_EXTENSION', 'sql'),
+            'drill_command' => $env('DB_OPS_MYSQL_DRILL_COMMAND', ''),
+            'command_timeout_seconds' => (int) $env('DB_OPS_MYSQL_TIMEOUT', 7200),
+            'pitr' => [
+                'binlog_files' => array_values(array_filter(array_map(
+                    static fn (string $value): string => trim($value),
+                    explode(',', (string) $env('DB_OPS_MYSQL_PITR_BINLOG_FILES', '')),
+                ), static fn (string $value): bool => $value !== '')),
+            ],
+            'extra_args' => [
+                'backup' => [],
+                'restore' => [],
+                'pitr_binlog' => [],
+                'pitr_replay' => [],
+                'drill' => [],
             ],
         ],
     ],

@@ -113,4 +113,13 @@ final class CommandJsonFixtureSupport
             putenv($originalPath === false ? 'PATH' : 'PATH='.$originalPath);
         }
     }
+
+    public static function seedMysqlDoctorInputs(): void
+    {
+        config()->set('checkpoint.drivers.mysql.output_dir', sys_get_temp_dir().'/checkpoint-mysql-exports');
+        config()->set('checkpoint.drivers.mysql.pitr.binlog_files', [
+            '/var/lib/mysql/binlog.000001',
+            '/var/lib/mysql/binlog.000002',
+        ]);
+    }
 }

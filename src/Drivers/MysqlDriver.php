@@ -1,0 +1,930 @@
+<?php
+
+declare(strict_types=1);
+
+namespace AdityaaCodes\LaravelCheckpoint\Drivers;
+
+use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
+use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupCompleted;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
+use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
+use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
+use Illuminate\Support\Facades\Log;
+use Psr\Log\LoggerInterface;
+use Symfony\Component\Process\Process;
+use Throwable;
+
+/** @internal */
+final class MysqlDriver implements BackupDriver
+{
+    public function execute(CommandRun $run): void
+    {
+        $storedOutputMetadata = null;
+
+        try {
+            if (! $run->claimPendingExecution()) {
+                return;
+            }
+
+            $run = $run->fresh() ?? $run;
+            $plannedMetadata = $this->plannedMetadata($run);
+            $restoreAudit = $this->restoreSafetyGuard()->ensureSafe($run, $plannedMetadata);
+            $plannedMetadata = $this->mergeRestoreAuditMetadata($plannedMetadata, $restoreAudit);
+            $displayCommandLine = $this->redactCommandLine($this->displayCommandLine($run, $plannedMetadata));
+            $persistedPlannedMetadata = $this->persistedPlannedMetadata($plannedMetadata);
+
+            $run->forceFill([
+                'command_line' => $displayCommandLine,
+            ])->save();
+            $run->recordMetadata($persistedPlannedMetadata);
+            $run = $run->fresh() ?? $run;
+
+            event(new BackupStarted($run));
+
+            $this->logger()->info('Starting mysql operation', $this->logContext($run, [
+                'command_line' => $displayCommandLine,
+            ]));
+
+            $result = $this->executeOperation($run, $plannedMetadata);
+            $storedOutput = $this->outputStore()->persist($run, $result['output']);
+            $storedOutputMetadata = $storedOutput['metadata']['output_storage'] ?? null;
+            $output = (string) ($storedOutput['command_output'] ?? '');
+            $exitCode = (int) $result['exit_code'];
+            $completedMetadata = $this->completedMetadata(
+                $run,
+                $plannedMetadata,
+                $exitCode,
+                [
+                    ...$result['metadata'],
+                    ...$storedOutput['metadata'],
+                ],
+            );
+
+            $run->forceFill([
+                'command_output' => $output,
+                'exit_code' => $exitCode,
+            ])->save();
+            $run->recordMetadata($completedMetadata);
+
+            if ($exitCode === 0) {
+                $run->markAsSucceeded($exitCode, $output);
+                $run = $run->fresh() ?? $run;
+
+                event(new BackupCompleted($run, $exitCode, $output));
+
+                $this->logger()->info('Completed mysql operation', $this->logContext($run, [
+                    'exit_code' => $exitCode,
+                ]));
+
+                return;
+            }
+
+            $run->markAsFailed($exitCode, $output);
+            $run = $run->fresh() ?? $run;
+            event(new BackupFailed($run, $exitCode, $output));
+
+            $this->logger()->error('mysql operation failed', $this->logContext($run, [
+                'exit_code' => $exitCode,
+            ]));
+        } catch (Throwable $exception) {
+            if (is_array($storedOutputMetadata)) {
+                $this->outputStore()->cleanupMetadata($storedOutputMetadata);
+            }
+
+            $run->markAsFailed(output: $exception->getMessage());
+            $run = $run->fresh() ?? $run;
+            event(new BackupFailed($run, -1, $exception->getMessage(), $exception));
+
+            $this->logger()->error('mysql operation crashed', $this->logContext($run, [
+                'error' => $exception->getMessage(),
+            ]));
+
+            throw $exception;
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return array{output:string,exit_code:int,metadata:array<string,mixed>}
+     */
+    private function executeOperation(CommandRun $run, array $plannedMetadata): array
+    {
+        return match ($run->operation) {
+            'logical_backup' => $this->executeSingleProcess($this->buildProcess($run, $plannedMetadata)),
+            'logical_restore_file', 'logical_restore_latest' => $this->executeLogicalRestore($run, $plannedMetadata),
+            'pitr_restore' => $this->executePitrRestore($run, $plannedMetadata),
+            'backup_drill' => $this->executeSingleProcess($this->buildProcess($run, $plannedMetadata)),
+            default => throw new ConfigurationException(
+                sprintf('Unsupported mysql operation [%s].', $run->operation),
+            ),
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return array{output:string,exit_code:int,metadata:array<string,mixed>}
+     */
+    private function executeLogicalRestore(CommandRun $run, array $plannedMetadata): array
+    {
+        $restoreTarget = (string) ($plannedMetadata['restore_target'] ?? '');
+
+        if ($restoreTarget === '') {
+            throw new ConfigurationException('Unable to resolve mysql restore target.');
+        }
+
+        $contents = @file_get_contents($restoreTarget);
+
+        if (! is_string($contents)) {
+            throw new ConfigurationException(sprintf('Unable to read mysql restore target [%s].', $restoreTarget));
+        }
+
+        return $this->executeSingleProcess(
+            $this->buildProcess($run, $plannedMetadata),
+            $contents,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return array{output:string,exit_code:int,metadata:array<string,mixed>}
+     */
+    private function executePitrRestore(CommandRun $run, array $plannedMetadata): array
+    {
+        $baseTarget = (string) ($plannedMetadata['pitr_base_target'] ?? '');
+        $targetTime = trim((string) ($plannedMetadata['restore_target'] ?? $run->argument_text ?? ''));
+
+        if ($baseTarget === '') {
+            throw new ConfigurationException('pitr_restore requires a baseline logical backup artifact.');
+        }
+
+        if ($targetTime === '') {
+            throw new ConfigurationException('pitr_restore requires a valid restore target timestamp.');
+        }
+
+        $baseContents = @file_get_contents($baseTarget);
+
+        if (! is_string($baseContents)) {
+            throw new ConfigurationException(sprintf('Unable to read mysql PITR baseline [%s].', $baseTarget));
+        }
+
+        $restoreBaseline = $this->executeSingleProcess(
+            $this->mysqlRestoreProcess(),
+            $baseContents,
+        );
+
+        if ($restoreBaseline['exit_code'] !== 0) {
+            return [
+                'output' => "[pitr_restore:baseline]\n".$restoreBaseline['output'],
+                'exit_code' => $restoreBaseline['exit_code'],
+                'metadata' => [
+                    ...$restoreBaseline['metadata'],
+                    'pitr' => [
+                        'failed_step' => 'baseline_restore',
+                        'target_time' => $targetTime,
+                    ],
+                ],
+            ];
+        }
+
+        $binlogOutputPath = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-pitr-');
+
+        if ($binlogOutputPath === false) {
+            throw new ConfigurationException('Unable to allocate temporary mysql PITR binlog output path.');
+        }
+
+        $binlogReplay = $this->executeSingleProcess(
+            $this->mysqlBinlogProcess($targetTime, $binlogOutputPath),
+        );
+
+        if ($binlogReplay['exit_code'] !== 0) {
+            @unlink($binlogOutputPath);
+
+            return [
+                'output' => "[pitr_restore:baseline]\n".$restoreBaseline['output']
+                    ."\n[pitr_restore:binlog]\n".$binlogReplay['output'],
+                'exit_code' => $binlogReplay['exit_code'],
+                'metadata' => [
+                    ...$restoreBaseline['metadata'],
+                    ...$binlogReplay['metadata'],
+                    'pitr' => [
+                        'failed_step' => 'binlog_extract',
+                        'target_time' => $targetTime,
+                        'baseline_artifact_path' => $baseTarget,
+                        'binlog_files' => $this->pitrBinlogFiles(),
+                    ],
+                ],
+            ];
+        }
+
+        $binlogSql = @file_get_contents($binlogOutputPath);
+        @unlink($binlogOutputPath);
+
+        if (! is_string($binlogSql)) {
+            throw new ConfigurationException('Unable to read extracted mysql PITR binlog SQL.');
+        }
+
+        $applyReplay = $this->executeSingleProcess(
+            $this->mysqlPitrReplayProcess(),
+            $binlogSql,
+        );
+
+        return [
+            'output' => "[pitr_restore:baseline]\n".$restoreBaseline['output']
+                ."\n[pitr_restore:binlog]\n".$binlogReplay['output']
+                ."\n[pitr_restore:apply]\n".$applyReplay['output'],
+            'exit_code' => $applyReplay['exit_code'],
+            'metadata' => [
+                ...$restoreBaseline['metadata'],
+                ...$binlogReplay['metadata'],
+                ...$applyReplay['metadata'],
+                'pitr' => [
+                    'failed_step' => $applyReplay['exit_code'] === 0 ? null : 'binlog_apply',
+                    'target_time' => $targetTime,
+                    'baseline_artifact_path' => $baseTarget,
+                    'binlog_files' => $this->pitrBinlogFiles(),
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @return array{output:string,exit_code:int,metadata:array<string,mixed>}
+     */
+    private function executeSingleProcess(Process $process, ?string $input = null): array
+    {
+        if ($input !== null) {
+            $process->setInput($input);
+        }
+
+        $captured = $this->outputCapture()->captureProcess($process);
+
+        return [
+            'output' => $captured['output'],
+            'exit_code' => $process->getExitCode() ?? -1,
+            'metadata' => $captured['metadata'],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     */
+    private function buildProcess(CommandRun $run, array $plannedMetadata = []): Process
+    {
+        return match ($run->operation) {
+            'logical_backup' => $this->mysqlBackupProcess($run),
+            'logical_restore_file', 'logical_restore_latest' => $this->mysqlRestoreProcessAfterValidatingTarget($run, $plannedMetadata),
+            'pitr_restore' => $this->mysqlBinlogProcess((string) ($plannedMetadata['restore_target'] ?? $run->argument_text ?? '')),
+            'backup_drill' => $this->mysqlDrillProcess($run),
+            default => throw new ConfigurationException(
+                sprintf('Unsupported mysql operation [%s].', $run->operation),
+            ),
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     */
+    private function mysqlRestoreProcessAfterValidatingTarget(CommandRun $run, array $plannedMetadata): Process
+    {
+        $plannedTarget = $plannedMetadata['restore_target'] ?? null;
+
+        if (is_string($plannedTarget) && trim($plannedTarget) !== '') {
+            $this->validatedRestoreTarget($plannedTarget, $run->operation);
+        } else {
+            match ($run->operation) {
+                'logical_restore_file' => $this->restorePathFromArgument($run),
+                'logical_restore_latest' => $this->latestBackupTarget(),
+                default => throw new ConfigurationException(
+                    sprintf('Unsupported mysql restore operation [%s].', $run->operation),
+                ),
+            };
+        }
+
+        return $this->mysqlRestoreProcess();
+    }
+
+    private function mysqlBackupProcess(CommandRun $run): Process
+    {
+        $command = [
+            $this->mysqldumpBinary(),
+            '--databases',
+            $this->databaseName(),
+            '--result-file='.$this->backupTarget($run),
+        ];
+
+        if ((bool) config('checkpoint.drivers.mysql.single_transaction', true)) {
+            $command[] = '--single-transaction';
+        }
+
+        if ((bool) config('checkpoint.drivers.mysql.quick', true)) {
+            $command[] = '--quick';
+        }
+
+        if ((bool) config('checkpoint.drivers.mysql.skip_lock_tables', true)) {
+            $command[] = '--skip-lock-tables';
+        }
+
+        return new Process(
+            [...$command, ...$this->extraArgs('backup')],
+            timeout: $this->commandTimeout(),
+        );
+    }
+
+    private function mysqlRestoreProcess(): Process
+    {
+        return new Process(
+            [
+                $this->mysqlBinary(),
+                '--database='.$this->databaseName(),
+                ...$this->extraArgs('restore'),
+            ],
+            timeout: $this->commandTimeout(),
+        );
+    }
+
+    private function mysqlBinlogProcess(string $targetTime, ?string $resultFile = null): Process
+    {
+        $trimmedTarget = trim($targetTime);
+
+        if ($trimmedTarget === '') {
+            throw new ConfigurationException('pitr_restore requires a valid restore target timestamp.');
+        }
+
+        $files = $this->pitrBinlogFiles();
+
+        if ($files === []) {
+            throw new ConfigurationException(
+                'checkpoint.drivers.mysql.pitr.binlog_files must list at least one binary log for pitr_restore.',
+            );
+        }
+
+        $command = [
+            $this->mysqlbinlogBinary(),
+            '--stop-datetime='.$trimmedTarget,
+            ...$this->extraArgs('pitr_binlog'),
+        ];
+
+        if (is_string($resultFile) && trim($resultFile) !== '') {
+            $command[] = '--result-file='.$resultFile;
+        }
+
+        return new Process(
+            [...$command, ...$files],
+            timeout: $this->commandTimeout(),
+        );
+    }
+
+    private function mysqlPitrReplayProcess(): Process
+    {
+        return new Process(
+            [
+                $this->mysqlBinary(),
+                '--binary-mode',
+                '--database='.$this->databaseName(),
+                ...$this->extraArgs('pitr_replay'),
+            ],
+            timeout: $this->commandTimeout(),
+        );
+    }
+
+    private function mysqlDrillProcess(CommandRun $run): Process
+    {
+        $template = trim((string) config('checkpoint.drivers.mysql.drill_command', ''));
+
+        if ($template === '') {
+            throw new ConfigurationException(
+                'checkpoint.drivers.mysql.drill_command must be configured for backup_drill when checkpoint.driver is mysql.',
+            );
+        }
+
+        $argv = preg_split('/\s+/', $template);
+
+        if ($argv === false || $argv === []) {
+            throw new ConfigurationException('checkpoint.drivers.mysql.drill_command must contain a valid executable token.');
+        }
+
+        $replacements = [
+            '{db}' => $this->databaseName(),
+            '{target}' => trim((string) ($run->argument_text ?? '')),
+            '{backup_dir}' => $this->outputDir(),
+        ];
+
+        $command = array_map(
+            static fn (string $token): string => str_replace(
+                array_keys($replacements),
+                array_values($replacements),
+                $token,
+            ),
+            $argv,
+        );
+
+        return new Process(
+            [...$command, ...$this->extraArgs('drill')],
+            timeout: $this->commandTimeout(),
+        );
+    }
+
+    private function mysqldumpBinary(): string
+    {
+        $binary = (string) config('checkpoint.drivers.mysql.dump_binary', 'mysqldump');
+
+        if (trim($binary) === '') {
+            throw new ConfigurationException('checkpoint.drivers.mysql.dump_binary must be a non-empty string.');
+        }
+
+        return $binary;
+    }
+
+    private function mysqlBinary(): string
+    {
+        $binary = (string) config('checkpoint.drivers.mysql.mysql_binary', 'mysql');
+
+        if (trim($binary) === '') {
+            throw new ConfigurationException('checkpoint.drivers.mysql.mysql_binary must be a non-empty string.');
+        }
+
+        return $binary;
+    }
+
+    private function mysqlbinlogBinary(): string
+    {
+        $binary = (string) config('checkpoint.drivers.mysql.mysqlbinlog_binary', 'mysqlbinlog');
+
+        if (trim($binary) === '') {
+            throw new ConfigurationException('checkpoint.drivers.mysql.mysqlbinlog_binary must be a non-empty string.');
+        }
+
+        return $binary;
+    }
+
+    private function databaseName(): string
+    {
+        $database = (string) config('database.connections.'.config('database.default').'.database', '');
+
+        if ($database === '') {
+            throw new ConfigurationException('The default database connection must define a database name for mysql operations.');
+        }
+
+        return $database;
+    }
+
+    private function outputDir(): string
+    {
+        $outputDir = (string) config('checkpoint.drivers.mysql.output_dir', storage_path('app/checkpoint/mysql/logical-exports'));
+
+        if (trim($outputDir) === '') {
+            throw new ConfigurationException('checkpoint.drivers.mysql.output_dir must be a non-empty string.');
+        }
+
+        if (! is_dir($outputDir) && ! mkdir($outputDir, 0755, true) && ! is_dir($outputDir)) {
+            throw new ConfigurationException(
+                sprintf('Unable to create mysql output directory [%s].', $outputDir),
+            );
+        }
+
+        return rtrim($outputDir, '/');
+    }
+
+    private function outputPrefix(): string
+    {
+        $prefix = (string) config('checkpoint.drivers.mysql.output_prefix', 'mysql-export');
+
+        if (trim($prefix) === '') {
+            throw new ConfigurationException('checkpoint.drivers.mysql.output_prefix must be a non-empty string.');
+        }
+
+        return $prefix;
+    }
+
+    private function fileExtension(): string
+    {
+        $extension = trim((string) config('checkpoint.drivers.mysql.file_extension', 'sql'), '.');
+
+        if ($extension === '') {
+            throw new ConfigurationException('checkpoint.drivers.mysql.file_extension must be a non-empty string.');
+        }
+
+        return $extension;
+    }
+
+    private function backupTarget(CommandRun $run): string
+    {
+        return sprintf(
+            '%s/%s-%d.%s',
+            $this->outputDir(),
+            $this->outputPrefix(),
+            (int) $run->getKey(),
+            $this->fileExtension(),
+        );
+    }
+
+    private function restorePathFromArgument(CommandRun $run): string
+    {
+        $argument = trim((string) ($run->argument_text ?? ''));
+
+        if ($argument === '') {
+            throw new ConfigurationException('logical_restore_file requires a backup path or export name.');
+        }
+
+        $resolvedPath = str_starts_with($argument, '/')
+            ? $argument
+            : $this->outputDir().'/'.ltrim($argument, '/');
+
+        if (pathinfo($resolvedPath, PATHINFO_EXTENSION) === '') {
+            $resolvedPath .= '.'.$this->fileExtension();
+        }
+
+        return $this->validatedRestoreTarget($resolvedPath, 'logical_restore_file');
+    }
+
+    private function latestBackupTarget(): string
+    {
+        $runs = CommandRun::query()
+            ->where('operation', 'logical_backup')
+            ->where('status', CommandRunStatus::Succeeded)
+            ->whereNotNull('artifact_path')
+            ->latest('finished_at')
+            ->latest('id')
+            ->limit(10)
+            ->get();
+
+        foreach ($runs as $run) {
+            if (! $run instanceof CommandRun || ! is_string($run->artifact_path) || trim($run->artifact_path) === '') {
+                continue;
+            }
+
+            try {
+                return $this->validatedRestoreTarget($run->artifact_path, 'logical_restore_latest');
+            } catch (ConfigurationException) {
+                continue;
+            }
+        }
+
+        $candidates = glob($this->outputDir().'/'.$this->outputPrefix().'-*.'.$this->fileExtension(), GLOB_NOSORT) ?: [];
+        $candidates = array_values(array_filter($candidates, static fn (string $path): bool => is_file($path)));
+
+        if ($candidates === []) {
+            throw new ConfigurationException('No mysql logical backup exports were found for logical_restore_latest.');
+        }
+
+        usort($candidates, static fn (string $left, string $right): int => filemtime($right) <=> filemtime($left));
+
+        return $this->validatedRestoreTarget($candidates[0], 'logical_restore_latest');
+    }
+
+    private function pitrBinlogFiles(): array
+    {
+        $files = config('checkpoint.drivers.mysql.pitr.binlog_files', []);
+
+        if (! is_array($files)) {
+            throw new ConfigurationException('checkpoint.drivers.mysql.pitr.binlog_files must be an array.');
+        }
+
+        $normalized = array_values(array_filter(array_map(
+            static fn (mixed $value): string => is_string($value) ? trim($value) : '',
+            $files,
+        ), static fn (string $value): bool => $value !== ''));
+
+        /** @var list<string> $normalized */
+        return $normalized;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function extraArgs(string $key): array
+    {
+        $value = config("checkpoint.drivers.mysql.extra_args.{$key}", []);
+
+        if (! is_array($value)) {
+            throw new ConfigurationException(
+                sprintf('checkpoint.drivers.mysql.extra_args.%s must be an array.', $key),
+            );
+        }
+
+        $args = array_values(array_filter(
+            $value,
+            static fn (mixed $arg): bool => is_string($arg) && trim($arg) !== '',
+        ));
+
+        /** @var list<string> $args */
+        return $args;
+    }
+
+    private function commandTimeout(): float
+    {
+        $timeout = (int) config('checkpoint.drivers.mysql.command_timeout_seconds', 7200);
+
+        if ($timeout < 1) {
+            throw new ConfigurationException('checkpoint.drivers.mysql.command_timeout_seconds must be greater than zero.');
+        }
+
+        return (float) $timeout;
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     */
+    private function displayCommandLine(CommandRun $run, array $plannedMetadata): string
+    {
+        return match ($run->operation) {
+            'pitr_restore' => implode(' ; ', [
+                $this->mysqlRestoreProcess()->getCommandLine(),
+                $this->mysqlBinlogProcess((string) ($plannedMetadata['restore_target'] ?? $run->argument_text ?? ''))->getCommandLine(),
+                $this->mysqlPitrReplayProcess()->getCommandLine(),
+            ]),
+            default => $this->buildProcess($run, $plannedMetadata)->getCommandLine(),
+        };
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function plannedMetadata(CommandRun $run): array
+    {
+        return match ($run->operation) {
+            'logical_backup' => [
+                'backup_type' => 'logical_export',
+                'artifact_path' => $this->backupTarget($run),
+                'verification_state' => 'not_applicable',
+                'metadata' => [
+                    'driver' => 'mysql',
+                    'database' => $this->databaseName(),
+                ],
+            ],
+            'logical_restore_latest', 'logical_restore_file' => [
+                ...$this->resolvedRestoreTargetMetadata($run),
+                'metadata' => [
+                    'driver' => 'mysql',
+                    'database' => $this->databaseName(),
+                    'restore_mode' => 'logical',
+                ],
+            ],
+            'pitr_restore' => [
+                'restore_target' => trim((string) ($run->argument_text ?? '')),
+                'pitr_base_target' => $this->latestBackupTarget(),
+                'metadata' => [
+                    'driver' => 'mysql',
+                    'database' => $this->databaseName(),
+                    'restore_mode' => 'pitr',
+                    'binlog_files' => $this->pitrBinlogFiles(),
+                ],
+            ],
+            'backup_drill' => [
+                'metadata' => [
+                    'driver' => 'mysql',
+                    'database' => $this->databaseName(),
+                ],
+            ],
+            default => [],
+        };
+    }
+
+    /**
+     * @return array{restore_target:string,restore_target_snapshot:array<string,mixed>}
+     */
+    private function resolvedRestoreTargetMetadata(CommandRun $run): array
+    {
+        $target = match ($run->operation) {
+            'logical_restore_latest' => $this->latestBackupTarget(),
+            'logical_restore_file' => $this->restorePathFromArgument($run),
+            default => throw new ConfigurationException(
+                sprintf('Unsupported mysql restore operation [%s].', $run->operation),
+            ),
+        };
+
+        return [
+            'restore_target' => $target,
+            'restore_target_snapshot' => $this->restoreTargetSnapshot($target),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return array<string, mixed>
+     */
+    private function persistedPlannedMetadata(array $plannedMetadata): array
+    {
+        unset($plannedMetadata['restore_target_snapshot']);
+
+        return $plannedMetadata;
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return array<string, mixed>
+     */
+    private function completedMetadata(CommandRun $run, array $plannedMetadata, int $exitCode, array $captureMetadata): array
+    {
+        $metadata = $plannedMetadata['metadata'] ?? ['driver' => 'mysql'];
+
+        if (! is_array($metadata)) {
+            $metadata = ['driver' => 'mysql'];
+        }
+
+        $completed = [
+            'metadata' => [
+                ...$metadata,
+                ...$captureMetadata,
+            ],
+        ];
+
+        if ($run->operation === 'logical_backup') {
+            $artifactPath = $plannedMetadata['artifact_path'] ?? null;
+            $backupSize = is_string($artifactPath) ? $this->pathSize($artifactPath) : null;
+
+            $completed['backup_size_bytes'] = $backupSize;
+
+            if ($exitCode === 0) {
+                if (is_string($artifactPath)) {
+                    $completed['metadata']['artifact_snapshot'] = $this->artifactSnapshot($artifactPath);
+                }
+
+                $completed['last_known_good_at'] = now();
+            }
+        }
+
+        if (in_array($run->operation, ['logical_restore_latest', 'logical_restore_file'], true)) {
+            $completed['metadata'] = [
+                ...$completed['metadata'],
+                'restored_via' => 'mysql',
+            ];
+        }
+
+        if ($run->operation === 'pitr_restore') {
+            $completed['metadata'] = [
+                ...$completed['metadata'],
+                'restored_via' => 'mysqlbinlog',
+            ];
+        }
+
+        return $completed;
+    }
+
+    private function validatedRestoreTarget(string $resolvedPath, string $operation): string
+    {
+        $realOutputDir = realpath($this->outputDir());
+        $realTargetPath = realpath($resolvedPath);
+
+        if (! is_string($realOutputDir) || $realOutputDir === '') {
+            throw new ConfigurationException('Unable to resolve the configured mysql output directory.');
+        }
+
+        if (! is_string($realTargetPath) || $realTargetPath === '') {
+            throw new ConfigurationException(
+                sprintf('Configured mysql restore target [%s] does not exist.', $resolvedPath),
+            );
+        }
+
+        $realOutputDir = rtrim($realOutputDir, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
+        $realTargetPrefix = rtrim($realTargetPath, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
+        $isContained = str_starts_with($realTargetPath, $realOutputDir)
+            || str_starts_with($realTargetPrefix, $realOutputDir);
+
+        if (! $isContained) {
+            throw new ConfigurationException(
+                sprintf('%s target [%s] must be inside the configured mysql output directory.', $operation, $resolvedPath),
+            );
+        }
+
+        if (! is_file($realTargetPath)) {
+            throw new ConfigurationException(
+                sprintf('%s target [%s] must be a restoreable mysql dump file.', $operation, $resolvedPath),
+            );
+        }
+
+        return $realTargetPath;
+    }
+
+    /**
+     * @return array{path:string,file_type:string,device:int|null,inode:int|null,mtime:int|null,size:int|null,content_signature:string|null}
+     */
+    private function restoreTargetSnapshot(string $realTargetPath): array
+    {
+        clearstatcache(true, $realTargetPath);
+
+        if (! file_exists($realTargetPath)) {
+            throw new ConfigurationException(
+                sprintf('Configured mysql restore target [%s] does not exist.', $realTargetPath),
+            );
+        }
+
+        $stats = @stat($realTargetPath);
+
+        if ($stats === false) {
+            throw new ConfigurationException(
+                sprintf('Configured mysql restore target [%s] does not exist.', $realTargetPath),
+            );
+        }
+
+        return [
+            'path' => $realTargetPath,
+            'file_type' => 'file',
+            'device' => isset($stats['dev']) ? (int) $stats['dev'] : null,
+            'inode' => isset($stats['ino']) ? (int) $stats['ino'] : null,
+            'mtime' => isset($stats['mtime']) ? (int) $stats['mtime'] : null,
+            'size' => isset($stats['size']) ? (int) $stats['size'] : null,
+            'content_signature' => @sha1_file($realTargetPath) ?: null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function artifactSnapshot(string $path): ?array
+    {
+        try {
+            return $this->restoreTargetSnapshot($path);
+        } catch (ConfigurationException) {
+            return null;
+        }
+    }
+
+    private function pathSize(string $path): ?int
+    {
+        if (! is_file($path)) {
+            return null;
+        }
+
+        $size = filesize($path);
+
+        return $size === false ? null : $size;
+    }
+
+    private function logger(): LoggerInterface
+    {
+        return Log::channel(config('checkpoint.log_channel', 'stack'));
+    }
+
+    private function redactCommandLine(string $commandLine): string
+    {
+        return $this->commandLineRedactor()->redact($commandLine);
+    }
+
+    private function commandLineRedactor(): CommandLineRedactor
+    {
+        return resolve(CommandLineRedactor::class);
+    }
+
+    private function outputCapture(): CommandOutputCapture
+    {
+        return resolve(CommandOutputCapture::class);
+    }
+
+    private function outputStore(): CommandOutputStore
+    {
+        return resolve(CommandOutputStore::class);
+    }
+
+    private function restoreSafetyGuard(): RestoreSafetyGuard
+    {
+        return resolve(RestoreSafetyGuard::class);
+    }
+
+    /**
+     * @param  array<string, mixed>  $extra
+     * @return array<string, mixed>
+     */
+    private function logContext(CommandRun $run, array $extra = []): array
+    {
+        return array_filter([
+            'run_id' => $run->getKey(),
+            'operation' => $run->operation,
+            'driver' => 'mysql',
+            'backup_type' => $run->backup_type,
+            'restore_target' => $run->restore_target,
+            'repository' => $run->repository,
+            'stanza' => $run->stanza,
+            'duration_seconds' => $run->duration_seconds,
+            ...$extra,
+        ], static fn (mixed $value): bool => $value !== null);
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @param  array<string, mixed>  $restoreAudit
+     * @return array<string, mixed>
+     */
+    private function mergeRestoreAuditMetadata(array $plannedMetadata, array $restoreAudit): array
+    {
+        if ($restoreAudit === []) {
+            return $plannedMetadata;
+        }
+
+        $metadata = is_array($plannedMetadata['metadata'] ?? null) ? $plannedMetadata['metadata'] : [];
+
+        return [
+            ...$plannedMetadata,
+            'metadata' => [
+                ...$metadata,
+                ...$restoreAudit,
+            ],
+        ];
+    }
+}

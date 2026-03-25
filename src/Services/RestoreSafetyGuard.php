@@ -30,7 +30,7 @@ final readonly class RestoreSafetyGuard
         $database = $this->ensureDatabaseAllowed();
         $confirmation = $this->ensureConfirmationSatisfied();
         $restoreTarget = $this->ensureRestoreTargetValid($run, $context);
-        $verificationSignal = $this->ensureVerificationSignal($run, $restoreTarget);
+        $verificationSignal = $this->ensureVerificationSignal($run, $restoreTarget, $context);
 
         return [
             'restore_audit' => [
@@ -164,7 +164,7 @@ final readonly class RestoreSafetyGuard
      *     last_known_good_at: string|null
      * }
      */
-    private function ensureVerificationSignal(CommandRun $run, string $restoreTarget): array
+    private function ensureVerificationSignal(CommandRun $run, string $restoreTarget, array $context): array
     {
         if (! (bool) $this->config->get('checkpoint.restore.require_verified_backup', false)) {
             return [
@@ -183,14 +183,12 @@ final readonly class RestoreSafetyGuard
             ->latest('last_known_good_at')
             ->latest('id');
 
-        match ($run->operation) {
-            'logical_restore_file', 'logical_restore_latest' => $query->where('artifact_path', $restoreTarget),
-            'pgbackrest_restore' => $this->requireExplicitPgBackRestBackupLabel($restoreTarget, $query),
-            default => $query,
-        };
-
         /** @var CommandRun|null $verifiedRun */
-        $verifiedRun = $query->first();
+        $verifiedRun = match ($run->operation) {
+            'logical_restore_file', 'logical_restore_latest' => $this->matchingLogicalRestoreVerification($query, $restoreTarget, $context),
+            'pgbackrest_restore' => $this->matchingPgBackRestRestoreVerification($query, $restoreTarget, $context),
+            default => $query->first(),
+        };
 
         if (! $verifiedRun instanceof CommandRun) {
             throw new ConfigurationException(
@@ -243,5 +241,83 @@ final readonly class RestoreSafetyGuard
         }
 
         $query->where('backup_label', $restoreTarget);
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<CommandRun>  $query
+     */
+    private function matchingLogicalRestoreVerification(
+        \Illuminate\Database\Eloquent\Builder $query,
+        string $restoreTarget,
+        array $context,
+    ): ?CommandRun {
+        $query
+            ->where('operation', 'logical_backup')
+            ->where('artifact_path', $restoreTarget);
+
+        $expectedSnapshot = is_array($context['restore_target_snapshot'] ?? null)
+            ? $context['restore_target_snapshot']
+            : null;
+
+        if ($expectedSnapshot === null) {
+            return $query->first();
+        }
+
+        /** @var \Illuminate\Support\Collection<int, CommandRun> $candidates */
+        $candidates = $query->limit(10)->get();
+
+        return $candidates->first(
+            fn (CommandRun $candidate): bool => $this->artifactSnapshotMatches($candidate, $expectedSnapshot),
+        );
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<CommandRun>  $query
+     */
+    private function matchingPgBackRestRestoreVerification(
+        \Illuminate\Database\Eloquent\Builder $query,
+        string $restoreTarget,
+        array $context,
+    ): ?CommandRun {
+        $this->requireExplicitPgBackRestBackupLabel($restoreTarget, $query);
+
+        $query->whereIn('operation', [
+            'pgbackrest_check',
+            'pgbackrest_verify',
+        ]);
+        $query->where('verification_state', 'verified');
+
+        if (is_numeric($context['repository'] ?? null)) {
+            $query->where('repository', (int) $context['repository']);
+        }
+
+        if (is_string($context['stanza'] ?? null) && trim((string) $context['stanza']) !== '') {
+            $query->where('stanza', trim((string) $context['stanza']));
+        }
+
+        return $query->first();
+    }
+
+    /**
+     * @param  array<string, mixed>  $expectedSnapshot
+     */
+    private function artifactSnapshotMatches(CommandRun $candidate, array $expectedSnapshot): bool
+    {
+        $metadata = is_array($candidate->metadata) ? $candidate->metadata : [];
+        $artifactSnapshot = is_array($metadata['artifact_snapshot'] ?? null)
+            ? $metadata['artifact_snapshot']
+            : null;
+
+        if ($artifactSnapshot === null) {
+            return false;
+        }
+
+        foreach (['path', 'file_type', 'device', 'inode', 'mtime', 'size', 'content_signature'] as $key) {
+            if (($artifactSnapshot[$key] ?? null) !== ($expectedSnapshot[$key] ?? null)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

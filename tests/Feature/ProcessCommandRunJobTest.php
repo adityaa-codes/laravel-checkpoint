@@ -171,6 +171,38 @@ it('uses the configured unique lock duration and cache store', function (): void
         ->and($job->uniqueVia()->getStore())->toBe(resolve(CacheFactory::class)->store('array')->getStore());
 });
 
+it('shares unique locks across separate job instances through the configured cache store', function (): void {
+    config()->set('checkpoint.queue.unique_for', 7200);
+    config()->set('checkpoint.queue.lock_store', 'array');
+
+    $runA = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    $runB = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    $jobA = new ProcessCommandRunJob($runA);
+    $jobB = new ProcessCommandRunJob($runB);
+
+    $lockA = $jobA->uniqueVia()->lock($jobA->uniqueId(), $jobA->uniqueFor());
+    $lockB = $jobB->uniqueVia()->lock($jobB->uniqueId(), $jobB->uniqueFor());
+
+    expect($lockA->get())->toBeTrue()
+        ->and($lockB->get())->toBeFalse();
+
+    $lockA->release();
+
+    expect($lockB->get())->toBeTrue();
+
+    $lockB->release();
+});
+
 it('forces destructive operations to a single attempt and logs a warning for higher config', function (): void {
     Log::shouldReceive('channel->warning')
         ->once()
