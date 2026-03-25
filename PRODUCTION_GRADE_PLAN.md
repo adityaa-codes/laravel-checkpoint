@@ -33,9 +33,9 @@ This plan is based on:
 
 ### Current Production Gaps
 
-- `[ ]` queue timeout / retry contract is now enforced in code, but production worker guidance still needs wider operator rollout
+- `[x]` queue timeout / retry contract is enforced in code and documented for operator rollout
 - `[x]` backup execution now has first-class pgBackRest and pgDump drivers alongside the shell escape hatch
-- `[ ]` scheduler overlap and cluster guards are now implemented
+- `[x]` scheduler overlap and cluster guards are implemented
 - `[x]` command runs now persist structured backup state, verification state, and last-known-good timestamps
 - `[x]` pgBackRest now supports typed repository configuration for local and S3-backed storage, including TLS and encryption settings
 - `[x]` restore operations now enforce confirmation, environment/database allowlists, PITR target validation, and optional verified-backup signals
@@ -302,7 +302,7 @@ Tasks:
 
 - `[x]` decide persistence model:
   - `[x]` extend `command_runs`
-  - `[ ]` or add `backup_run_reports`
+  - `[x]` dedicated `backup_run_reports` table not required for the current package shape
 - `[x]` persist backup type, repo, label, stanza, verification state, and restore target
 - `[x]` persist backup size, duration, throughput, and completion timestamps
 - `[x]` persist verification status from pgBackRest check/verify flows
@@ -361,7 +361,7 @@ Goal:
 Make backup health visible and operable at scale.
 
 Status:
-- `[-]` partial
+- `[x]` complete
 
 Tasks:
 
@@ -404,7 +404,7 @@ Acceptance:
 
 - `[x]` all planned implementation phases are complete
 - `[x]` package-level verification and devil's-advocate review completed
-- `[ ]` optional hardening follow-ups can continue from post-plan audit findings
+- `[x]` optional hardening follow-ups from the post-plan audit are complete
 
 ### Near-Term Production Milestones
 
@@ -422,12 +422,8 @@ Acceptance:
 
 ## Recommended Next Implementation Step
 
-The implementation plan is complete. Any next step should come from a fresh
-post-plan audit, with current candidates including:
-
-1. stronger artifact-specific verified-restore binding
-2. secret redaction for shell and pgDump command lines
-3. optional integration coverage for shared cache / multi-node environments
+The implementation plan and the previously identified follow-ups are complete.
+Any next step should come from a fresh audit rather than from this plan.
 
 ## Source Notes
 

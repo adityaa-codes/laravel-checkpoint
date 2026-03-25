@@ -30,7 +30,7 @@ Important config groups in `config/checkpoint.php`:
 - `user_model`, `user_name_column`, `table_prefix`
 - `queue.connection`, `queue.name`, `queue.max_attempts`, `queue.retry_after`, `queue.timeout`, `queue.unique_for`, `queue.lock_store`, `queue.orphan_threshold`, `queue.orphan_claim_timeout`, `queue.orphan_batch_size`, `queue.orphan_event_max_ids`
 - `schedule.logical_backup_*`, `schedule.health_check_enabled`, `schedule.recover_orphans_enabled`, `schedule.prune_enabled`, `schedule.without_overlapping`, `schedule.overlap_expires_at`, `schedule.on_one_server`, `schedule.prune_keep_*`
-- `driver`, `drivers.shell.*`, `drivers.pgbackrest.*`, `drivers.pgdump.*`
+- `driver`, `drivers.shell.*`, `drivers.pgbackrest.*`, `drivers.pgdump.*`, `drivers.mysql.*`
 - `reporting.max_recent_runs`, `output.max_persisted_bytes`
 - `log_channel`
 - `custom_operations`
@@ -74,6 +74,14 @@ DB_OPS_PGDUMP_FORMAT=directory
 DB_OPS_PGDUMP_JOBS=4
 DB_OPS_PGDUMP_COMPRESS_LEVEL=6
 DB_OPS_PGDUMP_OUTPUT_DIR=/var/app/checkpoint/logical-exports
+DB_OPS_MYSQL_DUMP_BINARY=mysqldump
+DB_OPS_MYSQL_BINARY=mysql
+DB_OPS_MYSQL_BINLOG_BINARY=mysqlbinlog
+DB_OPS_MYSQL_OUTPUT_DIR=/var/app/checkpoint/mysql/logical-exports
+DB_OPS_MYSQL_OUTPUT_PREFIX=mysql-export
+DB_OPS_MYSQL_FILE_EXTENSION=sql
+DB_OPS_MYSQL_PITR_BINLOG_FILES=/var/lib/mysql/binlog.000123,/var/lib/mysql/binlog.000124
+DB_OPS_MYSQL_DRILL_COMMAND=
 DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS=staging
 DB_OPS_RESTORE_ALLOWED_DATABASES=checkpoint_shadow
 DB_OPS_RESTORE_REQUIRE_CONFIRMATION=true
@@ -127,6 +135,8 @@ Recommended production cache config:
 
 - use Redis for queue uniqueness and scheduler overlap locks
 - avoid local-only cache drivers for multi-node deployments, because they cannot coordinate uniqueness or `onOneServer()` safely across hosts
+- non-local environments reject `array` and `file` lock stores during config validation because they are not safe for production uniqueness or clustered scheduling
+- the package test suite includes shared-cache lock coverage for duplicate job suppression, but production still requires a real shared cache backend across nodes
 
 ## Usage
 
@@ -175,6 +185,43 @@ DB_OPS_CMD_LOGICAL_BACKUP="mysqldump --single-transaction {db}"
 ```
 
 If you need a custom implementation, bind `AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver` to your own driver class and point `checkpoint.driver` / `checkpoint.drivers` at it.
+
+### MySQL Driver Strategy
+
+Use the bundled `mysql` driver when your backup flow is based on
+`mysqldump` logical exports and optional binlog replay:
+
+```env
+DB_OPS_DRIVER=mysql
+DB_OPS_MYSQL_DUMP_BINARY=mysqldump
+DB_OPS_MYSQL_BINARY=mysql
+DB_OPS_MYSQL_BINLOG_BINARY=mysqlbinlog
+DB_OPS_MYSQL_OUTPUT_DIR=/var/app/checkpoint/mysql/logical-exports
+DB_OPS_MYSQL_OUTPUT_PREFIX=mysql-export
+DB_OPS_MYSQL_FILE_EXTENSION=sql
+DB_OPS_MYSQL_SINGLE_TRANSACTION=true
+DB_OPS_MYSQL_QUICK=true
+DB_OPS_MYSQL_SKIP_LOCK_TABLES=true
+DB_OPS_MYSQL_PITR_BINLOG_FILES=/var/lib/mysql/binlog.000123,/var/lib/mysql/binlog.000124
+DB_OPS_MYSQL_DRILL_COMMAND="/usr/local/bin/checkpoint-mysql-drill --db={db} --backup-dir={backup_dir}"
+```
+
+Expected binaries and runtime dependencies:
+
+- `mysqldump`, `mysql`, and `mysqlbinlog` available on worker PATH (or set explicit binary paths)
+- database user privileges sufficient for logical dump + restore workflows
+- binlog retention and access aligned with your PITR target window
+- restore safety settings configured (`restore.allowed_environments`, `restore.allowed_databases`, confirmation controls)
+
+Operational behavior:
+
+- `logical_backup` writes a SQL artifact to `drivers.mysql.output_dir`
+- `logical_restore_latest` restores the newest successful tracked MySQL logical export (or newest matching file in `output_dir` when tracking is unavailable)
+- `logical_restore_file` resolves relative names inside `output_dir` and rejects restore paths outside the configured directory
+- `pitr_restore` expects a restore target timestamp argument, restores the latest logical export baseline, then extracts/replays configured binlogs up to that target
+- `backup_drill` requires `drivers.mysql.drill_command`; the package executes your drill command but does not provision an isolated drill environment for you
+
+PITR workflow expectation: treat logical backup + binlogs as one recovery chain. A PITR run is only as good as the baseline export and the completeness/order of `pitr.binlog_files`.
 
 ### PostgreSQL Driver Strategy
 
@@ -228,6 +275,7 @@ Operational notes:
 
 - `db-ops:doctor` reports the active repo target, TLS verification state, and encryption mode
 - persisted `command_line` values redact S3 keys, S3 secrets, and cipher passphrases
+- shell and `pgdump` command lines also redact inline credentials, separated secret flags, and connection-URI passwords before persistence and logging
 - doctor output never prints raw repository secrets
 
 ### Restore Safety Guardrails
@@ -241,7 +289,7 @@ Safety controls:
 - `restore.allowed_databases`: optional allowlist for database names that may receive restore traffic
 - `restore.require_confirmation`: requires `restore.confirmation_token` to match `restore.confirmation_phrase` outside CI
 - `restore.allow_in_ci`: lets CI bypass the confirmation token when explicitly enabled
-- `restore.require_verified_backup`: requires a prior `last_known_good_at` signal before restore execution
+- `restore.require_verified_backup`: requires a prior verified restore signal before restore execution
 
 Example guarded restore env:
 
@@ -260,7 +308,7 @@ Behavior notes:
 - `logical_restore_file`, `logical_restore_latest`, `pitr_restore`, and `pgbackrest_restore` all use the same guard service
 - `pitr_restore` now rejects invalid restore target timestamps before command execution
 - restore commands fail early when the current environment or target database is not allowlisted
-- when verified-backup enforcement is enabled, restore commands require a matching `last_known_good_at` signal
+- when verified-backup enforcement is enabled, `pgdump` restores require a matching `last_known_good_at` signal for the selected artifact, and pgBackRest restores require a successful verified `check` or `verify` run for the selected stanza/repository
 - restore runs persist `metadata.restore_audit` with the evaluated environment, database, target, confirmation path, and any matched verified-backup signal
 - `db-ops:status --format=json` mirrors both recent-run and summary views for automation use
 - `db-ops:status --format=json` includes top-level `version` and `surface=status` fields for contract-safe consumers
