@@ -295,7 +295,11 @@ final class MysqlDriver implements BackupDriver
         $plannedTarget = $plannedMetadata['restore_target'] ?? null;
 
         if (is_string($plannedTarget) && trim($plannedTarget) !== '') {
-            $this->validatedRestoreTarget($plannedTarget, $run->operation);
+            $snapshot = is_array($plannedMetadata['restore_target_snapshot'] ?? null)
+                ? $plannedMetadata['restore_target_snapshot']
+                : null;
+
+            $this->validatedRestoreTarget($plannedTarget, $run->operation, $snapshot);
         } else {
             match ($run->operation) {
                 'logical_restore_file' => $this->restorePathFromArgument($run),
@@ -767,7 +771,10 @@ final class MysqlDriver implements BackupDriver
         return $completed;
     }
 
-    private function validatedRestoreTarget(string $resolvedPath, string $operation): string
+    /**
+     * @param  array<string, mixed>|null  $expectedSnapshot
+     */
+    private function validatedRestoreTarget(string $resolvedPath, string $operation, ?array $expectedSnapshot = null): string
     {
         $realOutputDir = realpath($this->outputDir());
         $realTargetPath = realpath($resolvedPath);
@@ -796,6 +803,14 @@ final class MysqlDriver implements BackupDriver
         if (! is_file($realTargetPath)) {
             throw new ConfigurationException(
                 sprintf('%s target [%s] must be a restoreable mysql dump file.', $operation, $resolvedPath),
+            );
+        }
+
+        $snapshot = $this->restoreTargetSnapshot($realTargetPath);
+
+        if ($expectedSnapshot !== null && $this->restoreTargetChanged($snapshot, $expectedSnapshot)) {
+            throw new ConfigurationException(
+                sprintf('logical restore target [%s] changed after validation and must be selected again.', $resolvedPath),
             );
         }
 
@@ -844,6 +859,21 @@ final class MysqlDriver implements BackupDriver
         } catch (ConfigurationException) {
             return null;
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $currentSnapshot
+     * @param  array<string, mixed>  $expectedSnapshot
+     */
+    private function restoreTargetChanged(array $currentSnapshot, array $expectedSnapshot): bool
+    {
+        foreach (['path', 'file_type', 'device', 'inode', 'mtime', 'size', 'content_signature'] as $key) {
+            if (($currentSnapshot[$key] ?? null) !== ($expectedSnapshot[$key] ?? null)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function pathSize(string $path): ?int

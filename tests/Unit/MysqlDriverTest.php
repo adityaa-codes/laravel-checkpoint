@@ -100,6 +100,41 @@ it('rejects restore paths outside the configured mysql output directory', functi
         ));
 });
 
+it('rejects restore commands when the validated mysql restore file changes before execution', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-restore-race-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary mysql restore-file path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    $target = $outputDir.'/nightly-2026-03-11.sql';
+    file_put_contents($target, 'original');
+
+    config()->set('checkpoint.drivers.mysql.mysql_binary', 'mysql');
+    config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.mysql.file_extension', 'sql');
+
+    $driver = new MysqlDriver;
+    $run = CommandRun::factory()->make([
+        'operation' => 'logical_restore_file',
+        'argument_text' => 'nightly-2026-03-11',
+    ]);
+
+    $plannedMetadata = plannedMysqlMetadata($driver, $run);
+
+    unlink($target);
+    file_put_contents($target, 'replacement');
+
+    expect(fn (): Process => buildMysqlProcess($driver, $run, $plannedMetadata))
+        ->toThrow(ConfigurationException::class, sprintf(
+            'logical restore target [%s] changed after validation and must be selected again.',
+            $target,
+        ));
+});
+
 it('records metadata for successful mysql logical backups', function (): void {
     $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-execute-');
 
@@ -209,6 +244,19 @@ function buildMysqlProcess(MysqlDriver $driver, CommandRun $run, array $plannedM
     $process = $method->invoke($driver, $run, $plannedMetadata);
 
     return $process;
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function plannedMysqlMetadata(MysqlDriver $driver, CommandRun $run): array
+{
+    $method = new ReflectionMethod($driver, 'plannedMetadata');
+
+    /** @var array<string, mixed> $metadata */
+    $metadata = $method->invoke($driver, $run);
+
+    return $metadata;
 }
 
 function fakeMysqlScript(string $contents): string
