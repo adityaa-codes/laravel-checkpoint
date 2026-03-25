@@ -22,6 +22,10 @@ return new class extends Migration
                     $table->index(['status', 'created_at'], $this->statusCreatedAtIndexName());
                 }
 
+                if (! $this->hasIndex($commandRuns, $this->statusUpdatedAtIndexName())) {
+                    $table->index(['status', 'updated_at', 'id'], $this->statusUpdatedAtIndexName());
+                }
+
                 if (! $this->hasIndex($commandRuns, $this->restoreFinishedIndexName())) {
                     $table->index(['operation', 'status', 'finished_at', 'id'], $this->restoreFinishedIndexName());
                 }
@@ -59,6 +63,10 @@ return new class extends Migration
 
                 if ($this->hasIndex($commandRuns, $this->statusCreatedAtIndexName())) {
                     $table->dropIndex($this->statusCreatedAtIndexName());
+                }
+
+                if ($this->hasIndex($commandRuns, $this->statusUpdatedAtIndexName())) {
+                    $table->dropIndex($this->statusUpdatedAtIndexName());
                 }
 
                 if ($this->hasIndex($commandRuns, $this->restoreFinishedIndexName())) {
@@ -120,6 +128,11 @@ return new class extends Migration
     private function statusCreatedAtIndexName(): string
     {
         return $this->commandRunsTable().'_status_created_at_index';
+    }
+
+    private function statusUpdatedAtIndexName(): string
+    {
+        return $this->commandRunsTable().'_status_updated_at_index';
     }
 
     private function restoreFinishedIndexName(): string
