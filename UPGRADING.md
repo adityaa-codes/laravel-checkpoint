@@ -24,3 +24,23 @@ If you previously used the checkpoint and recovery logic inside an application m
 - shell command templates are configured through package config instead of module-local classes
 - queue safety behavior such as destructive-operation retry limits and orphan recovery is handled by the package
 - package consumers should treat drivers, jobs, and config validation as internal unless explicitly documented otherwise
+
+## Staged Enforcement Rollout
+
+When upgrading existing environments, apply restore and observability hardening in stages so operator workflows stay predictable:
+
+1. publish latest package migrations and run `php artisan migrate`
+2. run `php artisan db-ops:status --summary`, `php artisan db-ops:doctor --format=json`, and `php artisan db-ops:report --limit=10` to capture a pre-enforcement baseline
+3. set restore posture controls first:
+   - `DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS`
+   - `DB_OPS_RESTORE_ALLOWED_DATABASES`
+   - `DB_OPS_RESTORE_REQUIRE_CONFIRMATION=true`
+4. keep `DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=false` briefly while you establish a clean verified signal cadence
+5. run at least one successful verification cycle (`pgbackrest_check` / `pgbackrest_verify` or logical backup verification path), then switch `DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=true`
+6. keep `DB_OPS_RESTORE_ALLOW_IN_CI=false` unless CI restore execution is an explicit requirement
+
+Recommended migration safety checks after rollout:
+
+- confirm `db_ops_restore_decision_events` exists and is receiving `evaluate`, `block`, and `allow` events for restore attempts
+- confirm command-run reporting indexes exist, including `db_ops_command_runs_status_updated_at_index`, for high-volume doctor/recovery/status scans
+- verify restore runs persist `metadata.restore_audit` and that summary/report surfaces expose matching restore decision context

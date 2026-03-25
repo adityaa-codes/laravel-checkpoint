@@ -443,6 +443,18 @@ partially failing workloads:
 6. for pgBackRest backup retries, confirm retry command lines still include
    `--resume` and `--start-fast` before declaring the environment ready
 
+### Upgrade Staging Guidance
+
+For existing deployments, stage hardening controls instead of enabling every strict gate in one release:
+
+1. deploy schema updates first (`vendor:publish` migrations + `php artisan migrate`)
+2. baseline outputs with `db-ops:status --summary`, `db-ops:doctor --format=json`, and `db-ops:report --limit=10`
+3. enforce restore environment/database allowlists and confirmation requirements
+4. keep verified-backup enforcement temporarily disabled only until verified backup signals are stable, then enable it
+5. verify restore attempts are writing append-only `db_ops_restore_decision_events` and that status/report restore audit fields remain coherent
+
+See `UPGRADING.md` for the detailed staged-enforcement sequence and migration safety checks.
+
 ### pgDump Large-Export Configuration
 
 The bundled `pgdump` driver defaults to PostgreSQL directory format so large exports use parallel dump jobs:
