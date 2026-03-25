@@ -335,6 +335,7 @@ Operational surfaces now include:
 - `db-ops:doctor` freshness warnings for stale last-known-good backups
 - `db-ops:doctor` duration anomaly warnings for unusually slow backup runs
 - `db-ops:doctor` backup drill freshness and pass-rate warnings
+- `db-ops:doctor` restore posture warnings in non-local environments when restore allowlists are broad, CI bypass is enabled, or verified-backup enforcement is disabled
 - structured log context across drivers, queue job failures, and health checks
 - orphan recovery events for queue lag and redispatched stale runs
 

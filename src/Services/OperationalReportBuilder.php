@@ -228,6 +228,10 @@ final readonly class OperationalReportBuilder
                 'threshold_minutes' => max(1, (int) $this->config->get('checkpoint.queue.orphan_threshold', 10)),
             ],
         );
+        $rows[] = $this->restoreEnvironmentPostureCheck();
+        $rows[] = $this->restoreDatabasePostureCheck();
+        $rows[] = $this->restoreCiBypassPostureCheck();
+        $rows[] = $this->restoreVerifiedBackupPostureCheck();
         $rows[] = $this->lastKnownGoodCheck($snapshot['last_known_good']);
         $rows[] = $this->backupDurationAnomalyCheck();
         $backupDrillSummary = $snapshot['drill_summary'];
@@ -514,6 +518,186 @@ final readonly class OperationalReportBuilder
             ->pending()
             ->where('updated_at', '<', now()->subMinutes($thresholdMinutes))
             ->count();
+    }
+
+    /**
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
+     */
+    private function restoreEnvironmentPostureCheck(): array
+    {
+        $environment = $this->currentEnvironment();
+        $allowedEnvironments = $this->restoreStringList('allowed_environments');
+
+        if (! $this->nonLocalEnvironment($environment)) {
+            return $this->checkRow('restore.posture.environments', 'Restore posture: environments', 'pass', 'not enforced in local/testing', [
+                'environment' => $environment,
+                'allowed_environments' => $allowedEnvironments,
+                'reason' => 'local_or_testing',
+            ]);
+        }
+
+        if ($allowedEnvironments === []) {
+            return $this->checkRow('restore.posture.environments', 'Restore posture: environments', 'warn', 'checkpoint.restore.allowed_environments is empty in non-local environment', [
+                'environment' => $environment,
+                'allowed_environments' => [],
+                'reason' => 'allowlist_missing',
+            ]);
+        }
+
+        $currentEnvironmentAllowed = in_array($environment, $allowedEnvironments, true);
+
+        return $this->checkRow(
+            'restore.posture.environments',
+            'Restore posture: environments',
+            $currentEnvironmentAllowed ? 'warn' : 'pass',
+            $currentEnvironmentAllowed
+                ? sprintf('current environment [%s] is allowlisted for restores', $environment)
+                : sprintf('current environment [%s] is blocked by restore allowlist', $environment),
+            [
+                'environment' => $environment,
+                'allowed_environments' => $allowedEnvironments,
+                'current_environment_allowed' => $currentEnvironmentAllowed,
+                'reason' => $currentEnvironmentAllowed ? 'current_environment_allowlisted' : 'current_environment_blocked',
+            ],
+        );
+    }
+
+    /**
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
+     */
+    private function restoreDatabasePostureCheck(): array
+    {
+        $environment = $this->currentEnvironment();
+        $allowedDatabases = $this->restoreStringList('allowed_databases');
+        $database = $this->currentDatabase();
+
+        if (! $this->nonLocalEnvironment($environment)) {
+            return $this->checkRow('restore.posture.databases', 'Restore posture: databases', 'pass', 'not enforced in local/testing', [
+                'environment' => $environment,
+                'database' => $database,
+                'allowed_databases' => $allowedDatabases,
+                'reason' => 'local_or_testing',
+            ]);
+        }
+
+        if ($allowedDatabases === []) {
+            return $this->checkRow('restore.posture.databases', 'Restore posture: databases', 'warn', 'checkpoint.restore.allowed_databases is empty in non-local environment', [
+                'environment' => $environment,
+                'database' => $database,
+                'allowed_databases' => [],
+                'reason' => 'allowlist_missing',
+            ]);
+        }
+
+        $databaseAllowlisted = $database !== '' && in_array($database, $allowedDatabases, true);
+
+        return $this->checkRow(
+            'restore.posture.databases',
+            'Restore posture: databases',
+            $databaseAllowlisted ? 'warn' : 'pass',
+            $databaseAllowlisted
+                ? sprintf('current database [%s] is allowlisted for restores', $database)
+                : 'current database is not allowlisted for restores',
+            [
+                'environment' => $environment,
+                'database' => $database,
+                'allowed_databases' => $allowedDatabases,
+                'current_database_allowlisted' => $databaseAllowlisted,
+                'reason' => $databaseAllowlisted ? 'current_database_allowlisted' : 'current_database_blocked',
+            ],
+        );
+    }
+
+    /**
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
+     */
+    private function restoreCiBypassPostureCheck(): array
+    {
+        $environment = $this->currentEnvironment();
+        $allowInCi = (bool) $this->config->get('checkpoint.restore.allow_in_ci', false);
+
+        if (! $this->nonLocalEnvironment($environment)) {
+            return $this->checkRow('restore.posture.ci_bypass', 'Restore posture: CI bypass', 'pass', 'not enforced in local/testing', [
+                'environment' => $environment,
+                'allow_in_ci' => $allowInCi,
+                'reason' => 'local_or_testing',
+            ]);
+        }
+
+        return $this->checkRow(
+            'restore.posture.ci_bypass',
+            'Restore posture: CI bypass',
+            $allowInCi ? 'warn' : 'pass',
+            $allowInCi ? 'restore confirmation bypass in CI is enabled' : 'restore confirmation bypass in CI is disabled',
+            [
+                'environment' => $environment,
+                'allow_in_ci' => $allowInCi,
+                'reason' => $allowInCi ? 'ci_bypass_enabled' : 'ci_bypass_disabled',
+            ],
+        );
+    }
+
+    /**
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
+     */
+    private function restoreVerifiedBackupPostureCheck(): array
+    {
+        $environment = $this->currentEnvironment();
+        $required = (bool) $this->config->get('checkpoint.restore.require_verified_backup', false);
+
+        if (! $this->nonLocalEnvironment($environment)) {
+            return $this->checkRow('restore.posture.verified_backup', 'Restore posture: verified backup', 'pass', 'not enforced in local/testing', [
+                'environment' => $environment,
+                'require_verified_backup' => $required,
+                'reason' => 'local_or_testing',
+            ]);
+        }
+
+        return $this->checkRow(
+            'restore.posture.verified_backup',
+            'Restore posture: verified backup',
+            $required ? 'pass' : 'warn',
+            $required ? 'verified backup requirement is enabled' : 'verified backup requirement is disabled',
+            [
+                'environment' => $environment,
+                'require_verified_backup' => $required,
+                'reason' => $required ? 'verified_backup_required' : 'verified_backup_not_required',
+            ],
+        );
+    }
+
+    private function currentEnvironment(): string
+    {
+        return (string) $this->config->get('app.env', 'production');
+    }
+
+    private function currentDatabase(): string
+    {
+        $defaultConnection = (string) $this->config->get('database.default', '');
+
+        return (string) $this->config->get('database.connections.'.$defaultConnection.'.database', '');
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function restoreStringList(string $key): array
+    {
+        $value = $this->config->get('checkpoint.restore.'.$key, []);
+
+        if (! is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(
+            static fn (mixed $item): string => is_string($item) ? trim($item) : '',
+            $value,
+        ), static fn (string $item): bool => $item !== ''));
+    }
+
+    private function nonLocalEnvironment(string $environment): bool
+    {
+        return ! in_array($environment, ['local', 'testing'], true);
     }
 
     /**

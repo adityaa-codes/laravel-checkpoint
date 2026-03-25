@@ -189,6 +189,56 @@
         "status": "pass"
       },
       {
+        "check": "Restore posture: environments",
+        "code": "restore.posture.environments",
+        "data": {
+          "allowed_environments": [
+            "testing",
+            "workbench"
+          ],
+          "environment": "testing",
+          "reason": "local_or_testing"
+        },
+        "notes": "not enforced in local/testing",
+        "status": "pass"
+      },
+      {
+        "check": "Restore posture: databases",
+        "code": "restore.posture.databases",
+        "data": {
+          "allowed_databases": [
+            ":memory:"
+          ],
+          "database": ":memory:",
+          "environment": "testing",
+          "reason": "local_or_testing"
+        },
+        "notes": "not enforced in local/testing",
+        "status": "pass"
+      },
+      {
+        "check": "Restore posture: CI bypass",
+        "code": "restore.posture.ci_bypass",
+        "data": {
+          "allow_in_ci": true,
+          "environment": "testing",
+          "reason": "local_or_testing"
+        },
+        "notes": "not enforced in local/testing",
+        "status": "pass"
+      },
+      {
+        "check": "Restore posture: verified backup",
+        "code": "restore.posture.verified_backup",
+        "data": {
+          "environment": "testing",
+          "reason": "local_or_testing",
+          "require_verified_backup": false
+        },
+        "notes": "not enforced in local/testing",
+        "status": "pass"
+      },
+      {
         "check": "Backups: last known good",
         "code": "backup.last_known_good",
         "data": {

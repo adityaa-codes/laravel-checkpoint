@@ -121,5 +121,9 @@ final class CommandJsonFixtureSupport
             '/var/lib/mysql/binlog.000001',
             '/var/lib/mysql/binlog.000002',
         ]);
+        config()->set('checkpoint.restore.allowed_environments', ['local', 'testing', 'staging']);
+        config()->set('checkpoint.restore.allowed_databases', ['checkpoint_shadow']);
+        config()->set('checkpoint.restore.allow_in_ci', false);
+        config()->set('checkpoint.restore.require_verified_backup', true);
     }
 }

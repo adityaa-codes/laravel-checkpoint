@@ -28,6 +28,10 @@ it('renders the doctor health table', function (): void {
         ->expectsOutputToContain('DB: command_runs table')
         ->expectsOutputToContain('DB: backup_drill_runs table')
         ->expectsOutputToContain('Orphaned runs')
+        ->expectsOutputToContain('Restore posture: environments')
+        ->expectsOutputToContain('Restore posture: databases')
+        ->expectsOutputToContain('Restore posture: CI bypass')
+        ->expectsOutputToContain('Restore posture: verified backup')
         ->expectsOutputToContain('Backups: last known good')
         ->expectsOutputToContain('Backups: duration anomaly')
         ->expectsOutputToContain('Backup drills: latest run')
@@ -49,6 +53,44 @@ it('fails doctor when queue timeout settings are unsafe', function (): void {
     checkpoint_artisan('db-ops:doctor')
         ->expectsOutputToContain('Config validation')
         ->assertFailed();
+});
+
+it('warns about unsafe restore posture in non-local environments', function (): void {
+    config()->set('app.env', 'production');
+    config()->set('checkpoint.queue.lock_store', null);
+    config()->set('checkpoint.schedule.without_overlapping', false);
+    config()->set('checkpoint.schedule.on_one_server', false);
+    config()->set('checkpoint.restore.allowed_environments', ['production']);
+    config()->set('checkpoint.restore.allowed_databases', ['primary']);
+    config()->set('checkpoint.restore.allow_in_ci', true);
+    config()->set('checkpoint.restore.require_verified_backup', false);
+
+    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+
+    $report = json_decode(Artisan::output(), true);
+
+    expect($report)->toBeArray()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['code'] === 'restore.posture.environments'
+                && $check['status'] === 'warn'
+                && $check['data']['environment'] === 'production'
+                && $check['data']['current_environment_allowed'] === true,
+        ))->toBeTrue()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['code'] === 'restore.posture.databases'
+                && $check['status'] === 'pass'
+                && $check['data']['current_database_allowlisted'] === false,
+        ))->toBeTrue()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['code'] === 'restore.posture.ci_bypass'
+                && $check['status'] === 'warn'
+                && $check['data']['allow_in_ci'] === true,
+        ))->toBeTrue()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['code'] === 'restore.posture.verified_backup'
+                && $check['status'] === 'warn'
+                && $check['data']['require_verified_backup'] === false,
+        ))->toBeTrue();
 });
 
 it('shows the configured pgbackrest binary when it is missing from path', function (): void {
