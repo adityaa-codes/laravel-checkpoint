@@ -722,6 +722,33 @@ final readonly class ConfigValidator
         if (is_int($backupDrillPassRateWindowDays) && $backupDrillRetentionDays < $backupDrillPassRateWindowDays) {
             throw new ConfigurationException('checkpoint.schedule.prune_keep_backup_drill_days must be greater than or equal to checkpoint.observability.backup_drill_pass_rate_window_days.');
         }
+
+        $environment = (string) $this->config->get('app.env', 'production');
+        $usesClusterSchedulingGuards = (bool) ($config['without_overlapping'] ?? false)
+            || (bool) ($config['on_one_server'] ?? false);
+
+        if (! in_array($environment, ['local', 'testing'], true) && $usesClusterSchedulingGuards) {
+            $defaultCacheStore = (string) $this->config->get('cache.default', '');
+            $stores = $this->config->get('cache.stores', []);
+
+            if ($defaultCacheStore === '' || ! is_array($stores) || ! is_array($stores[$defaultCacheStore] ?? null)) {
+                throw new ConfigurationException(
+                    'checkpoint.schedule requires cache.default to reference a configured shared cache store when checkpoint.schedule.without_overlapping or checkpoint.schedule.on_one_server is enabled in non-local environments.',
+                );
+            }
+
+            $driver = (string) ($stores[$defaultCacheStore]['driver'] ?? '');
+
+            if (in_array($driver, ['array', 'file'], true)) {
+                throw new ConfigurationException(
+                    sprintf(
+                        'checkpoint.schedule cache store [%s] uses cache driver [%s], which is not safe for checkpoint.schedule.without_overlapping or checkpoint.schedule.on_one_server in non-local environments.',
+                        $defaultCacheStore,
+                        $driver,
+                    ),
+                );
+            }
+        }
     }
 
     private function validateCustomOperations(): void

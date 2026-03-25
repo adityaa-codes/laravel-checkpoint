@@ -144,6 +144,7 @@ Recommended production cache config:
 - use Redis for queue uniqueness and scheduler overlap locks
 - avoid local-only cache drivers for multi-node deployments, because they cannot coordinate uniqueness or `onOneServer()` safely across hosts
 - non-local environments reject `array` and `file` lock stores during config validation because they are not safe for production uniqueness or clustered scheduling
+- non-local environments also reject `cache.default` stores that use `array` or `file` when scheduled guardrails (`withoutOverlapping` / `onOneServer`) are enabled
 - the package test suite includes shared-cache lock coverage for duplicate job suppression, but production still requires a real shared cache backend across nodes
 
 ## Usage

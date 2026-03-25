@@ -467,6 +467,44 @@ it('rejects local-only queue lock stores outside local and testing environments'
     }
 });
 
+it('rejects local-only scheduler cache stores outside local and testing environments', function (): void {
+    $originalEnvironment = (string) config('app.env', 'testing');
+    $originalDefaultStore = (string) config('cache.default', 'array');
+
+    config()->set('app.env', 'production');
+    config()->set('checkpoint.schedule.without_overlapping', true);
+    config()->set('checkpoint.schedule.on_one_server', true);
+    config()->set('checkpoint.queue.lock_store', null);
+    config()->set('cache.default', 'array');
+
+    try {
+        expect(fn () => resolve(ConfigValidator::class)->validate())
+            ->toThrow(ConfigurationException::class, 'checkpoint.schedule cache store [array] uses cache driver [array], which is not safe for checkpoint.schedule.without_overlapping or checkpoint.schedule.on_one_server in non-local environments.');
+    } finally {
+        config()->set('app.env', $originalEnvironment);
+        config()->set('cache.default', $originalDefaultStore);
+    }
+});
+
+it('rejects missing scheduler cache default store outside local and testing environments', function (): void {
+    $originalEnvironment = (string) config('app.env', 'testing');
+    $originalDefaultStore = (string) config('cache.default', 'array');
+
+    config()->set('app.env', 'production');
+    config()->set('checkpoint.schedule.without_overlapping', true);
+    config()->set('checkpoint.schedule.on_one_server', true);
+    config()->set('checkpoint.queue.lock_store', null);
+    config()->set('cache.default', '');
+
+    try {
+        expect(fn () => resolve(ConfigValidator::class)->validate())
+            ->toThrow(ConfigurationException::class, 'checkpoint.schedule requires cache.default to reference a configured shared cache store when checkpoint.schedule.without_overlapping or checkpoint.schedule.on_one_server is enabled in non-local environments.');
+    } finally {
+        config()->set('app.env', $originalEnvironment);
+        config()->set('cache.default', $originalDefaultStore);
+    }
+});
+
 it('rejects shell command timeouts that exceed the queue timeout budget', function (): void {
     config()->set('checkpoint.queue.timeout', 3600);
     config()->set('checkpoint.drivers.shell.command_timeout_seconds', 3601);
