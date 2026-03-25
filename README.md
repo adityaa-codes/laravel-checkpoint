@@ -124,6 +124,7 @@ Worker alignment matters:
 - the Laravel queue worker `--timeout` should be a few seconds shorter than `DB_OPS_QUEUE_RETRY_AFTER`
 - orphan recovery claims should last at least as long as the queue redelivery window so stale queued work is not re-enqueued prematurely
 - this package validates the config contract, but your worker process must still be started with a compatible timeout
+- each driver timeout (`DB_OPS_CMD_TIMEOUT`, `DB_OPS_PGBACKREST_TIMEOUT`, `DB_OPS_PGDUMP_TIMEOUT`, `DB_OPS_MYSQL_TIMEOUT`) must be less than or equal to `DB_OPS_QUEUE_TIMEOUT` so queued jobs are not killed mid-command
 
 Example worker command:
 

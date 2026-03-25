@@ -407,3 +407,47 @@ it('rejects local-only queue lock stores outside local and testing environments'
         config()->set('app.env', $originalEnvironment);
     }
 });
+
+it('rejects shell command timeouts that exceed the queue timeout budget', function (): void {
+    config()->set('checkpoint.queue.timeout', 3600);
+    config()->set('checkpoint.drivers.shell.command_timeout_seconds', 3601);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(
+            ConfigurationException::class,
+            'checkpoint.drivers.shell.command_timeout_seconds [3601] must be less than or equal to checkpoint.queue.timeout [3600] so queued jobs are not terminated before the driver command finishes.',
+        );
+});
+
+it('rejects pgbackrest command timeouts that exceed the queue timeout budget', function (): void {
+    config()->set('checkpoint.queue.timeout', 3600);
+    config()->set('checkpoint.drivers.pgbackrest.command_timeout_seconds', 3601);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(
+            ConfigurationException::class,
+            'checkpoint.drivers.pgbackrest.command_timeout_seconds [3601] must be less than or equal to checkpoint.queue.timeout [3600] so queued jobs are not terminated before the driver command finishes.',
+        );
+});
+
+it('rejects pgdump command timeouts that exceed the queue timeout budget', function (): void {
+    config()->set('checkpoint.queue.timeout', 3600);
+    config()->set('checkpoint.drivers.pgdump.command_timeout_seconds', 3601);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(
+            ConfigurationException::class,
+            'checkpoint.drivers.pgdump.command_timeout_seconds [3601] must be less than or equal to checkpoint.queue.timeout [3600] so queued jobs are not terminated before the driver command finishes.',
+        );
+});
+
+it('rejects mysql command timeouts that exceed the queue timeout budget', function (): void {
+    config()->set('checkpoint.queue.timeout', 3600);
+    config()->set('checkpoint.drivers.mysql.command_timeout_seconds', 3601);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(
+            ConfigurationException::class,
+            'checkpoint.drivers.mysql.command_timeout_seconds [3601] must be less than or equal to checkpoint.queue.timeout [3600] so queued jobs are not terminated before the driver command finishes.',
+        );
+});

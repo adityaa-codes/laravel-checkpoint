@@ -22,6 +22,7 @@ final readonly class ConfigValidator
         $this->validatePgDumpConfig();
         $this->validateMysqlConfig();
         $this->validateQueueSettings();
+        $this->validateDriverTimeoutBudgets();
         $this->validateRestoreSettings();
         $this->validateScheduleSettings();
         $this->validateObservabilitySettings();
@@ -453,6 +454,39 @@ final readonly class ConfigValidator
                     $driver,
                 ),
             );
+        }
+    }
+
+    private function validateDriverTimeoutBudgets(): void
+    {
+        $queueTimeout = (int) $this->config->get('checkpoint.queue.timeout', 0);
+
+        if ($queueTimeout < 1) {
+            return;
+        }
+
+        $timeoutPaths = [
+            'shell' => 'checkpoint.drivers.shell.command_timeout_seconds',
+            'pgbackrest' => 'checkpoint.drivers.pgbackrest.command_timeout_seconds',
+            'pgdump' => 'checkpoint.drivers.pgdump.command_timeout_seconds',
+            'mysql' => 'checkpoint.drivers.mysql.command_timeout_seconds',
+        ];
+
+        foreach ($timeoutPaths as $driver => $path) {
+            $driverTimeout = $this->config->get($path);
+
+            if (! is_int($driverTimeout) || $driverTimeout < 1) {
+                continue;
+            }
+
+            if ($driverTimeout > $queueTimeout) {
+                throw new ConfigurationException(sprintf(
+                    '%s [%d] must be less than or equal to checkpoint.queue.timeout [%d] so queued jobs are not terminated before the driver command finishes.',
+                    $path,
+                    $driverTimeout,
+                    $queueTimeout,
+                ));
+            }
         }
     }
 
