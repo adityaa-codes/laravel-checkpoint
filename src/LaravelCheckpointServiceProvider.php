@@ -78,10 +78,6 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
 
         $this->registerSchedules();
 
-        if ($this->app->environment('production')) {
-            return;
-        }
-
         $this->app->make(ConfigValidator::class)->validate();
     }
 

@@ -79,13 +79,14 @@ it('can disable schedule overlap and cluster guards', function (): void {
     });
 });
 
-it('skips config validation during production boot', function (): void {
+it('validates config during production boot', function (): void {
     $provider = new LaravelCheckpointServiceProvider(app());
 
     app()['env'] = 'production';
     config()->set('checkpoint.table_prefix', '');
 
-    expect(fn () => $provider->packageBooted())->not->toThrow(ConfigurationException::class);
+    expect(fn () => $provider->packageBooted())
+        ->toThrow(ConfigurationException::class, 'checkpoint.table_prefix must be a non-empty string.');
 
     app()['env'] = 'testing';
 });
