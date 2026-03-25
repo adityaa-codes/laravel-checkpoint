@@ -29,10 +29,24 @@ final class HealthCheckCommand extends Command
     {
         $timeoutSeconds = max(1, (int) $this->config->get('checkpoint.queue.timeout', 3600));
         $threshold = now()->subSeconds($timeoutSeconds);
+        $graceSeconds = max(0, (int) $this->config->get('checkpoint.queue.heartbeat_grace_seconds', 60));
+        $heartbeatThreshold = now()->subSeconds($timeoutSeconds + $graceSeconds);
 
         CommandRun::query()
             ->running()
-            ->where('started_at', '<', $threshold)
+            ->where(function ($query) use ($heartbeatThreshold, $threshold): void {
+                $query
+                    ->where(function ($runningQuery) use ($heartbeatThreshold): void {
+                        $runningQuery
+                            ->whereNotNull('heartbeat_at')
+                            ->where('heartbeat_at', '<', $heartbeatThreshold);
+                    })
+                    ->orWhere(function ($runningQuery) use ($threshold): void {
+                        $runningQuery
+                            ->whereNull('heartbeat_at')
+                            ->where('started_at', '<', $threshold);
+                    });
+            })
             ->each(function (CommandRun $run) use ($timeoutSeconds): void {
                 $output = 'Timed out by health check';
 

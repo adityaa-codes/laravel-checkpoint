@@ -65,6 +65,8 @@ class TestCase extends Orchestra
                 'orphan_claim_timeout' => 61,
                 'orphan_batch_size' => 100,
                 'orphan_event_max_ids' => 50,
+                'heartbeat_interval_seconds' => 30,
+                'heartbeat_grace_seconds' => 60,
                 'unique_for' => 3660,
                 'lock_store' => 'array',
             ],
@@ -239,6 +241,11 @@ class TestCase extends Orchestra
 
         if (! Schema::hasColumn('db_ops_command_runs', 'orphan_recovery_claimed_at')) {
             $migration = require __DIR__.'/../database/migrations/add_orphan_recovery_claim_to_command_runs_table.php.stub';
+            $migration->up();
+        }
+
+        if (! Schema::hasColumn('db_ops_command_runs', 'heartbeat_at')) {
+            $migration = require __DIR__.'/../database/migrations/add_heartbeat_to_command_runs_table.php.stub';
             $migration->up();
         }
 

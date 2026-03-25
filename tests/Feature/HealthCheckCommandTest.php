@@ -53,3 +53,25 @@ it('marks timed-out running runs as failed and leaves recent runs untouched', fu
         && $event->exitCode === -1
         && $event->version === 1);
 });
+
+it('keeps long-running runs alive when heartbeats are fresh', function (): void {
+    Event::fake([BackupFailed::class]);
+
+    config()->set('checkpoint.queue.timeout', 300);
+    config()->set('checkpoint.queue.heartbeat_grace_seconds', 60);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Running,
+        'attempts' => 0,
+        'started_at' => Date::now()->subMinutes(20),
+        'heartbeat_at' => Date::now()->subMinutes(2),
+    ]);
+
+    checkpoint_artisan('db-ops:health-check')->assertSuccessful();
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Running);
+    Event::assertNotDispatched(BackupFailed::class);
+});

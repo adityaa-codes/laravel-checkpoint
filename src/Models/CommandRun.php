@@ -42,6 +42,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $exit_code
  * @property int $attempts
  * @property Carbon|null $started_at
+ * @property Carbon|null $heartbeat_at
  * @property Carbon|null $finished_at
  * @property Carbon|null $verified_at
  * @property Carbon|null $last_known_good_at
@@ -78,6 +79,7 @@ class CommandRun extends Model
             'restore_verified_signal_run_id' => 'integer',
             'status' => CommandRunStatus::class,
             'started_at' => 'datetime',
+            'heartbeat_at' => 'datetime',
             'finished_at' => 'datetime',
             'orphan_recovery_claimed_at' => 'datetime',
             'throughput_bytes_per_second' => 'integer',
@@ -240,6 +242,7 @@ class CommandRun extends Model
             ->update([
                 'status' => CommandRunStatus::Running,
                 'started_at' => $startedAt,
+                'heartbeat_at' => $startedAt,
                 'updated_at' => $startedAt,
                 'orphan_recovery_claimed_at' => null,
             ]);
@@ -293,6 +296,55 @@ class CommandRun extends Model
         $this->refresh();
 
         return $this;
+    }
+
+    public function recordHeartbeat(?Carbon $heartbeatAt = null, bool $refresh = false): bool
+    {
+        $heartbeatAt ??= now();
+
+        $updated = static::withoutTimestamps(function () use ($heartbeatAt): int {
+            return static::query()
+                ->whereKey($this->getKey())
+                ->where('status', CommandRunStatus::Running)
+                ->update([
+                    'heartbeat_at' => $heartbeatAt,
+                    'updated_at' => $heartbeatAt,
+                ]);
+        });
+
+        if ($refresh) {
+            $this->refresh();
+        }
+
+        return $updated === 1;
+    }
+
+    public function recordHeartbeatIfDue(?Carbon $heartbeatAt = null, ?int $intervalSeconds = null, bool $refresh = false): bool
+    {
+        $heartbeatAt ??= now();
+        $intervalSeconds = max(1, $intervalSeconds ?? (int) config('checkpoint.queue.heartbeat_interval_seconds', 30));
+        $cutoff = $heartbeatAt->copy()->subSeconds($intervalSeconds);
+
+        $updated = static::withoutTimestamps(function () use ($cutoff, $heartbeatAt): int {
+            return static::query()
+                ->whereKey($this->getKey())
+                ->where('status', CommandRunStatus::Running)
+                ->where(function (Builder $query) use ($cutoff): void {
+                    $query
+                        ->whereNull('heartbeat_at')
+                        ->orWhere('heartbeat_at', '<=', $cutoff);
+                })
+                ->update([
+                    'heartbeat_at' => $heartbeatAt,
+                    'updated_at' => $heartbeatAt,
+                ]);
+        });
+
+        if ($refresh) {
+            $this->refresh();
+        }
+
+        return $updated === 1;
     }
 
     public function claimForOrphanRecovery(Carbon $threshold, Carbon $claimExpiresBefore, ?Carbon $claimedAt = null, bool $refresh = true): bool

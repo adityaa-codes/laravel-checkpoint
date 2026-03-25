@@ -28,7 +28,7 @@ php artisan migrate
 Important config groups in `config/checkpoint.php`:
 
 - `user_model`, `user_name_column`, `table_prefix`
-- `queue.connection`, `queue.name`, `queue.max_attempts`, `queue.retry_after`, `queue.timeout`, `queue.unique_for`, `queue.lock_store`, `queue.orphan_threshold`, `queue.orphan_claim_timeout`, `queue.orphan_batch_size`, `queue.orphan_event_max_ids`
+- `queue.connection`, `queue.name`, `queue.max_attempts`, `queue.retry_after`, `queue.timeout`, `queue.unique_for`, `queue.lock_store`, `queue.orphan_threshold`, `queue.orphan_claim_timeout`, `queue.orphan_batch_size`, `queue.orphan_event_max_ids`, `queue.heartbeat_interval_seconds`, `queue.heartbeat_grace_seconds`
 - `schedule.logical_backup_*`, `schedule.health_check_enabled`, `schedule.recover_orphans_enabled`, `schedule.prune_enabled`, `schedule.without_overlapping`, `schedule.overlap_expires_at`, `schedule.on_one_server`, `schedule.prune_keep_*`
 - `driver`, `drivers.shell.*`, `drivers.pgbackrest.*`, `drivers.pgdump.*`, `drivers.mysql.*`
 - `reporting.max_recent_runs`, `output.max_persisted_bytes`
@@ -47,6 +47,8 @@ DB_OPS_QUEUE_ORPHAN_THRESHOLD=10
 DB_OPS_QUEUE_ORPHAN_CLAIM_TIMEOUT=61
 DB_OPS_QUEUE_ORPHAN_BATCH_SIZE=100
 DB_OPS_QUEUE_ORPHAN_EVENT_MAX_IDS=50
+DB_OPS_QUEUE_HEARTBEAT_INTERVAL_SECONDS=30
+DB_OPS_QUEUE_HEARTBEAT_GRACE_SECONDS=60
 DB_OPS_OUTPUT_MAX_PERSISTED_BYTES=65536
 DB_OPS_PRUNE_KEEP_DAYS=90
 DB_OPS_PRUNE_KEEP_FAILED_DAYS=365
@@ -101,6 +103,7 @@ For production, the package assumes long-running jobs and shared infrastructure.
 - `DB_OPS_QUEUE_RETRY_AFTER` must be greater than `DB_OPS_QUEUE_TIMEOUT`
 - `DB_OPS_QUEUE_UNIQUE_FOR` must be greater than or equal to `DB_OPS_QUEUE_RETRY_AFTER`
 - `DB_OPS_QUEUE_ORPHAN_CLAIM_TIMEOUT` should be greater than or equal to `ceil(DB_OPS_QUEUE_RETRY_AFTER / 60)`
+- `DB_OPS_QUEUE_HEARTBEAT_INTERVAL_SECONDS` must be lower than `DB_OPS_QUEUE_TIMEOUT`
 - `DB_OPS_QUEUE_LOCK_STORE` should point at a shared lock backend, typically `redis`
 - scheduled commands are configured to use `withoutOverlapping()` and `onOneServer()` by default
 
@@ -114,6 +117,8 @@ DB_OPS_QUEUE_ORPHAN_THRESHOLD=10
 DB_OPS_QUEUE_ORPHAN_CLAIM_TIMEOUT=61
 DB_OPS_QUEUE_ORPHAN_BATCH_SIZE=100
 DB_OPS_QUEUE_ORPHAN_EVENT_MAX_IDS=50
+DB_OPS_QUEUE_HEARTBEAT_INTERVAL_SECONDS=30
+DB_OPS_QUEUE_HEARTBEAT_GRACE_SECONDS=60
 DB_OPS_QUEUE_LOCK_STORE=redis
 DB_OPS_SCHEDULE_WITHOUT_OVERLAPPING=true
 DB_OPS_SCHEDULE_OVERLAP_EXPIRES_AT=180
@@ -124,6 +129,7 @@ Worker alignment matters:
 
 - the Laravel queue worker `--timeout` should be a few seconds shorter than `DB_OPS_QUEUE_RETRY_AFTER`
 - orphan recovery claims should last at least as long as the queue redelivery window so stale queued work is not re-enqueued prematurely
+- long-running jobs now refresh heartbeat markers while command output streams, and `db-ops:health-check` uses heartbeat freshness (with `DB_OPS_QUEUE_HEARTBEAT_GRACE_SECONDS`) before failing running work
 - this package validates the config contract, but your worker process must still be started with a compatible timeout
 - each driver timeout (`DB_OPS_CMD_TIMEOUT`, `DB_OPS_PGBACKREST_TIMEOUT`, `DB_OPS_PGDUMP_TIMEOUT`, `DB_OPS_MYSQL_TIMEOUT`) must be less than or equal to `DB_OPS_QUEUE_TIMEOUT` so queued jobs are not killed mid-command
 

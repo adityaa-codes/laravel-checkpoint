@@ -57,6 +57,7 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             ->hasMigration('create_checkpoint_command_runs_table')
             ->hasMigration('add_checkpoint_metadata_to_command_runs_table')
             ->hasMigration('add_orphan_recovery_claim_to_command_runs_table')
+            ->hasMigration('add_heartbeat_to_command_runs_table')
             ->hasMigration('add_operator_summary_columns_to_command_runs_table')
             ->hasMigration('create_checkpoint_backup_drill_runs_table')
             ->hasMigration('add_reporting_indexes_to_checkpoint_tables')

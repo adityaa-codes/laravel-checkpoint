@@ -23,6 +23,8 @@ use Throwable;
 /** @internal */
 final class MysqlDriver implements BackupDriver
 {
+    private ?CommandRun $activeRun = null;
+
     public function execute(CommandRun $run): void
     {
         $storedOutputMetadata = null;
@@ -33,6 +35,7 @@ final class MysqlDriver implements BackupDriver
             }
 
             $run = $run->fresh() ?? $run;
+            $this->activeRun = $run;
             $plannedMetadata = $this->plannedMetadata($run);
             $restoreAudit = $this->restoreSafetyGuard()->ensureSafe($run, $plannedMetadata);
             $plannedMetadata = $this->mergeRestoreAuditMetadata($plannedMetadata, $restoreAudit);
@@ -106,6 +109,8 @@ final class MysqlDriver implements BackupDriver
             ]));
 
             throw $exception;
+        } finally {
+            $this->activeRun = null;
         }
     }
 
@@ -262,7 +267,10 @@ final class MysqlDriver implements BackupDriver
             $process->setInput($input);
         }
 
-        $captured = $this->outputCapture()->captureProcess($process);
+        $captured = $this->outputCapture()->captureProcess(
+            $process,
+            fn (string $chunk, string $type): null => $this->tapCapturedOutput($chunk),
+        );
 
         return [
             'output' => $captured['output'],
@@ -933,6 +941,12 @@ final class MysqlDriver implements BackupDriver
     private function outputStore(): CommandOutputStore
     {
         return resolve(CommandOutputStore::class);
+    }
+
+    private function tapCapturedOutput(string $chunk): void
+    {
+        // MySQL multi-stage operations do not use stream sessions; only heartbeat is needed.
+        $this->activeRun?->recordHeartbeatIfDue();
     }
 
     private function restoreSafetyGuard(): RestoreSafetyGuard

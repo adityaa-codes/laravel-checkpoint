@@ -391,6 +391,28 @@ it('rejects a non-positive orphan lag event id cap', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.queue.orphan_event_max_ids must be greater than zero.');
 });
 
+it('rejects a non-positive queue heartbeat interval', function (): void {
+    config()->set('checkpoint.queue.heartbeat_interval_seconds', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.queue.heartbeat_interval_seconds must be greater than zero.');
+});
+
+it('rejects a queue heartbeat interval that is not lower than queue timeout', function (): void {
+    config()->set('checkpoint.queue.timeout', 300);
+    config()->set('checkpoint.queue.heartbeat_interval_seconds', 300);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.queue.heartbeat_interval_seconds must be less than checkpoint.queue.timeout.');
+});
+
+it('rejects a negative queue heartbeat grace window', function (): void {
+    config()->set('checkpoint.queue.heartbeat_grace_seconds', -1);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.queue.heartbeat_grace_seconds must be greater than or equal to zero.');
+});
+
 it('rejects an orphan lag event id cap that is too large', function (): void {
     config()->set('checkpoint.queue.orphan_event_max_ids', 1001);
 

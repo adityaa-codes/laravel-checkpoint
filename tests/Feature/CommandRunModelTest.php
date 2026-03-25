@@ -217,7 +217,27 @@ it('allows only one pending execution claimant across stale copies', function ()
 
     expect($run->status)->toBe(CommandRunStatus::Running)
         ->and($run->started_at?->toDateTimeString())->toBe('2026-03-11 12:00:00')
+        ->and($run->heartbeat_at?->toDateTimeString())->toBe('2026-03-11 12:00:00')
         ->and($run->orphan_recovery_claimed_at)->toBeNull();
+
+    Date::setTestNow();
+});
+
+it('records heartbeats only when due for running runs', function (): void {
+    Date::setTestNow('2026-03-11 12:00:00');
+
+    $run = CommandRun::factory()->running()->create([
+        'started_at' => Date::now()->subMinutes(5),
+        'heartbeat_at' => Date::now()->subSeconds(10),
+    ]);
+
+    expect($run->recordHeartbeatIfDue(Date::now(), 30, refresh: true))->toBeFalse()
+        ->and($run->heartbeat_at?->toDateTimeString())->toBe('2026-03-11 11:59:50');
+
+    Date::setTestNow('2026-03-11 12:00:25');
+
+    expect($run->recordHeartbeatIfDue(Date::now(), 30, refresh: true))->toBeTrue()
+        ->and($run->heartbeat_at?->toDateTimeString())->toBe('2026-03-11 12:00:25');
 
     Date::setTestNow();
 });

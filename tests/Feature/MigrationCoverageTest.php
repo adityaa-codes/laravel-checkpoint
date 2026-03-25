@@ -13,6 +13,7 @@ it('applies the command run migrations on a fresh install', function (): void {
     freshCommandRunMigration()->up();
     metadataCommandRunMigration()->up();
     orphanClaimMigration()->up();
+    heartbeatMigration()->up();
     operatorSummaryColumnsMigration()->up();
     backupDrillRunMigration()->up();
     reportingIndexesMigration()->up();
@@ -20,10 +21,12 @@ it('applies the command run migrations on a fresh install', function (): void {
     expect(Schema::hasTable('db_ops_command_runs'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'backup_type'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'orphan_recovery_claimed_at'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'heartbeat_at'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'driver_name'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'restore_confirmation_satisfied_via'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'restore_verified_signal_run_id'))->toBeTrue()
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_orphan_recovery_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_running_heartbeat_index')
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_verified_at_lookup_index')
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_status_created_at_index')
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_restore_finished_lookup_index')
@@ -73,16 +76,20 @@ it('adds operational summary columns and indexes on upgrade installs', function 
 
     orphanClaimMigration()->up();
     orphanClaimMigration()->up();
+    heartbeatMigration()->up();
+    heartbeatMigration()->up();
     operatorSummaryColumnsMigration()->up();
     operatorSummaryColumnsMigration()->up();
     reportingIndexesMigration()->up();
     reportingIndexesMigration()->up();
 
     expect(Schema::hasColumn('db_ops_command_runs', 'orphan_recovery_claimed_at'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'heartbeat_at'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'driver_name'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'restore_confirmation_satisfied_via'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'restore_verified_signal_run_id'))->toBeTrue()
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_orphan_recovery_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_running_heartbeat_index')
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_verified_at_lookup_index')
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_status_created_at_index')
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_restore_finished_lookup_index')
@@ -118,6 +125,17 @@ function orphanClaimMigration(): object
 {
     /** @var object{up: callable():void} $migration */
     $migration = require __DIR__.'/../../database/migrations/add_orphan_recovery_claim_to_command_runs_table.php.stub';
+
+    return $migration;
+}
+
+/**
+ * @return object{up: callable():void}
+ */
+function heartbeatMigration(): object
+{
+    /** @var object{up: callable():void} $migration */
+    $migration = require __DIR__.'/../../database/migrations/add_heartbeat_to_command_runs_table.php.stub';
 
     return $migration;
 }

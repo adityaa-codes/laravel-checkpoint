@@ -373,6 +373,8 @@ final readonly class ConfigValidator
         $orphanClaimTimeout = (int) $this->config->get('checkpoint.queue.orphan_claim_timeout', 0);
         $orphanBatchSize = (int) $this->config->get('checkpoint.queue.orphan_batch_size', 0);
         $orphanEventMaxIds = (int) $this->config->get('checkpoint.queue.orphan_event_max_ids', 0);
+        $heartbeatIntervalSeconds = (int) $this->config->get('checkpoint.queue.heartbeat_interval_seconds', 0);
+        $heartbeatGraceSeconds = (int) $this->config->get('checkpoint.queue.heartbeat_grace_seconds', 0);
         $uniqueFor = (int) $this->config->get('checkpoint.queue.unique_for', 0);
         $lockStore = $this->config->get('checkpoint.queue.lock_store');
 
@@ -419,6 +421,20 @@ final readonly class ConfigValidator
 
         if ($orphanEventMaxIds > 1000) {
             throw new ConfigurationException('checkpoint.queue.orphan_event_max_ids must not exceed 1000.');
+        }
+
+        if ($heartbeatIntervalSeconds < 1) {
+            throw new ConfigurationException('checkpoint.queue.heartbeat_interval_seconds must be greater than zero.');
+        }
+
+        if ($heartbeatGraceSeconds < 0) {
+            throw new ConfigurationException('checkpoint.queue.heartbeat_grace_seconds must be greater than or equal to zero.');
+        }
+
+        if ($heartbeatIntervalSeconds >= $timeout) {
+            throw new ConfigurationException(
+                'checkpoint.queue.heartbeat_interval_seconds must be less than checkpoint.queue.timeout.',
+            );
         }
 
         if ($uniqueFor < 1) {

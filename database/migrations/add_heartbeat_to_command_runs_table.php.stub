@@ -1,0 +1,69 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        $table = $this->tableName();
+
+        if (! Schema::hasTable($table)) {
+            return;
+        }
+
+        Schema::table($table, function (Blueprint $table): void {
+            if (! Schema::hasColumn($this->tableName(), 'heartbeat_at')) {
+                $table->timestamp('heartbeat_at')->nullable()->after('started_at');
+            }
+
+            if (! $this->hasIndex($this->heartbeatIndexName())) {
+                $table->index(['status', 'heartbeat_at', 'updated_at'], $this->heartbeatIndexName());
+            }
+        });
+    }
+
+    public function down(): void
+    {
+        $table = $this->tableName();
+
+        if (! Schema::hasTable($table)) {
+            return;
+        }
+
+        Schema::table($table, function (Blueprint $table): void {
+            if ($this->hasIndex($this->heartbeatIndexName())) {
+                $table->dropIndex($this->heartbeatIndexName());
+            }
+
+            if (Schema::hasColumn($this->tableName(), 'heartbeat_at')) {
+                $table->dropColumn('heartbeat_at');
+            }
+        });
+    }
+
+    private function tableName(): string
+    {
+        return sprintf('%scommand_runs', config('checkpoint.table_prefix', 'db_ops_'));
+    }
+
+    private function heartbeatIndexName(): string
+    {
+        return $this->tableName().'_running_heartbeat_index';
+    }
+
+    private function hasIndex(string $name): bool
+    {
+        $rows = Schema::getConnection()->select("PRAGMA index_list('".$this->tableName()."')");
+
+        foreach ($rows as $row) {
+            if (($row->name ?? null) === $name) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+};

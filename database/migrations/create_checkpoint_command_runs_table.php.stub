@@ -32,12 +32,14 @@ return new class extends Migration
             $table->integer('exit_code')->nullable();
             $table->unsignedInteger('attempts')->default(0);
             $table->timestamp('started_at')->nullable();
+            $table->timestamp('heartbeat_at')->nullable();
             $table->timestamp('finished_at')->nullable();
             $table->timestamp('orphan_recovery_claimed_at')->nullable();
             $table->timestamps();
 
             $table->index(['operation', 'status']);
             $table->index(['status', 'orphan_recovery_claimed_at', 'updated_at'], $this->orphanRecoveryIndexName());
+            $table->index(['status', 'heartbeat_at', 'updated_at'], $this->heartbeatIndexName());
             $table->index('last_known_good_at');
             $table->index('created_at');
         });
@@ -59,5 +61,10 @@ return new class extends Migration
     private function orphanRecoveryIndexName(): string
     {
         return $this->tableName().'_orphan_recovery_index';
+    }
+
+    private function heartbeatIndexName(): string
+    {
+        return $this->tableName().'_running_heartbeat_index';
     }
 };

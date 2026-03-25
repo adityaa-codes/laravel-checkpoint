@@ -82,7 +82,7 @@ final class ShellCommandDriver implements BackupDriver
             $outputSession = $this->outputStore()->startCapture($run);
             $capturedOutput = $this->outputCapture()->captureProcess(
                 $process,
-                fn (string $chunk, string $type): null => $this->outputStore()->appendCaptureChunk($outputSession, $chunk),
+                fn (string $chunk, string $type): null => $this->tapCapturedOutput($run, $outputSession, $chunk),
             );
             $storedOutput = $this->outputStore()->finishCapture($run, $capturedOutput['output'], $outputSession);
             $outputSession = null;
@@ -339,5 +339,11 @@ final class ShellCommandDriver implements BackupDriver
     private function outputStore(): CommandOutputStore
     {
         return resolve(CommandOutputStore::class);
+    }
+
+    private function tapCapturedOutput(CommandRun $run, ?array $outputSession, string $chunk): void
+    {
+        $this->outputStore()->appendCaptureChunk($outputSession, $chunk);
+        $run->recordHeartbeatIfDue();
     }
 }

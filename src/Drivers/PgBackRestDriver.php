@@ -55,7 +55,7 @@ final class PgBackRestDriver implements BackupDriver
             $outputSession = $this->outputStore()->startCapture($run);
             $capturedOutput = $this->outputCapture()->captureProcess(
                 $process,
-                fn (string $chunk, string $type): null => $this->outputStore()->appendCaptureChunk($outputSession, $chunk),
+                fn (string $chunk, string $type): null => $this->tapCapturedOutput($run, $outputSession, $chunk),
             );
             $output = $capturedOutput['output'];
             $exitCode = $process->getExitCode() ?? -1;
@@ -762,5 +762,11 @@ final class PgBackRestDriver implements BackupDriver
     private function outputStore(): CommandOutputStore
     {
         return resolve(CommandOutputStore::class);
+    }
+
+    private function tapCapturedOutput(CommandRun $run, ?array $outputSession, string $chunk): void
+    {
+        $this->outputStore()->appendCaptureChunk($outputSession, $chunk);
+        $run->recordHeartbeatIfDue();
     }
 }
