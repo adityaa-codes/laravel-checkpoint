@@ -63,6 +63,7 @@ it('registers published migrations in dependency order', function (): void {
         'add_orphan_recovery_claim_to_command_runs_table',
         'add_heartbeat_to_command_runs_table',
         'add_operator_summary_columns_to_command_runs_table',
+        'create_checkpoint_restore_decision_events_table',
         'create_checkpoint_backup_drill_runs_table',
         'add_reporting_indexes_to_checkpoint_tables',
     ]);

@@ -8,6 +8,7 @@ use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
@@ -148,7 +149,24 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
             'repository' => $run->repository,
             'stanza' => $run->stanza,
             'duration_seconds' => $run->duration_seconds,
+            'restore_decision_event_count' => $this->restoreDecisionEventCount($run),
             ...$extra,
         ], static fn (mixed $value): bool => $value !== null);
     }
+
+    private function restoreDecisionEventCount(CommandRun $run): ?int
+    {
+        if (! in_array($run->operation, ['logical_restore_latest', 'logical_restore_file', 'pitr_restore', 'pgbackrest_restore'], true)) {
+            return null;
+        }
+
+        if (! $run->exists) {
+            return null;
+        }
+
+        return RestoreDecisionEvent::query()
+            ->where('command_run_id', (int) $run->getKey())
+            ->count();
+    }
+
 }

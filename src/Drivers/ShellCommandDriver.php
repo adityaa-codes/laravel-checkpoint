@@ -11,6 +11,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
@@ -252,6 +253,7 @@ final class ShellCommandDriver implements BackupDriver
             'repository' => $run->repository,
             'stanza' => $run->stanza,
             'duration_seconds' => $run->duration_seconds,
+            'restore_decision_event_count' => $this->restoreDecisionEventCount($run),
             ...$extra,
         ], static fn (mixed $value): bool => $value !== null);
     }
@@ -346,4 +348,20 @@ final class ShellCommandDriver implements BackupDriver
         $this->outputStore()->appendCaptureChunk($outputSession, $chunk);
         $run->recordHeartbeatIfDue();
     }
+
+    private function restoreDecisionEventCount(CommandRun $run): ?int
+    {
+        if (! in_array($run->operation, ['logical_restore_latest', 'logical_restore_file', 'pitr_restore', 'pgbackrest_restore'], true)) {
+            return null;
+        }
+
+        if (! $run->exists) {
+            return null;
+        }
+
+        return RestoreDecisionEvent::query()
+            ->where('command_run_id', (int) $run->getKey())
+            ->count();
+    }
+
 }

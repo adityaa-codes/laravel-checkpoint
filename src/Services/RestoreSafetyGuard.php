@@ -6,6 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Services;
 
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 
@@ -26,13 +27,27 @@ final readonly class RestoreSafetyGuard
             return [];
         }
 
-        $environment = $this->ensureEnvironmentAllowed();
-        $database = $this->ensureDatabaseAllowed();
-        $confirmation = $this->ensureConfirmationSatisfied();
-        $restoreTarget = $this->ensureRestoreTargetValid($run, $context);
-        $verificationSignal = $this->ensureVerificationSignal($run, $restoreTarget, $context);
+        $this->recordDecisionEvent($run, 'evaluate', 'restore_safety_evaluated', [
+            'operation' => $run->operation,
+            'restore_target' => $context['restore_target'] ?? $run->argument_text,
+        ]);
 
-        return [
+        try {
+            $environment = $this->ensureEnvironmentAllowed();
+            $database = $this->ensureDatabaseAllowed();
+            $confirmation = $this->ensureConfirmationSatisfied();
+            $restoreTarget = $this->ensureRestoreTargetValid($run, $context);
+            $verificationSignal = $this->ensureVerificationSignal($run, $restoreTarget, $context);
+        } catch (ConfigurationException $exception) {
+            $this->recordDecisionEvent($run, 'block', 'restore_safety_blocked', [
+                'message' => $exception->getMessage(),
+                'restore_target' => $context['restore_target'] ?? $run->argument_text,
+            ]);
+
+            throw $exception;
+        }
+
+        $audit = [
             'restore_audit' => [
                 'environment' => $environment,
                 'database' => $database !== '' ? $database : null,
@@ -49,6 +64,27 @@ final readonly class RestoreSafetyGuard
                 'verified_signal_last_known_good_at' => $verificationSignal['last_known_good_at'],
             ],
         ];
+
+        $this->recordDecisionEvent($run, 'allow', 'restore_safety_passed', [
+            'restore_audit' => $audit['restore_audit'],
+        ]);
+
+        return $audit;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function recordDecisionEvent(CommandRun $run, string $decision, string $reason, array $payload = []): void
+    {
+        RestoreDecisionEvent::query()->create([
+            'command_run_id' => $run->exists ? (int) $run->getKey() : null,
+            'operation' => $run->operation,
+            'decision' => $decision,
+            'reason' => $reason,
+            'payload' => $payload !== [] ? $payload : null,
+            'created_at' => now(),
+        ]);
     }
 
     private function isRestoreOperation(string $operation): bool

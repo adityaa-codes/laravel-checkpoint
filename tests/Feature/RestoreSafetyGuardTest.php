@@ -5,6 +5,7 @@ declare(strict_types=1);
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 
 it('requires explicit confirmation outside ci contexts', function (): void {
@@ -441,4 +442,84 @@ it('requires an explicit pgbackrest backup label when verified backup enforcemen
             ConfigurationException::class,
             'pgbackrest_restore requires an explicit backup set label when checkpoint.restore.require_verified_backup is enabled.',
         );
+});
+
+
+it('records append-only restore decision evidence for blocked restore checks', function (): void {
+    config()->set('app.env', 'production');
+    config()->set('checkpoint.restore.allowed_environments', ['staging']);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_restore_file',
+        'argument_text' => 'nightly.sql',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, ['restore_target' => 'nightly.sql']))
+        ->toThrow(ConfigurationException::class, 'Restore operations are blocked in environment [production].');
+
+    $events = RestoreDecisionEvent::query()
+        ->where('command_run_id', $run->id)
+        ->orderBy('id')
+        ->get();
+
+    expect($events)->toHaveCount(2)
+        ->and($events[0]->decision)->toBe('evaluate')
+        ->and($events[0]->reason)->toBe('restore_safety_evaluated')
+        ->and($events[1]->decision)->toBe('block')
+        ->and($events[1]->reason)->toBe('restore_safety_blocked')
+        ->and($events[1]->payload['message'] ?? null)->toBe('Restore operations are blocked in environment [production].');
+});
+
+it('records append-only restore decision evidence for successful restore checks', function (): void {
+    config()->set('checkpoint.restore.require_confirmation', true);
+    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.restore.require_verified_backup', true);
+
+    $verified = CommandRun::query()->create([
+        'operation' => 'pgbackrest_check',
+        'backup_label' => '20260312-010101F',
+        'verification_state' => 'verified',
+        'driver_name' => 'pgbackrest',
+        'repository' => 1,
+        'stanza' => 'main',
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 0,
+        'last_known_good_at' => now(),
+        'metadata' => [
+            'driver' => 'pgbackrest',
+            'database' => ':memory:',
+        ],
+    ]);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'pgbackrest_restore',
+        'argument_text' => '20260312-010101F',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    $audit = resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
+        'restore_target' => '20260312-010101F',
+        'repository' => 1,
+        'stanza' => 'main',
+        'metadata' => [
+            'driver' => 'pgbackrest',
+            'database' => ':memory:',
+        ],
+    ]);
+
+    $events = RestoreDecisionEvent::query()
+        ->where('command_run_id', $run->id)
+        ->orderBy('id')
+        ->get();
+
+    expect($events)->toHaveCount(2)
+        ->and($events[0]->decision)->toBe('evaluate')
+        ->and($events[1]->decision)->toBe('allow')
+        ->and($events[1]->reason)->toBe('restore_safety_passed')
+        ->and($events[1]->payload['restore_audit']['verified_signal_run_id'] ?? null)->toBe((int) $verified->id)
+        ->and($audit['restore_audit']['verified_signal_run_id'])->toBe((int) $verified->id);
 });

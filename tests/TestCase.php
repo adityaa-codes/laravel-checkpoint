@@ -255,6 +255,11 @@ class TestCase extends Orchestra
             $migration->up();
         }
 
+        if (! Schema::hasTable('db_ops_restore_decision_events')) {
+            $migration = require __DIR__.'/../database/migrations/create_checkpoint_restore_decision_events_table.php.stub';
+            $migration->up();
+        }
+
         if (! Schema::hasTable('db_ops_backup_drill_runs')) {
             $migration = require __DIR__.'/../database/migrations/create_checkpoint_backup_drill_runs_table.php.stub';
             $migration->up();

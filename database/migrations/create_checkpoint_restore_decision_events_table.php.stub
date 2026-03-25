@@ -1,0 +1,48 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        if (Schema::hasTable($this->tableName())) {
+            return;
+        }
+
+        Schema::create($this->tableName(), function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('command_run_id')->nullable();
+            $table->string('operation');
+            $table->string('decision');
+            $table->string('reason');
+            $table->json('payload')->nullable();
+            $table->timestamp('created_at')->useCurrent();
+
+            $table->index(['command_run_id', 'created_at'], $this->runCreatedAtIndexName());
+            $table->index(['decision', 'created_at'], $this->decisionCreatedAtIndexName());
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists($this->tableName());
+    }
+
+    private function tableName(): string
+    {
+        return sprintf('%srestore_decision_events', config('checkpoint.table_prefix', 'db_ops_'));
+    }
+
+    private function runCreatedAtIndexName(): string
+    {
+        return $this->tableName().'_run_created_at_index';
+    }
+
+    private function decisionCreatedAtIndexName(): string
+    {
+        return $this->tableName().'_decision_created_at_index';
+    }
+};
