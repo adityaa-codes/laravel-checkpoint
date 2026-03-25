@@ -626,6 +626,8 @@ it('records restore audit metadata for pgdump restore runs', function (): void {
                 'verified_signal_backup_label' => null,
                 'verified_signal_artifact_path' => null,
                 'verified_signal_last_known_good_at' => null,
+                'pitr_base_target' => null,
+                'pitr_binlog_files' => [],
             ],
         ]);
 });
