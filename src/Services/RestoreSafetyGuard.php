@@ -7,7 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Services;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Contracts\Config\Repository;
-use Illuminate\Support\CarbonImmutable;
+use Illuminate\Support\Carbon;
 
 /** @internal */
 final readonly class RestoreSafetyGuard
@@ -144,7 +144,7 @@ final readonly class RestoreSafetyGuard
         }
 
         try {
-            CarbonImmutable::parse($target);
+            Carbon::parse($target);
         } catch (\Throwable) {
             throw new ConfigurationException(
                 sprintf('pitr_restore target [%s] must be a valid datetime string.', $target),
@@ -187,6 +187,7 @@ final readonly class RestoreSafetyGuard
         $verifiedRun = match ($run->operation) {
             'logical_restore_file', 'logical_restore_latest' => $this->matchingLogicalRestoreVerification($query, $restoreTarget, $context),
             'pgbackrest_restore' => $this->matchingPgBackRestRestoreVerification($query, $restoreTarget, $context),
+            'pitr_restore' => $this->matchingPitrRestoreVerification($query, $context),
             default => $query->first(),
         };
 
@@ -267,7 +268,8 @@ final readonly class RestoreSafetyGuard
         $candidates = $query->limit(10)->get();
 
         return $candidates->first(
-            fn (CommandRun $candidate): bool => $this->artifactSnapshotMatches($candidate, $expectedSnapshot),
+            fn (CommandRun $candidate): bool => $this->artifactSnapshotMatches($candidate, $expectedSnapshot)
+                && $this->provenanceMatches($candidate, $context),
         );
     }
 
@@ -295,7 +297,29 @@ final readonly class RestoreSafetyGuard
             $query->where('stanza', trim((string) $context['stanza']));
         }
 
-        return $query->first();
+        /** @var \Illuminate\Support\Collection<int, CommandRun> $candidates */
+        $candidates = $query->limit(10)->get();
+
+        return $candidates->first(
+            fn (CommandRun $candidate): bool => $this->provenanceMatches($candidate, $context),
+        );
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<CommandRun>  $query
+     */
+    private function matchingPitrRestoreVerification(
+        \Illuminate\Database\Eloquent\Builder $query,
+        array $context,
+    ): ?CommandRun {
+        $query->where('operation', 'logical_backup');
+
+        /** @var \Illuminate\Support\Collection<int, CommandRun> $candidates */
+        $candidates = $query->limit(10)->get();
+
+        return $candidates->first(
+            fn (CommandRun $candidate): bool => $this->provenanceMatches($candidate, $context),
+        );
     }
 
     /**
@@ -314,6 +338,33 @@ final readonly class RestoreSafetyGuard
 
         foreach (['path', 'file_type', 'device', 'inode', 'mtime', 'size', 'content_signature'] as $key) {
             if (($artifactSnapshot[$key] ?? null) !== ($expectedSnapshot[$key] ?? null)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private function provenanceMatches(CommandRun $candidate, array $context): bool
+    {
+        $contextMetadata = is_array($context['metadata'] ?? null) ? $context['metadata'] : [];
+        $expectedDriver = is_string($contextMetadata['driver'] ?? null) ? trim((string) $contextMetadata['driver']) : '';
+        $expectedDatabase = is_string($contextMetadata['database'] ?? null) ? trim((string) $contextMetadata['database']) : '';
+
+        if ($expectedDriver !== '' && $candidate->resolvedDriverName() !== $expectedDriver) {
+            return false;
+        }
+
+        if ($expectedDatabase !== '') {
+            $candidateMetadata = is_array($candidate->metadata) ? $candidate->metadata : [];
+            $candidateDatabase = is_string($candidateMetadata['database'] ?? null)
+                ? trim((string) $candidateMetadata['database'])
+                : '';
+
+            if ($candidateDatabase !== $expectedDatabase) {
                 return false;
             }
         }

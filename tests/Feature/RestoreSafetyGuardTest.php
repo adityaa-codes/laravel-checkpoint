@@ -163,6 +163,8 @@ it('requires a matching artifact snapshot for verified logical restores', functi
         'attempts' => 0,
         'last_known_good_at' => now(),
         'metadata' => [
+            'driver' => 'pgdump',
+            'database' => ':memory:',
             'artifact_snapshot' => [
                 'path' => '/tmp/checkpoint-tests/logical-export-42',
                 'file_type' => 'directory',
@@ -191,6 +193,10 @@ it('requires a matching artifact snapshot for verified logical restores', functi
             'size' => null,
             'content_signature' => 'after',
         ],
+        'metadata' => [
+            'driver' => 'pgdump',
+            'database' => ':memory:',
+        ],
     ]))->toThrow(ConfigurationException::class, 'Restore operation [logical_restore_file] requires a verified backup signal before execution.');
 });
 
@@ -204,6 +210,7 @@ it('requires pgbackrest verification to match the configured stanza and reposito
         'operation' => 'pgbackrest_check',
         'backup_label' => '20260312-010101F',
         'verification_state' => 'verified',
+        'driver_name' => 'pgbackrest',
         'repository' => 2,
         'stanza' => 'archive',
         'status' => CommandRunStatus::Succeeded,
@@ -219,6 +226,154 @@ it('requires pgbackrest verification to match the configured stanza and reposito
     expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
         'repository' => 1,
         'stanza' => 'main',
+    ]))->toThrow(ConfigurationException::class, 'Restore operation [pgbackrest_restore] requires a verified backup signal before execution.');
+});
+
+it('requires logical restore verification to match the driver provenance', function (): void {
+    config()->set('checkpoint.restore.require_verified_backup', true);
+    config()->set('checkpoint.restore.require_confirmation', true);
+    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'artifact_path' => '/tmp/checkpoint-tests/logical-export-42',
+        'driver_name' => 'mysql',
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 0,
+        'last_known_good_at' => now(),
+        'metadata' => [
+            'driver' => 'mysql',
+            'database' => ':memory:',
+            'artifact_snapshot' => [
+                'path' => '/tmp/checkpoint-tests/logical-export-42',
+                'file_type' => 'directory',
+                'device' => 1,
+                'inode' => 11,
+                'mtime' => 1700000000,
+                'size' => null,
+                'content_signature' => 'before',
+            ],
+        ],
+    ]);
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'logical_restore_file',
+        'argument_text' => 'logical-export-42',
+    ]);
+
+    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
+        'restore_target' => '/tmp/checkpoint-tests/logical-export-42',
+        'restore_target_snapshot' => [
+            'path' => '/tmp/checkpoint-tests/logical-export-42',
+            'file_type' => 'directory',
+            'device' => 1,
+            'inode' => 11,
+            'mtime' => 1700000000,
+            'size' => null,
+            'content_signature' => 'before',
+        ],
+        'metadata' => [
+            'driver' => 'pgdump',
+            'database' => ':memory:',
+        ],
+    ]))->toThrow(ConfigurationException::class, 'Restore operation [logical_restore_file] requires a verified backup signal before execution.');
+});
+
+it('requires pitr restore verification to match mysql provenance', function (): void {
+    config()->set('checkpoint.restore.require_verified_backup', true);
+    config()->set('checkpoint.restore.require_confirmation', true);
+    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'driver_name' => 'pgdump',
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 0,
+        'last_known_good_at' => now(),
+        'metadata' => [
+            'driver' => 'pgdump',
+            'database' => ':memory:',
+        ],
+    ]);
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'pitr_restore',
+        'argument_text' => '2026-03-24T11:00:00+00:00',
+    ]);
+
+    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
+        'restore_target' => '2026-03-24T11:00:00+00:00',
+        'metadata' => [
+            'driver' => 'mysql',
+            'database' => ':memory:',
+        ],
+    ]))->toThrow(ConfigurationException::class, 'Restore operation [pitr_restore] requires a verified backup signal before execution.');
+});
+
+it('accepts pitr restore verification when provenance matches mysql backup metadata', function (): void {
+    config()->set('checkpoint.restore.require_verified_backup', true);
+    config()->set('checkpoint.restore.require_confirmation', true);
+    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
+
+    CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'driver_name' => 'mysql',
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 0,
+        'last_known_good_at' => now(),
+        'metadata' => [
+            'driver' => 'mysql',
+            'database' => ':memory:',
+        ],
+    ]);
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'pitr_restore',
+        'argument_text' => '2026-03-24T11:00:00+00:00',
+    ]);
+
+    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
+        'restore_target' => '2026-03-24T11:00:00+00:00',
+        'metadata' => [
+            'driver' => 'mysql',
+            'database' => ':memory:',
+        ],
+    ]))->not->toThrow(ConfigurationException::class);
+});
+
+it('requires pgbackrest verification to match driver provenance', function (): void {
+    config()->set('checkpoint.restore.require_verified_backup', true);
+    config()->set('checkpoint.restore.require_confirmation', true);
+    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
+
+    CommandRun::query()->create([
+        'operation' => 'pgbackrest_check',
+        'backup_label' => '20260312-010101F',
+        'verification_state' => 'verified',
+        'driver_name' => 'pgdump',
+        'repository' => 1,
+        'stanza' => 'main',
+        'status' => CommandRunStatus::Succeeded,
+        'attempts' => 0,
+        'last_known_good_at' => now(),
+    ]);
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'pgbackrest_restore',
+        'argument_text' => '20260312-010101F',
+    ]);
+
+    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
+        'repository' => 1,
+        'stanza' => 'main',
+        'metadata' => [
+            'driver' => 'pgbackrest',
+            'database' => ':memory:',
+        ],
     ]))->toThrow(ConfigurationException::class, 'Restore operation [pgbackrest_restore] requires a verified backup signal before execution.');
 });
 
