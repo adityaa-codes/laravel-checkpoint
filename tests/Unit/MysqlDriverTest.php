@@ -147,6 +147,60 @@ SH
         ]);
 });
 
+it('redacts mysql command lines before persisting and logging them', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-redact-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary mysql redaction path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    config()->set('checkpoint.drivers.mysql.dump_binary', fakeMysqlScript(<<<'SH'
+#!/bin/sh
+set -e
+for arg in "$@"; do
+  case "$arg" in
+    --result-file=*)
+      file="${arg#--result-file=}"
+      printf 'dump content' > "$file"
+      ;;
+  esac
+done
+printf 'backup complete'
+SH
+    ));
+    config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.mysql.output_prefix', 'mysql-export');
+    config()->set('checkpoint.drivers.mysql.file_extension', 'sql');
+    config()->set('checkpoint.drivers.mysql.extra_args.backup', [
+        'mysql://app:super-secret@db.internal/app?password=query-secret',
+        '--password',
+        'top-secret',
+        '--token=abc123',
+    ]);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_backup',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new MysqlDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->command_line)->toContain('mysql://app:[REDACTED]@db.internal/app')
+        ->and($run->command_line)->toContain('?password=[REDACTED]')
+        ->and($run->command_line)->toContain("'--password' '[REDACTED]'")
+        ->and($run->command_line)->toContain('--token=[REDACTED]')
+        ->and($run->command_line)->not->toContain('super-secret')
+        ->and($run->command_line)->not->toContain('query-secret')
+        ->and($run->command_line)->not->toContain('top-secret')
+        ->and($run->command_line)->not->toContain('abc123');
+});
+
 function buildMysqlProcess(MysqlDriver $driver, CommandRun $run, array $plannedMetadata = []): Process
 {
     $method = new ReflectionMethod($driver, 'buildProcess');
