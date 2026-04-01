@@ -106,6 +106,7 @@ final class EnqueueCommand extends Command
             'backup_drill' => 'Backup Drill',
             'pgbackrest_check' => 'pgBackRest Check',
             'pgbackrest_info' => 'pgBackRest Info',
+            'replication_sync' => 'Replication Sync',
             default => str($operation)
                 ->replace('_', ' ')
                 ->title()

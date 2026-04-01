@@ -46,6 +46,7 @@ it('prompts for the operation and argument when needed', function (): void {
                 'pgbackrest_check',
                 'pgbackrest_info',
                 'pitr_restore',
+                'replication_sync',
             ],
         )
         ->expectsQuestion('Enter the argument for the selected operation', 'nightly.sql')
