@@ -6,6 +6,7 @@ use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Services\ReplicationFailureSuggestionMapper;
 use Symfony\Component\Process\Process;
 
 it('builds mysqldump backup commands from structured config', function (): void {
@@ -327,6 +328,170 @@ SH
         ->and($run->command_line)->not->toContain('query-secret')
         ->and($run->command_line)->not->toContain('top-secret')
         ->and($run->command_line)->not->toContain('abc123');
+});
+
+it('plans replication_sync metadata with explicit default safety gates', function (): void {
+    $run = CommandRun::factory()->make([
+        'id' => 8801,
+        'operation' => 'replication_sync',
+        'argument_text' => '{"source":"profile:mysql-source","destination":"mysql://[REDACTED]","dry_run":true}',
+        'metadata' => [
+            'replication' => [
+                'engine' => 'mysql',
+                'source' => ['kind' => 'config_profile', 'identifier' => 'mysql-source', 'redacted' => 'profile:mysql-source'],
+                'destination' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'mysql://root:secret@db.internal'],
+                'queue_only' => true,
+                'dry_run_requested' => true,
+            ],
+        ],
+    ]);
+
+    $metadata = plannedMysqlMetadata(new MysqlDriver, $run);
+
+    expect($metadata['metadata']['replication']['engine'] ?? null)->toBe('mysql')
+        ->and($metadata['metadata']['replication']['dry_run_requested'] ?? null)->toBeTrue()
+        ->and($metadata['metadata']['replication']['apply_requested'] ?? null)->toBeFalse()
+        ->and($metadata['metadata']['replication']['force_requested'] ?? null)->toBeFalse()
+        ->and($metadata['metadata']['replication']['overwrite_destination'] ?? null)->toBeFalse()
+        ->and((string) ($metadata['metadata']['replication']['artifact_path'] ?? ''))->toContain('checkpoint-mysql-replication-8801.sql');
+});
+
+it('rejects replication_sync on mysql driver when replication engine is not mysql', function (): void {
+    $run = CommandRun::factory()->make([
+        'operation' => 'replication_sync',
+        'argument_text' => '{"source":"pgsql://[REDACTED]","destination":"pgsql://[REDACTED]","dry_run":true}',
+        'metadata' => [
+            'replication' => [
+                'engine' => 'pgsql',
+                'source' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'pgsql://[REDACTED]'],
+                'destination' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'pgsql://[REDACTED]'],
+                'queue_only' => true,
+                'dry_run_requested' => true,
+            ],
+        ],
+    ]);
+
+    expect(fn (): array => plannedMysqlMetadata(new MysqlDriver, $run))
+        ->toThrow(ConfigurationException::class, 'Unsupported replication engine [pgsql] for mysql driver. mysql driver supports mysql -> mysql only.');
+});
+
+it('runs replication_sync as dry-run-only by default and records conservative sanity metadata', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-repl-dry-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary mysql replication path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    $tempDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-repl-temp-');
+
+    if ($tempDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary mysql replication temp path.');
+    }
+
+    unlink($tempDir);
+    mkdir($tempDir, 0755, true);
+
+    config()->set('checkpoint.drivers.mysql.dump_binary', fakeMysqlScript(<<<'SH'
+#!/bin/sh
+for arg in "$@"; do
+  case "$arg" in
+    --result-file=*)
+      target="${arg#--result-file=}"
+      printf 'mysql replication export payload' > "$target"
+      ;;
+  esac
+done
+printf 'dry-run export ok'
+SH
+    ));
+    config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
+    config()->set('checkpoint.temp_dir', $tempDir);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'replication_sync',
+        'argument_text' => '{"source":"profile:mysql-source","destination":"mysql://[REDACTED]","dry_run":true,"apply":false}',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'metadata' => [
+            'replication' => [
+                'engine' => 'mysql',
+                'source' => ['kind' => 'config_profile', 'identifier' => 'mysql-source', 'redacted' => 'profile:mysql-source'],
+                'destination' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'mysql://root:secret@db.internal'],
+                'queue_only' => true,
+                'dry_run_requested' => true,
+            ],
+        ],
+    ]);
+
+    (new MysqlDriver)->execute($run);
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+        ->and($run->command_output)->toContain('[replication_sync:dry_run]')
+        ->and($run->metadata['replication']['result'] ?? null)->toBe('dry_run_only')
+        ->and($run->metadata['replication']['sanity']['method'] ?? null)->toBe('artifact_hash')
+        ->and($run->metadata['replication']['sanity']['fallback_reason'] ?? null)->toBe('apply_not_requested_or_dry_run_enforced')
+        ->and($run->metadata['replication']['destination']['redacted'] ?? null)->not->toContain('secret');
+});
+
+it('adds structured failure analysis and debug suggestions for mysql replication dry-run failures', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-repl-fail-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary mysql replication path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    config()->set('checkpoint.drivers.mysql.dump_binary', fakeMysqlScript(<<<'SH'
+#!/bin/sh
+echo 'ERROR 1045 (28000): Access denied for user "repl"@"10.0.0.5" (using password: YES)'
+exit 1
+SH
+    ));
+    config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'replication_sync',
+        'argument_text' => '{"source":"profile:mysql-source","destination":"mysql://[REDACTED]","dry_run":true,"apply":false}',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'metadata' => [
+            'replication' => [
+                'engine' => 'mysql',
+                'source' => ['kind' => 'config_profile', 'identifier' => 'mysql-source', 'redacted' => 'profile:mysql-source'],
+                'destination' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'mysql://root:secret@db.internal'],
+                'queue_only' => true,
+                'dry_run_requested' => true,
+            ],
+        ],
+    ]);
+
+    (new MysqlDriver)->execute($run);
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Failed)
+        ->and($run->command_output)->toContain('[replication_sync:debug]')
+        ->and($run->command_output)->toContain('category: auth_credential_failure')
+        ->and($run->metadata['replication']['failure_analysis']['diagnostics']['destination'] ?? null)->toBe('mysql://[REDACTED]@db.internal')
+        ->and($run->metadata['replication']['failure_analysis']['category'] ?? null)->toBe('auth_credential_failure')
+        ->and($run->metadata['replication']['failure_analysis']['immediate_fix'] ?? null)->toBeString()
+        ->and($run->metadata['replication']['failure_context']['suggestions'][0] ?? null)->toBe($run->metadata['replication']['failure_analysis']['immediate_fix'] ?? null);
+});
+
+it('maps checksum mismatch signatures in replication failure analysis', function (): void {
+    $analysis = app(ReplicationFailureSuggestionMapper::class)->map(
+        'apply_import',
+        'replication sanity check failed: checksum mismatch for staged artifact',
+        ['destination' => 'mysql://root:secret@db.internal'],
+    );
+
+    expect($analysis['category'])->toBe('checksum_sanity_verification_mismatch')
+        ->and($analysis['diagnostics']['destination'] ?? null)->toBe('mysql://[REDACTED]@db.internal');
 });
 
 function buildMysqlProcess(MysqlDriver $driver, CommandRun $run, array $plannedMetadata = []): Process

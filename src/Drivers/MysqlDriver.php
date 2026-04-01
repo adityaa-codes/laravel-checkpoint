@@ -15,6 +15,7 @@ use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
+use AdityaaCodes\LaravelCheckpoint\Services\ReplicationFailureSuggestionMapper;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
@@ -38,6 +39,7 @@ final class MysqlDriver implements BackupDriver
             $run = $run->fresh() ?? $run;
             $this->activeRun = $run;
             $plannedMetadata = $this->plannedMetadata($run);
+            $plannedMetadata = $this->redactedReplicationMetadata($plannedMetadata);
             $restoreAudit = $this->restoreSafetyGuard()->ensureSafe($run, $plannedMetadata);
             $plannedMetadata = $this->mergeRestoreAuditMetadata($plannedMetadata, $restoreAudit);
             $displayCommandLine = $this->redactCommandLine($this->displayCommandLine($run, $plannedMetadata));
@@ -125,6 +127,7 @@ final class MysqlDriver implements BackupDriver
             'logical_backup' => $this->executeSingleProcess($this->buildProcess($run, $plannedMetadata)),
             'logical_restore_file', 'logical_restore_latest' => $this->executeLogicalRestore($run, $plannedMetadata),
             'pitr_restore' => $this->executePitrRestore($run, $plannedMetadata),
+            'replication_sync' => $this->executeReplicationSync($run, $plannedMetadata),
             'backup_drill' => $this->executeSingleProcess($this->buildProcess($run, $plannedMetadata)),
             default => throw new ConfigurationException(
                 sprintf('Unsupported mysql operation [%s].', $run->operation),
@@ -289,6 +292,7 @@ final class MysqlDriver implements BackupDriver
             'logical_backup' => $this->mysqlBackupProcess($run),
             'logical_restore_file', 'logical_restore_latest' => $this->mysqlRestoreProcessAfterValidatingTarget($run, $plannedMetadata),
             'pitr_restore' => $this->mysqlBinlogProcess((string) ($plannedMetadata['restore_target'] ?? $run->argument_text ?? '')),
+            'replication_sync' => $this->mysqlReplicationDryRunProcess($run, $plannedMetadata),
             'backup_drill' => $this->mysqlDrillProcess($run),
             default => throw new ConfigurationException(
                 sprintf('Unsupported mysql operation [%s].', $run->operation),
@@ -675,6 +679,12 @@ final class MysqlDriver implements BackupDriver
                 $this->mysqlBinlogProcess((string) ($plannedMetadata['restore_target'] ?? $run->argument_text ?? ''))->getCommandLine(),
                 $this->mysqlPitrReplayProcess()->getCommandLine(),
             ]),
+            'replication_sync' => implode(' ; ', array_filter([
+                $this->mysqlReplicationDryRunProcess($run, $plannedMetadata)->getCommandLine(),
+                (bool) ($plannedMetadata['metadata']['replication']['apply_requested'] ?? false)
+                    ? $this->mysqlReplicationApplyProcess()->getCommandLine()
+                    : null,
+            ])),
             default => $this->buildProcess($run, $plannedMetadata)->getCommandLine(),
         };
     }
@@ -710,6 +720,12 @@ final class MysqlDriver implements BackupDriver
                     'database' => $this->databaseName(),
                     'restore_mode' => 'pitr',
                     'binlog_files' => $this->pitrBinlogFiles(),
+                ],
+            ],
+            'replication_sync' => [
+                'metadata' => [
+                    'driver' => 'mysql',
+                    'replication' => $this->replicationPlan($run),
                 ],
             ],
             'backup_drill' => [
@@ -801,7 +817,325 @@ final class MysqlDriver implements BackupDriver
             ];
         }
 
+        if ($run->operation === 'replication_sync') {
+            $completed['metadata'] = [
+                ...$completed['metadata'],
+                'replicated_via' => 'mysqldump+mysql',
+            ];
+        }
+
         return $completed;
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return array{output:string,exit_code:int,metadata:array<string,mixed>}
+     */
+    private function executeReplicationSync(CommandRun $run, array $plannedMetadata): array
+    {
+        $replication = is_array($plannedMetadata['metadata']['replication'] ?? null) ? $plannedMetadata['metadata']['replication'] : [];
+        $artifactPath = (string) ($replication['artifact_path'] ?? '');
+
+        if ($artifactPath === '') {
+            throw new ConfigurationException('mysql replication requires a writable staging artifact path.');
+        }
+
+        $dryRun = $this->executeSingleProcess($this->mysqlReplicationDryRunProcess($run, $plannedMetadata));
+
+        if ($dryRun['exit_code'] !== 0) {
+            $analysis = $this->failureAnalysis(
+                stage: 'dry_run_export',
+                failureOutput: $dryRun['output'],
+                context: [
+                    'engine' => $replication['engine'] ?? null,
+                    'source' => (is_array($replication['source'] ?? null) ? ($replication['source']['redacted'] ?? null) : null),
+                    'destination' => (is_array($replication['destination'] ?? null) ? ($replication['destination']['redacted'] ?? null) : null),
+                ],
+            );
+
+            return [
+                'output' => "[replication_sync:dry_run]\n".$dryRun['output'].$this->renderDebugSuggestions($analysis),
+                'exit_code' => $dryRun['exit_code'],
+                'metadata' => [
+                    ...$dryRun['metadata'],
+                    'replication' => [
+                        ...$replication,
+                        'result' => 'failed',
+                        'failure_analysis' => $analysis,
+                        'failure_context' => [
+                            'stage' => 'dry_run_export',
+                            'reason' => 'mysql dry-run export command failed.',
+                            'suggestions' => $this->legacySuggestions($analysis),
+                        ],
+                    ],
+                ],
+            ];
+        }
+
+        $sourceSnapshot = $this->replicationArtifactSnapshot($artifactPath);
+        $applyRequested = (bool) ($replication['apply_requested'] ?? false);
+        $dryRunRequested = (bool) ($replication['dry_run_requested'] ?? true);
+        $overwriteAllowed = (bool) ($replication['overwrite_destination'] ?? false) || (bool) ($replication['force_requested'] ?? false);
+
+        if (! $applyRequested || $dryRunRequested) {
+            @unlink($artifactPath);
+
+            return [
+                'output' => "[replication_sync:dry_run]\n".$dryRun['output'],
+                'exit_code' => 0,
+                'metadata' => [
+                    ...$dryRun['metadata'],
+                    'replication' => [
+                        ...$replication,
+                        'result' => 'dry_run_only',
+                        'sanity' => [
+                            'source_snapshot' => $sourceSnapshot,
+                            'method' => 'artifact_hash',
+                            'destination_check' => 'skipped',
+                            'fallback_reason' => 'apply_not_requested_or_dry_run_enforced',
+                        ],
+                    ],
+                ],
+            ];
+        }
+
+        if (! $overwriteAllowed) {
+            @unlink($artifactPath);
+            $analysis = $this->failureAnalysis(
+                stage: 'apply_gate',
+                failureOutput: 'Destination overwrite denied by policy.',
+                context: [
+                    'engine' => $replication['engine'] ?? null,
+                    'source' => (is_array($replication['source'] ?? null) ? ($replication['source']['redacted'] ?? null) : null),
+                    'destination' => (is_array($replication['destination'] ?? null) ? ($replication['destination']['redacted'] ?? null) : null),
+                    'overwrite_destination' => (bool) ($replication['overwrite_destination'] ?? false),
+                    'force_requested' => (bool) ($replication['force_requested'] ?? false),
+                ],
+            );
+
+            return [
+                'output' => "[replication_sync:dry_run]\n".$dryRun['output']
+                    ."\n[replication_sync:apply_gate]\nDestination overwrite denied by policy."
+                    .$this->renderDebugSuggestions($analysis),
+                'exit_code' => 2,
+                'metadata' => [
+                    ...$dryRun['metadata'],
+                    'replication' => [
+                        ...$replication,
+                        'result' => 'failed',
+                        'failure_analysis' => $analysis,
+                        'failure_context' => [
+                            'stage' => 'apply_gate',
+                            'reason' => 'Destination overwrite is blocked by default.',
+                            'suggestions' => $this->legacySuggestions($analysis),
+                        ],
+                    ],
+                ],
+            ];
+        }
+
+        $contents = @file_get_contents($artifactPath);
+
+        if (! is_string($contents)) {
+            throw new ConfigurationException(sprintf('Unable to read mysql replication staging artifact [%s].', $artifactPath));
+        }
+
+        $apply = $this->executeSingleProcess($this->mysqlReplicationApplyProcess(), $contents);
+        @unlink($artifactPath);
+
+        $sanity = [
+            'source_snapshot' => $sourceSnapshot,
+            'method' => 'artifact_hash',
+            'destination_check' => $apply['exit_code'] === 0 ? 'apply_exit_code_zero' : 'apply_failed',
+            'fallback_reason' => 'live_destination_checksum_not_available_in_v1',
+        ];
+
+        if ($apply['exit_code'] !== 0) {
+            $analysis = $this->failureAnalysis(
+                stage: 'apply_import',
+                failureOutput: $apply['output'],
+                context: [
+                    'engine' => $replication['engine'] ?? null,
+                    'source' => (is_array($replication['source'] ?? null) ? ($replication['source']['redacted'] ?? null) : null),
+                    'destination' => (is_array($replication['destination'] ?? null) ? ($replication['destination']['redacted'] ?? null) : null),
+                    'sanity_method' => $sanity['method'],
+                ],
+            );
+
+            return [
+                'output' => "[replication_sync:dry_run]\n".$dryRun['output']
+                    ."\n[replication_sync:apply]\n".$apply['output']
+                    .$this->renderDebugSuggestions($analysis),
+                'exit_code' => $apply['exit_code'],
+                'metadata' => [
+                    ...$dryRun['metadata'],
+                    ...$apply['metadata'],
+                    'replication' => [
+                        ...$replication,
+                        'result' => 'failed',
+                        'sanity' => $sanity,
+                        'failure_analysis' => $analysis,
+                        'failure_context' => [
+                            'stage' => 'apply_import',
+                            'reason' => 'mysql apply phase failed while importing staged artifact.',
+                            'suggestions' => $this->legacySuggestions($analysis),
+                        ],
+                    ],
+                ],
+            ];
+        }
+
+        return [
+            'output' => "[replication_sync:dry_run]\n".$dryRun['output']
+                ."\n[replication_sync:apply]\n".$apply['output'],
+            'exit_code' => 0,
+            'metadata' => [
+                ...$dryRun['metadata'],
+                ...$apply['metadata'],
+                'replication' => [
+                    ...$replication,
+                    'result' => 'applied',
+                    'sanity' => $sanity,
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     */
+    private function mysqlReplicationDryRunProcess(CommandRun $run, array $plannedMetadata): Process
+    {
+        $replication = is_array($plannedMetadata['metadata']['replication'] ?? null) ? $plannedMetadata['metadata']['replication'] : [];
+        $artifactPath = (string) ($replication['artifact_path'] ?? '');
+
+        if ($artifactPath === '') {
+            throw new ConfigurationException('mysql replication requires an artifact path for dry-run export.');
+        }
+
+        $command = [
+            $this->mysqldumpBinary(),
+            '--databases',
+            $this->databaseName(),
+            '--result-file='.$artifactPath,
+        ];
+
+        if ((bool) config('checkpoint.drivers.mysql.single_transaction', true)) {
+            $command[] = '--single-transaction';
+        }
+
+        if ((bool) config('checkpoint.drivers.mysql.quick', true)) {
+            $command[] = '--quick';
+        }
+
+        if ((bool) config('checkpoint.drivers.mysql.skip_lock_tables', true)) {
+            $command[] = '--skip-lock-tables';
+        }
+
+        return new Process(
+            [...$command, ...$this->extraArgs('backup')],
+            timeout: $this->commandTimeout(),
+        );
+    }
+
+    private function mysqlReplicationApplyProcess(): Process
+    {
+        return new Process(
+            [
+                $this->mysqlBinary(),
+                '--database='.$this->databaseName(),
+                ...$this->extraArgs('restore'),
+            ],
+            timeout: $this->commandTimeout(),
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function replicationPlan(CommandRun $run): array
+    {
+        $payload = $this->replicationPayload($run);
+        $metadata = is_array($run->metadata) ? $run->metadata : [];
+        $replicationMetadata = is_array($metadata['replication'] ?? null) ? $metadata['replication'] : [];
+        $engine = strtolower(trim((string) ($replicationMetadata['engine'] ?? '')));
+
+        if ($engine === '') {
+            throw new ConfigurationException('replication_sync requires replication.engine metadata.');
+        }
+
+        if ($engine !== 'mysql') {
+            throw new ConfigurationException(sprintf(
+                'Unsupported replication engine [%s] for mysql driver. mysql driver supports mysql -> mysql only.',
+                $engine,
+            ));
+        }
+
+        return [
+            'engine' => 'mysql',
+            'source' => is_array($replicationMetadata['source'] ?? null) ? $replicationMetadata['source'] : null,
+            'destination' => is_array($replicationMetadata['destination'] ?? null) ? $replicationMetadata['destination'] : null,
+            'dry_run_requested' => (bool) ($payload['dry_run'] ?? true),
+            'apply_requested' => (bool) ($payload['apply'] ?? false),
+            'force_requested' => (bool) ($payload['force'] ?? false),
+            'overwrite_destination' => (bool) ($payload['overwrite_destination'] ?? false),
+            'artifact_path' => $this->replicationArtifactPath($run),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function replicationPayload(CommandRun $run): array
+    {
+        $argument = trim((string) ($run->argument_text ?? ''));
+
+        if ($argument === '') {
+            throw new ConfigurationException('replication_sync requires a JSON payload argument.');
+        }
+
+        try {
+            $payload = json_decode($argument, true, flags: JSON_THROW_ON_ERROR);
+        } catch (\JsonException $exception) {
+            throw new ConfigurationException('replication_sync argument must be valid JSON.', previous: $exception);
+        }
+
+        if (! is_array($payload)) {
+            throw new ConfigurationException('replication_sync argument payload must decode to an object.');
+        }
+
+        return $payload;
+    }
+
+    private function replicationArtifactPath(CommandRun $run): string
+    {
+        return sprintf(
+            '%s/%s-%d.sql',
+            $this->tempDir(),
+            'checkpoint-mysql-replication',
+            (int) $run->getKey(),
+        );
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function replicationArtifactSnapshot(string $path): ?array
+    {
+        if (! is_file($path)) {
+            return null;
+        }
+
+        $size = filesize($path);
+        $contents = @file_get_contents($path);
+
+        return [
+            'path' => $path,
+            'size' => $size === false ? null : (int) $size,
+            'sha1' => @sha1_file($path) ?: null,
+            'line_count' => is_string($contents) ? substr_count($contents, "\n") + 1 : null,
+            'statement_count' => is_string($contents) ? substr_count(strtoupper($contents), ';') : null,
+        ];
     }
 
     /**
@@ -1000,7 +1334,7 @@ final class MysqlDriver implements BackupDriver
 
     private function restoreDecisionEventCount(CommandRun $run): ?int
     {
-        if (! in_array($run->operation, ['logical_restore_latest', 'logical_restore_file', 'pitr_restore', 'pgbackrest_restore'], true)) {
+        if (! in_array($run->operation, ['logical_restore_latest', 'logical_restore_file', 'pitr_restore', 'pgbackrest_restore', 'replication_sync'], true)) {
             return null;
         }
 
@@ -1011,6 +1345,87 @@ final class MysqlDriver implements BackupDriver
         return RestoreDecisionEvent::query()
             ->where('command_run_id', (int) $run->getKey())
             ->count();
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return array<string, mixed>
+     */
+    private function redactedReplicationMetadata(array $plannedMetadata): array
+    {
+        if (! is_array($plannedMetadata['metadata']['replication'] ?? null)) {
+            return $plannedMetadata;
+        }
+
+        $replication = $plannedMetadata['metadata']['replication'];
+
+        foreach (['source', 'destination'] as $role) {
+            if (is_array($replication[$role] ?? null) && is_string($replication[$role]['redacted'] ?? null)) {
+                $replication[$role]['redacted'] = $this->redactCommandLine($replication[$role]['redacted']);
+            }
+        }
+
+        $plannedMetadata['metadata']['replication'] = $replication;
+
+        return $plannedMetadata;
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     * @return array{
+     *     category:string,
+     *     signature:string,
+     *     immediate_fix:string,
+     *     deeper_diagnostics:list<string>,
+     *     diagnostics:array<string, mixed>
+     * }
+     */
+    private function failureAnalysis(string $stage, string $failureOutput, array $context = []): array
+    {
+        return $this->suggestionMapper()->map($stage, $failureOutput, $context);
+    }
+
+    /**
+     * @param  array{
+     *     immediate_fix:string,
+     *     deeper_diagnostics:list<string>
+     * } $analysis
+     * @return list<string>
+     */
+    private function legacySuggestions(array $analysis): array
+    {
+        return [
+            $analysis['immediate_fix'],
+            ...$analysis['deeper_diagnostics'],
+        ];
+    }
+
+    /**
+     * @param  array{
+     *     category:string,
+     *     immediate_fix:string,
+     *     deeper_diagnostics:list<string>
+     * } $analysis
+     */
+    private function renderDebugSuggestions(array $analysis): string
+    {
+        $lines = [
+            '',
+            '[replication_sync:debug]',
+            sprintf('category: %s', $analysis['category']),
+            sprintf('immediate_fix: %s', $analysis['immediate_fix']),
+        ];
+
+        foreach ($analysis['deeper_diagnostics'] as $index => $step) {
+            $lines[] = sprintf('diagnostic_%d: %s', $index + 1, $step);
+        }
+
+        return "\n".implode("\n", $lines);
+    }
+
+    private function suggestionMapper(): ReplicationFailureSuggestionMapper
+    {
+        return resolve(ReplicationFailureSuggestionMapper::class);
     }
 
 }

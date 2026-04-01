@@ -9,6 +9,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Services\ReplicationFailureSuggestionMapper;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
@@ -434,6 +435,158 @@ it('rejects unsupported pg_dump operations', function (): void {
 
     expect(fn (): Process => buildPgDumpProcess(new PgDumpDriver, $run))
         ->toThrow(ConfigurationException::class, 'Unsupported pg_dump operation [pgbackrest_info].');
+});
+
+it('plans replication_sync metadata with explicit default safety gates', function (): void {
+    $run = CommandRun::factory()->make([
+        'id' => 7001,
+        'operation' => 'replication_sync',
+        'argument_text' => '{"source":"profile:pg-source","destination":"pgsql://[REDACTED]","dry_run":true}',
+        'metadata' => [
+            'replication' => [
+                'engine' => 'pgsql',
+                'source' => ['kind' => 'config_profile', 'identifier' => 'pg-source', 'redacted' => 'profile:pg-source'],
+                'destination' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'pgsql://replicator:secret@db.internal'],
+                'queue_only' => true,
+                'dry_run_requested' => true,
+            ],
+        ],
+    ]);
+
+    $metadata = plannedPgDumpMetadata(new PgDumpDriver, $run);
+
+    expect($metadata['metadata']['replication']['engine'] ?? null)->toBe('pgsql')
+        ->and($metadata['metadata']['replication']['dry_run_requested'] ?? null)->toBeTrue()
+        ->and($metadata['metadata']['replication']['apply_requested'] ?? null)->toBeFalse()
+        ->and($metadata['metadata']['replication']['force_requested'] ?? null)->toBeFalse()
+        ->and($metadata['metadata']['replication']['overwrite_destination'] ?? null)->toBeFalse()
+        ->and((string) ($metadata['metadata']['replication']['artifact_path'] ?? ''))->toContain('checkpoint-replication-7001.dump');
+});
+
+it('rejects replication_sync on pg_dump driver when replication engine is not pgsql', function (): void {
+    $run = CommandRun::factory()->make([
+        'operation' => 'replication_sync',
+        'argument_text' => '{"source":"mysql://[REDACTED]","destination":"mysql://[REDACTED]","dry_run":true}',
+        'metadata' => [
+            'replication' => [
+                'engine' => 'mysql',
+                'source' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'mysql://[REDACTED]'],
+                'destination' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'mysql://[REDACTED]'],
+                'queue_only' => true,
+                'dry_run_requested' => true,
+            ],
+        ],
+    ]);
+
+    expect(fn (): array => plannedPgDumpMetadata(new PgDumpDriver, $run))
+        ->toThrow(ConfigurationException::class, 'Unsupported replication engine [mysql] for pg_dump driver. pg_dump driver supports pgsql -> pgsql only.');
+});
+
+it('runs replication_sync as dry-run-only by default and records conservative sanity metadata', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgdump-repl-dry-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary pgdump replication path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    config()->set('checkpoint.drivers.pgdump.dump_binary', fakePgDumpScript(<<<'SH'
+#!/bin/sh
+for arg in "$@"; do
+  case "$arg" in
+    --file=*)
+      target="${arg#--file=}"
+      printf 'replication export payload' > "$target"
+      ;;
+  esac
+done
+printf 'dry-run export ok'
+SH));
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'replication_sync',
+        'argument_text' => '{"source":"profile:pg-source","destination":"pgsql://[REDACTED]","dry_run":true,"apply":false}',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'metadata' => [
+            'replication' => [
+                'engine' => 'pgsql',
+                'source' => ['kind' => 'config_profile', 'identifier' => 'pg-source', 'redacted' => 'profile:pg-source'],
+                'destination' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'pgsql://replicator:secret@db.internal'],
+                'queue_only' => true,
+                'dry_run_requested' => true,
+            ],
+        ],
+    ]);
+
+    (new PgDumpDriver)->execute($run);
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+        ->and($run->command_output)->toContain('[replication_sync:dry_run]')
+        ->and($run->metadata['replication']['result'] ?? null)->toBe('dry_run_only')
+        ->and($run->metadata['replication']['sanity']['method'] ?? null)->toBe('artifact_hash')
+        ->and($run->metadata['replication']['sanity']['fallback_reason'] ?? null)->toBe('apply_not_requested_or_dry_run_enforced')
+        ->and($run->metadata['replication']['destination']['redacted'] ?? null)->not->toContain('secret');
+});
+
+it('adds structured failure analysis and debug suggestions for pg replication dry-run failures', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgdump-repl-fail-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary pgdump replication path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    config()->set('checkpoint.drivers.pgdump.dump_binary', fakePgDumpScript(<<<'SH'
+#!/bin/sh
+echo 'could not translate host name "db.invalid" to address: Name or service not known'
+exit 1
+SH
+    ));
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'replication_sync',
+        'argument_text' => '{"source":"profile:pg-source","destination":"pgsql://[REDACTED]","dry_run":true,"apply":false}',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'metadata' => [
+            'replication' => [
+                'engine' => 'pgsql',
+                'source' => ['kind' => 'config_profile', 'identifier' => 'pg-source', 'redacted' => 'profile:pg-source'],
+                'destination' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'pgsql://replicator:secret@db.internal'],
+                'queue_only' => true,
+                'dry_run_requested' => true,
+            ],
+        ],
+    ]);
+
+    (new PgDumpDriver)->execute($run);
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Failed)
+        ->and($run->command_output)->toContain('[replication_sync:debug]')
+        ->and($run->command_output)->toContain('category: dns_network_connection_refused')
+        ->and($run->command_output)->not->toContain('secret')
+        ->and($run->metadata['replication']['failure_analysis']['category'] ?? null)->toBe('dns_network_connection_refused')
+        ->and($run->metadata['replication']['failure_context']['suggestions'][0] ?? null)->toBe($run->metadata['replication']['failure_analysis']['immediate_fix'] ?? null);
+});
+
+it('maps invalid dsn parse signatures in replication failure analysis', function (): void {
+    $analysis = app(ReplicationFailureSuggestionMapper::class)->map(
+        'dry_run_export',
+        'invalid DSN: failed to parse endpoint URL',
+        ['source' => 'pgsql://user:secret@db.internal/source'],
+    );
+
+    expect($analysis['category'])->toBe('invalid_url_dsn_parse')
+        ->and($analysis['diagnostics']['source'] ?? null)->toBe('pgsql://[REDACTED]@db.internal');
 });
 
 it('records metadata for successful logical exports', function (): void {
