@@ -122,7 +122,50 @@ it('requests json output for pgbackrest info operations', function (): void {
 
     expect($process->getCommandLine())
         ->toContain('info')
-        ->and($process->getCommandLine())->toContain('--output=json');
+        ->and($process->getCommandLine())->toContain('--output=json')
+        ->and($process->getCommandLine())->not->toContain('--process-max=')
+        ->and($process->getCommandLine())->not->toContain('--resume')
+        ->and($process->getCommandLine())->not->toContain('--start-fast');
+});
+
+it('does not append storage tls flags for posix pgbackrest repositories', function (): void {
+    config()->set('checkpoint.drivers.pgbackrest.binary', 'pgbackrest');
+    config()->set('checkpoint.drivers.pgbackrest.repo', 1);
+    config()->set('checkpoint.drivers.pgbackrest.repositories', [
+        1 => [
+            'type' => 'posix',
+            'path' => '/var/lib/pgbackrest/repo1',
+            's3' => [
+                'bucket' => null,
+                'endpoint' => null,
+                'region' => null,
+                'key' => null,
+                'secret' => null,
+                'uri_style' => 'host',
+            ],
+            'tls' => [
+                'verify' => false,
+                'ca_file' => '/etc/ssl/should-not-be-used.pem',
+            ],
+            'encryption' => [
+                'enabled' => false,
+                'cipher_type' => 'aes-256-cbc',
+                'passphrase' => null,
+            ],
+        ],
+    ]);
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'pgbackrest_info',
+    ]);
+
+    $process = buildPgBackRestProcess(new PgBackRestDriver, $run);
+
+    expect($process->getCommandLine())
+        ->toContain('--repo1-type=posix')
+        ->and($process->getCommandLine())->toContain('--repo1-path=/var/lib/pgbackrest/repo1')
+        ->and($process->getCommandLine())->not->toContain('storage-verify-tls')
+        ->and($process->getCommandLine())->not->toContain('storage-ca-file');
 });
 
 it('adds restore options from structured config and the optional backup set argument', function (): void {
@@ -230,6 +273,26 @@ it('keeps resume and start-fast enabled for pgbackrest backup retries', function
         ->and($process->getCommandLine())->toContain('--type=diff')
         ->and($process->getCommandLine())->toContain('--resume')
         ->and($process->getCommandLine())->toContain('--start-fast');
+});
+
+it('does not append backup-only options to pgbackrest check operations', function (): void {
+    config()->set('checkpoint.drivers.pgbackrest.binary', 'pgbackrest');
+    config()->set('checkpoint.drivers.pgbackrest.process_max', 4);
+    config()->set('checkpoint.drivers.pgbackrest.resume', true);
+    config()->set('checkpoint.drivers.pgbackrest.start_fast', true);
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'pgbackrest_check',
+    ]);
+
+    $process = buildPgBackRestProcess(new PgBackRestDriver, $run);
+
+    expect($process->getCommandLine())
+        ->toContain('check')
+        ->and($process->getCommandLine())->not->toContain('--repo=')
+        ->and($process->getCommandLine())->not->toContain('--process-max=')
+        ->and($process->getCommandLine())->not->toContain('--resume')
+        ->and($process->getCommandLine())->not->toContain('--start-fast');
 });
 
 it('rejects an empty pgbackrest binary configuration', function (): void {

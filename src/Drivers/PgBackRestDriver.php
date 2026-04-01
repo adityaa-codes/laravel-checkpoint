@@ -219,15 +219,15 @@ final class PgBackRestDriver implements BackupDriver
             $options[] = '--stanza='.$stanza;
         }
 
-        if (is_int($repo) || (is_string($repo) && $repo !== '')) {
+        if ((is_int($repo) || (is_string($repo) && $repo !== '')) && $operation !== 'pgbackrest_check') {
             $options[] = '--repo='.$repo;
         }
 
-        if ($processMax > 0) {
+        if ($processMax > 0 && ! in_array($operation, ['pgbackrest_info', 'pgbackrest_check'], true)) {
             $options[] = '--process-max='.$processMax;
         }
 
-        if ($operation !== 'pgbackrest_restore') {
+        if (in_array($operation, ['pgbackrest_backup_full', 'pgbackrest_backup_diff', 'pgbackrest_backup_incr'], true)) {
             if ((bool) config('checkpoint.drivers.pgbackrest.resume', true)) {
                 $options[] = '--resume';
             }
@@ -272,11 +272,13 @@ final class PgBackRestDriver implements BackupDriver
             $options[] = sprintf('--repo%d-s3-uri-style=%s', $repoId, (string) ($s3['uri_style'] ?? 'host'));
         }
 
-        $tls = is_array($repository['tls'] ?? null) ? $repository['tls'] : [];
-        $options[] = sprintf('--repo%d-storage-verify-tls=%s', $repoId, ($tls['verify'] ?? true) ? 'y' : 'n');
+        if ($repository['type'] === 's3') {
+            $tls = is_array($repository['tls'] ?? null) ? $repository['tls'] : [];
+            $options[] = sprintf('--repo%d-storage-verify-tls=%s', $repoId, ($tls['verify'] ?? true) ? 'y' : 'n');
 
-        if (is_string($tls['ca_file'] ?? null) && trim((string) $tls['ca_file']) !== '') {
-            $options[] = sprintf('--repo%d-storage-ca-file=%s', $repoId, (string) $tls['ca_file']);
+            if (is_string($tls['ca_file'] ?? null) && trim((string) $tls['ca_file']) !== '') {
+                $options[] = sprintf('--repo%d-storage-ca-file=%s', $repoId, (string) $tls['ca_file']);
+            }
         }
 
         $encryption = is_array($repository['encryption'] ?? null) ? $repository['encryption'] : [];

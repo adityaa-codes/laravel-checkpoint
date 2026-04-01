@@ -252,6 +252,29 @@ it('captures pitr baseline and binlog chain metadata during planning', function 
         ]);
 });
 
+it('does not persist mysql pitr baseline artifacts into non-existent command run columns', function (): void {
+    $driver = new MysqlDriver;
+    $method = new ReflectionMethod($driver, 'persistedPlannedMetadata');
+
+    $persisted = $method->invoke($driver, [
+        'restore_target' => '2026-03-24 11:00:00',
+        'restore_target_snapshot' => ['path' => '/tmp/snapshot.sql'],
+        'pitr_base_target' => '/tmp/mysql-baseline.sql',
+        'metadata' => [
+            'driver' => 'mysql',
+        ],
+    ]);
+
+    expect($persisted)->toMatchArray([
+        'restore_target' => '2026-03-24 11:00:00',
+        'metadata' => [
+            'driver' => 'mysql',
+        ],
+    ])
+        ->and($persisted)->not->toHaveKey('restore_target_snapshot')
+        ->and($persisted)->not->toHaveKey('pitr_base_target');
+});
+
 it('redacts mysql command lines before persisting and logging them', function (): void {
     $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-redact-');
 

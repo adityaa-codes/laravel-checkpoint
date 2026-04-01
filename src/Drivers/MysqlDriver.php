@@ -748,6 +748,7 @@ final class MysqlDriver implements BackupDriver
     private function persistedPlannedMetadata(array $plannedMetadata): array
     {
         unset($plannedMetadata['restore_target_snapshot']);
+        unset($plannedMetadata['pitr_base_target']);
 
         return $plannedMetadata;
     }
