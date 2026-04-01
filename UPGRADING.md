@@ -1,5 +1,21 @@
 # Upgrading
 
+## Framework Compatibility
+
+This package supports Laravel `12.x` and `13.x`.
+
+When upgrading consumer applications from Laravel 12 to 13, review both guides and then validate your application-level configuration and listeners:
+
+1. Laravel 12 upgrade guide: https://laravel.com/docs/12.x/upgrade
+2. Laravel 13 upgrade guide: https://laravel.com/docs/13.x/upgrade
+
+Package maintainers and integrators should pay special attention to these Laravel 13 changes:
+
+- CSRF middleware rename (`VerifyCsrfToken` -> `PreventRequestForgery`) when excluding middleware in tests or route groups.
+- Queue event payload/property updates (`JobAttempted::$exception`, `QueueBusy::$connectionName`) for custom listeners.
+- Contract additions for custom implementations (dispatcher / queue / response factory / cache store).
+- Cache hardening defaults (`cache.serializable_classes`) in applications that serialize objects into cache.
+
 ## v1.0.0
 
 `v1.0.0` is the first standalone release of `laravel-checkpoint`.

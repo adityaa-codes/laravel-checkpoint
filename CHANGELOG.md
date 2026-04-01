@@ -2,6 +2,14 @@
 
 All notable changes to `laravel-checkpoint` will be documented in this file.
 
+## Unreleased
+
+### Changed
+
+- Standardized package runtime requirement to PHP `^8.3` to align with Laravel 12 / 13 support expectations.
+- Documented explicit Laravel `12.x` / `13.x` compatibility in README.
+- Expanded upgrade notes with Laravel 12 and 13 guide references and key Laravel 13 integration considerations.
+
 ## v1.0.0 - 2026-03-11
 
 ### Added

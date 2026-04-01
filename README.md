@@ -7,6 +7,11 @@
 
 Core Laravel package for database checkpoint, backup, restore, drill recording, and operational safety workflows.
 
+## Compatibility
+
+- Laravel `12.x` and `13.x`
+- PHP `^8.3`
+
 ## Installation
 
 Install the package:
