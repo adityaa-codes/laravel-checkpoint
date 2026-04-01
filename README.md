@@ -187,6 +187,29 @@ php artisan db-ops:prune
 php artisan db-ops:doctor
 php artisan db-ops:doctor --format=json
 php artisan db-ops:report --limit=10
+php artisan db-ops:replicate profile:pg-source profile:pg-destination
+php artisan db-ops:replicate --source=pgsql://user:pass@source.internal/app --destination=pgsql://user:pass@dest.internal/app
+php artisan db-ops:replicate --source=profile:pg-source --destination=profile:pg-destination --apply --force-overwrite --critical-table=users --critical-table=orders
+```
+
+### Replication Safety Queue Flow
+
+`db-ops:replicate` queues `replication_sync` with dry-run defaults.
+
+- input endpoints support `profile:<id>`, DSN (`<engine>://...`), or key/value pairs
+- dry-run is default; pass `--apply` only after dry-run validation
+- `--force-overwrite` is intended for controlled apply workflows
+- `--critical-table=*` can be repeated to enforce table-level overwrite guardrails
+- when `--critical-table` is omitted, fallback comes from `checkpoint.replication.critical_tables` / `DB_OPS_REPLICATION_CRITICAL_TABLES`
+
+Replication policy controls:
+
+```env
+DB_OPS_REPLICATION_REQUIRE_CONFIRMATION_TOKEN=true
+DB_OPS_REPLICATION_BLOCK_IN_CI=true
+DB_OPS_REPLICATION_REQUIRE_DRY_RUN_BEFORE_APPLY=true
+DB_OPS_REPLICATION_ALLOWLISTED_DESTINATIONS=staging-replica
+DB_OPS_REPLICATION_CRITICAL_TABLES=users,orders
 ```
 
 ## Driver Customization

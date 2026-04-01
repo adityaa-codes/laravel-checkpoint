@@ -4,6 +4,16 @@
 
 This package supports Laravel `12.x` and `13.x`.
 
+## Unreleased
+
+Replication workflows now have a dedicated queue entrypoint: `db-ops:replicate`.
+When adopting this flow:
+
+1. configure replication policy env vars in each environment (`DB_OPS_REPLICATION_REQUIRE_CONFIRMATION_TOKEN`, `DB_OPS_REPLICATION_BLOCK_IN_CI`, `DB_OPS_REPLICATION_REQUIRE_DRY_RUN_BEFORE_APPLY`)
+2. define allowed destination identifiers via `DB_OPS_REPLICATION_ALLOWLISTED_DESTINATIONS`
+3. set default critical-table guardrails with `DB_OPS_REPLICATION_CRITICAL_TABLES`
+4. verify operator runbooks use dry-run first, then `--apply`/`--force-overwrite` only through approved change windows
+
 When upgrading consumer applications from Laravel 12 to 13, review both guides and then validate your application-level configuration and listeners:
 
 1. Laravel 12 upgrade guide: https://laravel.com/docs/12.x/upgrade
