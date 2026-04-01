@@ -4,15 +4,16 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Tests;
 
+use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpointServiceProvider;
 use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Orchestra\Testbench\TestCase as Orchestra;
 
@@ -79,6 +80,20 @@ class TestCase extends Orchestra
                 'allow_in_ci' => true,
                 'ci' => false,
                 'require_verified_backup' => false,
+            ],
+            'replication' => [
+                'require_confirmation_token' => true,
+                'block_in_ci' => true,
+                'require_dry_run_before_apply' => true,
+                'allowlisted_destinations' => ['staging-replica'],
+                'profiles' => [
+                    'pg-source' => [
+                        'engine' => 'pgsql',
+                    ],
+                    'pg-destination' => [
+                        'engine' => 'pgsql',
+                    ],
+                ],
             ],
             'observability' => [
                 'max_last_known_good_age_hours' => 24,
@@ -285,7 +300,7 @@ class TestCase extends Orchestra
 
     private function hasIndex(string $table, string $indexName): bool
     {
-        $connection = \Illuminate\Support\Facades\DB::connection();
+        $connection = DB::connection();
         $driver = $connection->getDriverName();
 
         return match ($driver) {

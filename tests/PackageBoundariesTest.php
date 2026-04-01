@@ -37,6 +37,9 @@ use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
+use AdityaaCodes\LaravelCheckpoint\Services\ReplicationEndpointInputParser;
+use AdityaaCodes\LaravelCheckpoint\Services\ReplicationRequestFactory;
+use AdityaaCodes\LaravelCheckpoint\Services\ReplicationSecretRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
 
@@ -65,6 +68,9 @@ it('keeps package internals final by default with explicit seams', function (): 
         CommandRunCatalog::class,
         ConfigValidator::class,
         RestoreSafetyGuard::class,
+        ReplicationRequestFactory::class,
+        ReplicationEndpointInputParser::class,
+        ReplicationSecretRedactor::class,
     ];
 
     foreach ($finalClasses as $class) {

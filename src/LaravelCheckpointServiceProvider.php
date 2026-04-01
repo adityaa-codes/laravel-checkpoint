@@ -15,11 +15,13 @@ use AdityaaCodes\LaravelCheckpoint\Console\RecoverOrphansCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ReportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\StatusCommand;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
+use AdityaaCodes\LaravelCheckpoint\Contracts\ReplicationEndpointParser;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
+use AdityaaCodes\LaravelCheckpoint\Services\ReplicationEndpointInputParser;
 use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Gate;
@@ -40,6 +42,11 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
 
             return $app->make((string) $class);
         });
+
+        $this->app->bind(
+            ReplicationEndpointParser::class,
+            ReplicationEndpointInputParser::class,
+        );
     }
 
     public function configurePackage(Package $package): void

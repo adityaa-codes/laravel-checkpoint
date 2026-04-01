@@ -101,6 +101,22 @@ it('rejects custom operations with invalid safety flags', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.custom_operations.audit_snapshot.destructive must be a boolean.');
 });
 
+it('rejects invalid replication configuration structure', function (): void {
+    config()->set('checkpoint.replication', 'invalid');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.replication must be an array.');
+});
+
+it('rejects replication profile engines outside pgsql or mysql', function (): void {
+    config()->set('checkpoint.replication.profiles.invalid', [
+        'engine' => 'sqlserver',
+    ]);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.replication.profiles.invalid.engine must be pgsql or mysql.');
+});
+
 it('rejects an empty pgbackrest stanza', function (): void {
     config()->set('checkpoint.drivers.pgbackrest.stanza', '');
 

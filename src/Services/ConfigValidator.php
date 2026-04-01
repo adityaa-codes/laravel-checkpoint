@@ -28,6 +28,7 @@ final readonly class ConfigValidator
         $this->validateObservabilitySettings();
         $this->validateReportingSettings();
         $this->validateOutputSettings();
+        $this->validateReplicationSettings();
         $this->validateCustomOperations();
         $this->validateLogChannel();
         $this->validateUserModel();
@@ -799,6 +800,61 @@ final readonly class ConfigValidator
                 if (! is_bool($operation[$flag] ?? null)) {
                     throw new ConfigurationException(sprintf('%s.%s must be a boolean.', $prefix, $flag));
                 }
+            }
+        }
+    }
+
+    private function validateReplicationSettings(): void
+    {
+        $config = $this->config->get('checkpoint.replication', []);
+
+        if (! is_array($config)) {
+            throw new ConfigurationException('checkpoint.replication must be an array.');
+        }
+
+        foreach ([
+            'require_confirmation_token',
+            'block_in_ci',
+            'require_dry_run_before_apply',
+        ] as $flag) {
+            if (! is_bool($config[$flag] ?? null)) {
+                throw new ConfigurationException(sprintf('checkpoint.replication.%s must be a boolean.', $flag));
+            }
+        }
+
+        $allowlistedDestinations = $config['allowlisted_destinations'] ?? [];
+
+        if (! is_array($allowlistedDestinations)) {
+            throw new ConfigurationException('checkpoint.replication.allowlisted_destinations must be an array.');
+        }
+
+        foreach ($allowlistedDestinations as $destination) {
+            if (! is_string($destination) || trim($destination) === '') {
+                throw new ConfigurationException('checkpoint.replication.allowlisted_destinations must contain non-empty strings.');
+            }
+        }
+
+        $profiles = $config['profiles'] ?? [];
+
+        if (! is_array($profiles)) {
+            throw new ConfigurationException('checkpoint.replication.profiles must be an array.');
+        }
+
+        foreach ($profiles as $name => $profile) {
+            $prefix = sprintf('checkpoint.replication.profiles.%s', (string) $name);
+
+            if (! is_string($name) || trim($name) === '') {
+                throw new ConfigurationException('checkpoint.replication.profiles keys must be non-empty strings.');
+            }
+
+            if (! is_array($profile)) {
+                throw new ConfigurationException(sprintf('%s must be an array.', $prefix));
+            }
+
+            $engine = $profile['engine'] ?? null;
+
+            if (! is_string($engine) || ! in_array(strtolower(trim($engine)), ['pgsql', 'mysql'], true)) {
+                throw new ConfigurationException(sprintf('%s.engine must be pgsql or mysql.', $prefix));
             }
         }
     }

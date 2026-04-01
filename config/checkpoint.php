@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
+use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
 use Illuminate\Foundation\Auth\User;
 
 /** @phpstan-ignore-next-line */
@@ -49,6 +49,17 @@ return [
         'allow_in_ci' => (bool) $env('DB_OPS_RESTORE_ALLOW_IN_CI', false),
         'ci' => (bool) $env('CI', false),
         'require_verified_backup' => (bool) $env('DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP', $nonLocalPosture),
+    ],
+
+    'replication' => [
+        'require_confirmation_token' => (bool) $env('DB_OPS_REPLICATION_REQUIRE_CONFIRMATION_TOKEN', true),
+        'block_in_ci' => (bool) $env('DB_OPS_REPLICATION_BLOCK_IN_CI', true),
+        'require_dry_run_before_apply' => (bool) $env('DB_OPS_REPLICATION_REQUIRE_DRY_RUN_BEFORE_APPLY', true),
+        'allowlisted_destinations' => array_values(array_filter(array_map(
+            static fn (string $value): string => trim($value),
+            explode(',', (string) $env('DB_OPS_REPLICATION_ALLOWLISTED_DESTINATIONS', '')),
+        ), static fn (string $value): bool => $value !== '')),
+        'profiles' => [],
     ],
 
     'schedule' => [
