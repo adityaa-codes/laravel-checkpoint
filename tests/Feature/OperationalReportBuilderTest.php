@@ -110,6 +110,74 @@ it('builds a combined report payload from a shared snapshot', function (): void 
     Date::setTestNow();
 });
 
+it('includes replication metadata in recent run payloads when available', function (): void {
+    CommandRun::query()->create([
+        'operation' => 'replication_sync',
+        'argument_text' => '{"source":"profile:pg-source","destination":"pgsql://[REDACTED]"}',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'metadata' => [
+            'replication' => [
+                'engine' => 'pgsql',
+                'source' => [
+                    'kind' => 'config_profile',
+                    'identifier' => 'pg-source',
+                    'redacted' => 'profile:pg-source',
+                ],
+                'destination' => [
+                    'kind' => 'dsn',
+                    'identifier' => null,
+                    'redacted' => 'pgsql://[REDACTED]@db.internal',
+                ],
+                'queue_only' => true,
+                'dry_run_requested' => true,
+                'apply_requested' => false,
+                'force_requested' => false,
+                'overwrite_destination' => false,
+                'result' => 'dry_run_only',
+                'sanity' => [
+                    'method' => 'artifact_hash',
+                ],
+                'failure_analysis' => [
+                    'category' => 'dns_network_connection_refused',
+                    'signature' => 'DNS resolution or network connectivity to source/destination failed.',
+                    'immediate_fix' => 'Validate host, port, and network path; then rerun dry-run.',
+                    'deeper_diagnostics' => [
+                        'Check DNS resolution, firewall rules, VPN routes, and security group policies.',
+                    ],
+                    'diagnostics' => [
+                        'stage' => 'dry_run_export',
+                        'excerpt' => 'could not translate host name',
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $runs = app(OperationalReportBuilder::class)->recentRuns(1);
+
+    expect($runs)->toHaveCount(1)
+        ->and($runs[0]['operation'])->toBe('replication_sync')
+        ->and($runs[0])->toHaveKey('replication')
+        ->and($runs[0]['replication'])->toMatchArray([
+            'engine' => 'pgsql',
+            'queue_only' => true,
+            'dry_run_requested' => true,
+            'apply_requested' => false,
+            'force_requested' => false,
+            'overwrite_destination' => false,
+            'result' => 'dry_run_only',
+        ])
+        ->and($runs[0]['replication']['failure_analysis'] ?? null)->toMatchArray([
+            'category' => 'dns_network_connection_refused',
+            'immediate_fix' => 'Validate host, port, and network path; then rerun dry-run.',
+        ])
+        ->and($runs[0]['replication']['destination'])->toMatchArray([
+            'kind' => 'dsn',
+            'redacted' => 'pgsql://[REDACTED]@db.internal',
+        ]);
+});
+
 it('prefers denormalized restore audit fields in restore summaries', function (): void {
     Date::setTestNow('2026-03-11 12:00:00');
 

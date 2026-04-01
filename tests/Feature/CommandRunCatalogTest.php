@@ -15,10 +15,14 @@ it('validates built-in operations and their exclusivity rules', function (): voi
         ->toBe('20260312-010101F')
         ->and($catalog->validate('logical_restore_file', ' nightly.sql '))
         ->toBe('nightly.sql')
+        ->and($catalog->validate('replication_sync', '{"source":"profile:source","destination":"profile:destination","dry_run":true,"apply":false,"force":false,"overwrite_destination":false}'))
+        ->toBe('{"source":"profile:source","destination":"profile:destination","dry_run":true,"apply":false,"force":false,"overwrite_destination":false}')
         ->and($catalog->isDestructive('logical_restore_file'))->toBeTrue()
+        ->and($catalog->isDestructive('replication_sync'))->toBeTrue()
         ->and($catalog->isDestructive('pgbackrest_restore'))->toBeTrue()
         ->and($catalog->isExclusive('pgbackrest_backup_full'))->toBeTrue()
         ->and($catalog->isExclusive('logical_backup'))->toBeTrue()
+        ->and($catalog->isExclusive('replication_sync'))->toBeTrue()
         ->and($catalog->isExclusive('pgbackrest_info'))->toBeFalse();
 });
 
@@ -30,6 +34,12 @@ it('throws for unsupported operations and missing required arguments', function 
 
     expect(fn (): ?string => $catalog->validate('logical_restore_file', null))
         ->toThrow(InvalidArgumentException::class, 'Operation logical_restore_file requires an argument.');
+
+    expect(fn (): ?string => $catalog->validate('replication_sync', 'not-json'))
+        ->toThrow(InvalidArgumentException::class, 'Invalid argument for replication_sync. Expected: json payload with source, destination, optional dry_run/apply/force_overwrite booleans, and optional critical_tables array');
+
+    expect(fn (): ?string => $catalog->validate('replication_sync', '{"source":"profile:source","destination":"profile:destination","overwrite_destination":"yes"}'))
+        ->toThrow(InvalidArgumentException::class, 'Invalid argument for replication_sync. Expected: json payload with source, destination, optional dry_run/apply/force_overwrite booleans, and optional critical_tables array');
 });
 
 it('supports runtime extension with custom validators', function (): void {

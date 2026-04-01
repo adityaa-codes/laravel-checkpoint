@@ -207,6 +207,59 @@ final class CommandRunCatalog
                 'destructive' => false,
                 'exclusive' => false,
             ],
+            'replication_sync' => [
+                'label' => 'messages.operations.replication_sync',
+                'argument_required' => true,
+                'argument_hint' => 'json payload with source, destination, optional dry_run/apply/force_overwrite booleans, and optional critical_tables array',
+                'argument_validator' => static fn (?string $value): bool => self::validReplicationArgument($value),
+                'destructive' => true,
+                'exclusive' => true,
+            ],
         ];
+    }
+
+    private static function validReplicationArgument(?string $value): bool
+    {
+        if ($value === null || $value === '') {
+            return false;
+        }
+
+        try {
+            $payload = json_decode($value, true, flags: JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return false;
+        }
+
+        if (! is_array($payload)) {
+            return false;
+        }
+
+        if (! is_string($payload['source'] ?? null) || trim((string) $payload['source']) === '') {
+            return false;
+        }
+
+        if (! is_string($payload['destination'] ?? null) || trim((string) $payload['destination']) === '') {
+            return false;
+        }
+
+        foreach (['dry_run', 'apply', 'force', 'force_overwrite', 'overwrite_destination'] as $flag) {
+            if (array_key_exists($flag, $payload) && ! is_bool($payload[$flag])) {
+                return false;
+            }
+        }
+
+        if (array_key_exists('critical_tables', $payload)) {
+            if (! is_array($payload['critical_tables'])) {
+                return false;
+            }
+
+            foreach ($payload['critical_tables'] as $table) {
+                if (! is_string($table) || trim($table) === '') {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 }

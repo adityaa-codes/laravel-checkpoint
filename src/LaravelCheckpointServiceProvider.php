@@ -10,6 +10,7 @@ use AdityaaCodes\LaravelCheckpoint\Console\EnqueueCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueLogicalBackupCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\HealthCheckCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\ReplicateCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecordDrillRunCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecoverOrphansCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ReportCommand;
@@ -77,7 +78,8 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             ->hasCommand(ReportCommand::class)
             ->hasCommand(StatusCommand::class)
             ->hasCommand(RecordDrillRunCommand::class)
-            ->hasCommand(EnqueueLogicalBackupCommand::class);
+            ->hasCommand(EnqueueLogicalBackupCommand::class)
+            ->hasCommand(ReplicateCommand::class);
     }
 
     public function packageBooted(): void

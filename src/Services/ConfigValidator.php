@@ -834,6 +834,18 @@ final readonly class ConfigValidator
             }
         }
 
+        $criticalTables = $config['critical_tables'] ?? [];
+
+        if (! is_array($criticalTables)) {
+            throw new ConfigurationException('checkpoint.replication.critical_tables must be an array.');
+        }
+
+        foreach ($criticalTables as $table) {
+            if (! is_string($table) || trim($table) === '') {
+                throw new ConfigurationException('checkpoint.replication.critical_tables must contain non-empty strings.');
+            }
+        }
+
         $profiles = $config['profiles'] ?? [];
 
         if (! is_array($profiles)) {

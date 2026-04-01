@@ -48,8 +48,14 @@ it('registers the default scheduled checkpoint commands', function (): void {
 });
 
 it('registers the public report command', function (): void {
+
     expect(Artisan::all())->toHaveKey('db-ops:report');
 });
+
+it('registers the replicate command interface', function (): void {
+    expect(Artisan::all())->toHaveKey('db-ops:replicate');
+});
+
 
 it('registers published migrations in dependency order', function (): void {
     $provider = new LaravelCheckpointServiceProvider(app());

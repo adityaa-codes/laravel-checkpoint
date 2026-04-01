@@ -86,6 +86,7 @@ class TestCase extends Orchestra
                 'block_in_ci' => true,
                 'require_dry_run_before_apply' => true,
                 'allowlisted_destinations' => ['staging-replica'],
+                'critical_tables' => [],
                 'profiles' => [
                     'pg-source' => [
                         'engine' => 'pgsql',

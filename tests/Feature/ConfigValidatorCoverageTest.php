@@ -108,6 +108,21 @@ it('rejects invalid replication configuration structure', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.replication must be an array.');
 });
 
+
+it('rejects non-array replication critical tables configuration', function (): void {
+    config()->set('checkpoint.replication.critical_tables', 'users');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.replication.critical_tables must be an array.');
+});
+
+it('rejects empty replication critical table names', function (): void {
+    config()->set('checkpoint.replication.critical_tables', ['users', '']);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.replication.critical_tables must contain non-empty strings.');
+});
+
 it('rejects replication profile engines outside pgsql or mysql', function (): void {
     config()->set('checkpoint.replication.profiles.invalid', [
         'engine' => 'sqlserver',

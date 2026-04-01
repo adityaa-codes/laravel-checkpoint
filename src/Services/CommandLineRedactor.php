@@ -15,7 +15,7 @@ final class CommandLineRedactor
             '/(\b(?:password|pass|passphrase|token|secret|apikey|api_key|access_key|key_secret|pgpassword)=)([^\s]+)/i',
             '/(--(?:password|pass|passphrase|token|secret|apikey|api-key|access-key|key-secret|cipher-pass|s3-key-secret)=)([^\s]+)/i',
             '/(--(?:password|pass|passphrase|token|secret|apikey|api-key|access-key|key-secret|cipher-pass|s3-key-secret))\s+("[^"]*"|\'[^\']*\'|[^\s]+)/i',
-            '/((?:postgres|postgresql|mysql|mariadb):\/\/[^:\s]+:)([^@\/\s]+)(@)/i',
+            '/((?:postgres|postgresql|pgsql|mysql|mariadb):\/\/[^:\s]+:)([^@\/\s]+)(@)/i',
         ];
 
         $replacements = [

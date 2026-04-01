@@ -16,6 +16,7 @@ return [
     'operations.pgbackrest_check' => 'pgBackRest Check',
     'operations.pgbackrest_info' => 'pgBackRest Info',
     'operations.mysql_pitr_replay' => 'MySQL PITR Replay',
+    'operations.replication_sync' => 'Replication Sync',
 
     'status.pending' => 'Pending',
     'status.running' => 'Running',

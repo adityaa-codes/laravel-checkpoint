@@ -52,19 +52,29 @@ final readonly class OperationalReportBuilder
             ->latest('id')
             ->limit(max(1, $limit))
             ->get()
-            ->map(fn (CommandRun $run): array => [
-                'id' => (int) $run->getKey(),
-                'operation' => $run->operation,
-                'status' => (string) $run->status->value,
-                'exit_code' => $run->exit_code,
-                'backup' => $this->backupSummary($run),
-                'verification_state' => $run->verification_state,
-                'restore_target' => $run->restore_target,
-                'restore_audit' => $this->restoreAuditPayload($run),
-                'last_known_good_at' => $run->last_known_good_at?->format('Y-m-d H:i:s'),
-                'started_at' => $run->started_at?->format('Y-m-d H:i:s'),
-                'finished_at' => $run->finished_at?->format('Y-m-d H:i:s'),
-            ])
+            ->map(function (CommandRun $run): array {
+                $payload = [
+                    'id' => (int) $run->getKey(),
+                    'operation' => $run->operation,
+                    'status' => (string) $run->status->value,
+                    'exit_code' => $run->exit_code,
+                    'backup' => $this->backupSummary($run),
+                    'verification_state' => $run->verification_state,
+                    'restore_target' => $run->restore_target,
+                    'restore_audit' => $this->restoreAuditPayload($run),
+                    'last_known_good_at' => $run->last_known_good_at?->format('Y-m-d H:i:s'),
+                    'started_at' => $run->started_at?->format('Y-m-d H:i:s'),
+                    'finished_at' => $run->finished_at?->format('Y-m-d H:i:s'),
+                ];
+
+                $replication = $this->replicationPayload($run);
+
+                if ($replication !== null) {
+                    $payload['replication'] = $replication;
+                }
+
+                return $payload;
+            })
             ->all();
     }
 
@@ -428,6 +438,34 @@ final readonly class OperationalReportBuilder
         }
 
         return $restoreAudit !== [] ? $restoreAudit : null;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function replicationPayload(CommandRun $run): ?array
+    {
+        $metadata = is_array($run->metadata) ? $run->metadata : [];
+        $replication = is_array($metadata['replication'] ?? null) ? $metadata['replication'] : null;
+
+        if ($replication === null) {
+            return null;
+        }
+
+        return [
+            'engine' => $replication['engine'] ?? null,
+            'source' => is_array($replication['source'] ?? null) ? $replication['source'] : null,
+            'destination' => is_array($replication['destination'] ?? null) ? $replication['destination'] : null,
+            'queue_only' => $replication['queue_only'] ?? null,
+            'dry_run_requested' => $replication['dry_run_requested'] ?? null,
+            'apply_requested' => $replication['apply_requested'] ?? null,
+            'force_requested' => $replication['force_requested'] ?? null,
+            'overwrite_destination' => $replication['overwrite_destination'] ?? null,
+            'result' => $replication['result'] ?? null,
+            'sanity' => is_array($replication['sanity'] ?? null) ? $replication['sanity'] : null,
+            'failure_analysis' => is_array($replication['failure_analysis'] ?? null) ? $replication['failure_analysis'] : null,
+            'failure_context' => is_array($replication['failure_context'] ?? null) ? $replication['failure_context'] : null,
+        ];
     }
 
     /**

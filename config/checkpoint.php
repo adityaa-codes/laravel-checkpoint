@@ -59,6 +59,10 @@ return [
             static fn (string $value): string => trim($value),
             explode(',', (string) $env('DB_OPS_REPLICATION_ALLOWLISTED_DESTINATIONS', '')),
         ), static fn (string $value): bool => $value !== '')),
+        'critical_tables' => array_values(array_filter(array_map(
+            static fn (string $value): string => trim($value),
+            explode(',', (string) $env('DB_OPS_REPLICATION_CRITICAL_TABLES', '')),
+        ), static fn (string $value): bool => $value !== '')),
         'profiles' => [],
     ],
 
