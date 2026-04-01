@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -56,14 +57,20 @@ return new class extends Migration
 
     private function hasIndex(string $name): bool
     {
-        $rows = Schema::getConnection()->select("PRAGMA index_list('".$this->tableName()."')");
+        $connection = DB::connection();
+        $driver = $connection->getDriverName();
+        $table = $this->tableName();
 
-        foreach ($rows as $row) {
-            if (($row->name ?? null) === $name) {
-                return true;
-            }
-        }
-
-        return false;
+        return match ($driver) {
+            'sqlite' => collect($connection->select(sprintf("PRAGMA index_list('%s')", $table)))
+                ->contains(fn (object $index): bool => (string) ($index->name ?? '') === $name),
+            'mysql' => collect($connection->select(sprintf('SHOW INDEX FROM `%s`', $table)))
+                ->contains(fn (object $index): bool => (string) ($index->Key_name ?? '') === $name),
+            'pgsql' => collect($connection->select(
+                'SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND tablename = ?',
+                [$table],
+            ))->contains(fn (object $index): bool => (string) ($index->indexname ?? '') === $name),
+            default => true,
+        };
     }
 };

@@ -198,10 +198,7 @@ function backupDrillRunMigration(): object
  */
 function commandRunIndexNames(): array
 {
-    return array_map(
-        static fn (object $index): string => (string) $index->name,
-        DB::select("PRAGMA index_list('db_ops_command_runs')"),
-    );
+    return indexNamesForTable('db_ops_command_runs');
 }
 
 /**
@@ -209,10 +206,7 @@ function commandRunIndexNames(): array
  */
 function backupDrillRunIndexNames(): array
 {
-    return array_map(
-        static fn (object $index): string => (string) $index->name,
-        DB::select("PRAGMA index_list('db_ops_backup_drill_runs')"),
-    );
+    return indexNamesForTable('db_ops_backup_drill_runs');
 }
 
 /**
@@ -220,8 +214,33 @@ function backupDrillRunIndexNames(): array
  */
 function restoreDecisionEventIndexNames(): array
 {
-    return array_map(
-        static fn (object $index): string => (string) $index->name,
-        DB::select("PRAGMA index_list('db_ops_restore_decision_events')"),
-    );
+    return indexNamesForTable('db_ops_restore_decision_events');
+}
+
+/**
+ * @return list<string>
+ */
+function indexNamesForTable(string $table): array
+{
+    $connection = DB::connection();
+    $driver = $connection->getDriverName();
+
+    return match ($driver) {
+        'sqlite' => array_map(
+            static fn (object $index): string => (string) ($index->name ?? ''),
+            $connection->select(sprintf("PRAGMA index_list('%s')", $table)),
+        ),
+        'mysql' => array_values(array_unique(array_map(
+            static fn (object $index): string => (string) ($index->Key_name ?? ''),
+            $connection->select(sprintf('SHOW INDEX FROM `%s`', $table)),
+        ))),
+        'pgsql' => array_map(
+            static fn (object $index): string => (string) ($index->indexname ?? ''),
+            $connection->select(
+                'SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND tablename = ?',
+                [$table],
+            ),
+        ),
+        default => [],
+    };
 }

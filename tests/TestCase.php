@@ -285,9 +285,19 @@ class TestCase extends Orchestra
 
     private function hasIndex(string $table, string $indexName): bool
     {
-        /** @var list<object{name:string}> $indexes */
-        $indexes = \Illuminate\Support\Facades\DB::select(sprintf("PRAGMA index_list('%s')", $table));
+        $connection = \Illuminate\Support\Facades\DB::connection();
+        $driver = $connection->getDriverName();
 
-        return collect($indexes)->contains(fn (object $index): bool => (string) $index->name === $indexName);
+        return match ($driver) {
+            'sqlite' => collect($connection->select(sprintf("PRAGMA index_list('%s')", $table)))
+                ->contains(fn (object $index): bool => (string) ($index->name ?? '') === $indexName),
+            'mysql' => collect($connection->select(sprintf('SHOW INDEX FROM `%s`', $table)))
+                ->contains(fn (object $index): bool => (string) ($index->Key_name ?? '') === $indexName),
+            'pgsql' => collect($connection->select(
+                'SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND tablename = ?',
+                [$table],
+            ))->contains(fn (object $index): bool => (string) ($index->indexname ?? '') === $indexName),
+            default => false,
+        };
     }
 }
