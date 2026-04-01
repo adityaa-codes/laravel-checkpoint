@@ -11,7 +11,7 @@ use Illuminate\Console\Command;
 
 final class StatusCommand extends Command
 {
-    protected $signature = 'db-ops:status {--limit=10} {--summary : Show an operator-facing summary instead of recent runs.} {--format=table : Output format: table or json.}';
+    protected $signature = 'db-ops:status {--limit=10} {--summary : Show an operator-facing summary instead of recent runs.} {--format=table : Output format: table or json.} {--agent : Emit compact AI-agent friendly JSON output.}';
 
     protected $description = 'Show recent checkpoint command runs.';
 
@@ -26,21 +26,41 @@ final class StatusCommand extends Command
     public function handle(): int
     {
         $format = (string) $this->option('format');
+        $agentMode = (bool) $this->option('agent');
 
-        if (! in_array($format, ['table', 'json'], true)) {
+        if (! $agentMode && ! in_array($format, ['table', 'json'], true)) {
             $this->error('The --format option must be table or json.');
 
             return self::FAILURE;
         }
 
         if ((bool) $this->option('summary')) {
-            $this->renderSummary($format);
+            $this->renderSummary($format, $agentMode);
 
             return self::SUCCESS;
         }
 
         $limit = $this->recentRunLimit();
         $runs = $this->reportBuilder->recentRuns($limit);
+
+        if ($agentMode) {
+            $failedRuns = count(array_filter($runs, static fn (array $run): bool => (string) ($run['status'] ?? '') === 'failed'));
+            $this->line(json_encode($this->jsonContract->envelope('status', [
+                'result' => $failedRuns > 0 ? 'failed' : 'passed',
+                'code' => $failedRuns > 0 ? 'status.runs.failed' : 'status.runs.ok',
+                'summary' => sprintf('%d failed run(s) in the latest %d run(s).', $failedRuns, count($runs)),
+                'data' => [
+                    'mode' => 'runs',
+                    'limit' => $limit,
+                    'run_count' => count($runs),
+                    'failed_run_count' => $failedRuns,
+                    'runs' => $runs,
+                ],
+                'suggestions' => $this->replicationFailureSuggestions($runs),
+            ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
+            return self::SUCCESS;
+        }
 
         if ($format === 'json') {
             $this->line(json_encode($this->jsonContract->envelope('status', [
@@ -69,9 +89,30 @@ final class StatusCommand extends Command
         return self::SUCCESS;
     }
 
-    private function renderSummary(string $format): void
+    private function renderSummary(string $format, bool $agentMode): void
     {
         $summary = $this->reportBuilder->summary();
+        $failedRuns24h = (int) ($summary['failed_runs_24h'] ?? 0);
+
+        if ($agentMode) {
+            $this->line(json_encode($this->jsonContract->envelope('status', [
+                'result' => $failedRuns24h > 0 ? 'partial' : 'passed',
+                'code' => $failedRuns24h > 0 ? 'status.summary.degraded' : 'status.summary.ok',
+                'summary' => sprintf(
+                    'Pending: %d, Running: %d, Failed (24h): %d.',
+                    (int) ($summary['pending_runs'] ?? 0),
+                    (int) ($summary['running_runs'] ?? 0),
+                    $failedRuns24h,
+                ),
+                'data' => [
+                    'mode' => 'summary',
+                    'summary' => $summary,
+                ],
+                'suggestions' => $this->summarySuggestions($summary),
+            ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
+            return;
+        }
 
         if ($format === 'json') {
             $this->line(json_encode($this->jsonContract->envelope('status', [
@@ -137,5 +178,65 @@ final class StatusCommand extends Command
         }
 
         return min($requestedLimit, $configuredCap);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $runs
+     * @return list<string>
+     */
+    private function replicationFailureSuggestions(array $runs): array
+    {
+        $suggestions = [];
+
+        foreach ($runs as $run) {
+            $analysis = $run['replication']['failure_analysis'] ?? null;
+
+            if (! is_array($analysis)) {
+                continue;
+            }
+
+            foreach (['immediate', 'deeper'] as $bucket) {
+                $candidate = $analysis['suggestions'][$bucket] ?? null;
+
+                if (! is_array($candidate)) {
+                    continue;
+                }
+
+                foreach ($candidate as $suggestion) {
+                    if (! is_string($suggestion) || trim($suggestion) === '') {
+                        continue;
+                    }
+
+                    $suggestions[] = trim($suggestion);
+                }
+            }
+        }
+
+        $suggestions = array_values(array_unique($suggestions));
+
+        return array_slice($suggestions, 0, 5);
+    }
+
+    /**
+     * @param  array<string, mixed>  $summary
+     * @return list<string>
+     */
+    private function summarySuggestions(array $summary): array
+    {
+        $suggestions = [];
+
+        if ((int) ($summary['failed_runs_24h'] ?? 0) > 0) {
+            $suggestions[] = 'Run db-ops:status --format=json to inspect failed runs and statuses.';
+        }
+
+        if ((int) ($summary['pending_runs'] ?? 0) > 0) {
+            $suggestions[] = 'Start or scale queue workers for the db-ops queue to drain pending runs.';
+        }
+
+        if ((int) ($summary['running_runs'] ?? 0) > 0) {
+            $suggestions[] = 'Run db-ops:doctor --format=json to check queue heartbeat and orphan signals.';
+        }
+
+        return $suggestions;
     }
 }

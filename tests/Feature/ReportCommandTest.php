@@ -10,7 +10,7 @@ it('renders a machine-readable operational report', function (): void {
     config()->set('checkpoint.observability.backup_drill_pass_rate_window_days', 14);
     OperatorCommandTestSupport::seedOperatorSummaryState();
 
-    Artisan::call('db-ops:report', ['--limit' => 2]);
+    Artisan::call('db-ops:report', ['--limit' => 2, '--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
 
@@ -58,7 +58,7 @@ it('returns a failed report when config validation fails', function (): void {
     config()->set('checkpoint.queue.retry_after', 300);
     config()->set('checkpoint.table_prefix', 'broken_');
 
-    $exitCode = Artisan::call('db-ops:report');
+    $exitCode = Artisan::call('db-ops:report', ['--format' => 'json']);
     $report = json_decode(Artisan::output(), true);
 
     expect($exitCode)->toBe(1)
@@ -82,12 +82,57 @@ it('caps operational report recent runs to the configured reporting limit', func
     OperatorCommandTestSupport::seedOperatorSummaryState();
     config()->set('checkpoint.reporting.max_recent_runs', 1);
 
-    Artisan::call('db-ops:report', ['--limit' => 50]);
+    Artisan::call('db-ops:report', ['--limit' => 50, '--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
         ->and($report['recent_runs'])->toHaveCount(1);
+
+    OperatorCommandTestSupport::resetTime();
+});
+
+it('renders report in table format by default', function (): void {
+    OperatorCommandTestSupport::freezeTime();
+    OperatorCommandTestSupport::seedOperatorSummaryState();
+
+    checkpoint_artisan('db-ops:report --limit=2')
+        ->expectsOutputToContain('Driver')
+        ->expectsOutputToContain('Recent runs returned')
+        ->expectsOutputToContain('Health OK')
+        ->expectsOutputToContain('Check')
+        ->expectsOutputToContain('Status')
+        ->assertSuccessful();
+
+    OperatorCommandTestSupport::resetTime();
+});
+
+it('fails for unsupported report output formats', function (): void {
+    checkpoint_artisan('db-ops:report --format=xml')
+        ->expectsOutput('The --format option must be table or json.')
+        ->assertFailed();
+});
+
+it('renders compact agent-friendly report output', function (): void {
+    OperatorCommandTestSupport::freezeTime();
+    OperatorCommandTestSupport::seedOperatorSummaryState();
+
+    Artisan::call('db-ops:report', ['--limit' => 2, '--agent' => true]);
+
+    $report = json_decode(Artisan::output(), true);
+
+    expect($report)->toBeArray()
+        ->and($report['version'])->toBe(2)
+        ->and($report['surface'])->toBe('report')
+        ->and($report['result'])->toBeString()
+        ->and($report['code'])->toBeString()
+        ->and($report['summary'])->toBeString()
+        ->and($report['data']['driver'])->toBe('shell')
+        ->and($report['data']['limit_requested'])->toBe(2)
+        ->and($report['data']['limit'])->toBe(2)
+        ->and($report['data']['recent_runs'])->toBeArray()
+        ->and($report['data']['health'])->toBeArray()
+        ->and($report['suggestions'])->toBeArray();
 
     OperatorCommandTestSupport::resetTime();
 });

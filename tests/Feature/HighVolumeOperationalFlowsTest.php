@@ -80,7 +80,7 @@ it('returns bounded recent report results for high command-run volume', function
         'updated_at' => now()->subHours(6),
     ]);
 
-    Artisan::call('db-ops:report', ['--limit' => 50]);
+    Artisan::call('db-ops:report', ['--limit' => 50, '--format' => 'json']);
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()

@@ -164,6 +164,47 @@ it('fails for unsupported status output formats', function (): void {
         ->assertFailed();
 });
 
+it('renders compact agent-friendly status output for runs', function (): void {
+    OperatorCommandTestSupport::freezeTime();
+    OperatorCommandTestSupport::seedRecentRuns();
+
+    Artisan::call('db-ops:status', ['--limit' => 1, '--agent' => true]);
+
+    $report = json_decode(Artisan::output(), true);
+
+    expect($report)->toBeArray()
+        ->and($report['version'])->toBe(1)
+        ->and($report['surface'])->toBe('status')
+        ->and($report['result'])->toBe('passed')
+        ->and($report['code'])->toBe('status.runs.ok')
+        ->and($report['data']['mode'])->toBe('runs')
+        ->and($report['data']['run_count'])->toBe(1)
+        ->and($report['data']['runs'])->toHaveCount(1)
+        ->and($report['suggestions'])->toBeArray();
+
+    OperatorCommandTestSupport::resetTime();
+});
+
+it('renders compact agent-friendly status output for summary', function (): void {
+    OperatorCommandTestSupport::freezeTime();
+    OperatorCommandTestSupport::seedOperatorSummaryState();
+
+    Artisan::call('db-ops:status', ['--summary' => true, '--agent' => true]);
+
+    $report = json_decode(Artisan::output(), true);
+
+    expect($report)->toBeArray()
+        ->and($report['version'])->toBe(1)
+        ->and($report['surface'])->toBe('status')
+        ->and($report['result'])->toBe('partial')
+        ->and($report['code'])->toBe('status.summary.degraded')
+        ->and($report['data']['mode'])->toBe('summary')
+        ->and($report['data']['summary']['failed_runs_24h'])->toBe(1)
+        ->and($report['suggestions'])->toBeArray();
+
+    OperatorCommandTestSupport::resetTime();
+});
+
 it('caps machine-readable recent run output to the configured reporting limit', function (): void {
     OperatorCommandTestSupport::freezeTime();
     OperatorCommandTestSupport::seedRecentRuns();

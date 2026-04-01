@@ -180,13 +180,18 @@ php artisan db-ops:status --limit=10
 php artisan db-ops:status --summary
 php artisan db-ops:status --format=json
 php artisan db-ops:status --summary --format=json
+php artisan db-ops:status --agent
+php artisan db-ops:status --summary --agent
 php artisan db-ops:record-drill --run-uuid=... --overall-result=pass --executed-at=2026-03-11T10:30:00+00:00
 php artisan db-ops:health-check
 php artisan db-ops:recover-orphans
 php artisan db-ops:prune
 php artisan db-ops:doctor
 php artisan db-ops:doctor --format=json
+php artisan db-ops:doctor --agent
 php artisan db-ops:report --limit=10
+php artisan db-ops:report --limit=10 --format=json
+php artisan db-ops:report --limit=10 --agent
 php artisan db-ops:replicate profile:pg-source profile:pg-destination
 php artisan db-ops:replicate --source=pgsql://user:pass@source.internal/app --destination=pgsql://user:pass@dest.internal/app
 php artisan db-ops:replicate --source=profile:pg-source --destination=profile:pg-destination --apply --force-overwrite --critical-table=users --critical-table=orders
@@ -357,8 +362,10 @@ Behavior notes:
 
 Operational surfaces now include:
 
-- `db-ops:report` for one combined machine-readable operational snapshot
+- `db-ops:report` for a combined operational snapshot (table by default)
+- `db-ops:report --format=json` for machine-readable report payloads
 - `db-ops:doctor --format=json` for machine-readable health checks
+- `--agent` mode on `db-ops:status`, `db-ops:doctor`, and `db-ops:report` for compact AI-agent friendly contracts
 - all machine-readable command payloads now expose a top-level `version` and `surface`
 - `db-ops:doctor` freshness warnings for stale last-known-good backups
 - `db-ops:doctor` duration anomaly warnings for unusually slow backup runs
@@ -380,7 +387,7 @@ Operational surfaces now include:
 - `backup_drill_pass_rate_30d` remains available as a compatibility alias
 - the table summary mirrors those signals for operators without requiring JSON parsing
 
-`db-ops:report` is the preferred automation surface when you want one payload
+`db-ops:report --format=json` is the preferred automation surface when you want one payload
 instead of stitching together multiple commands. It combines:
 
 - `recent_runs`
@@ -394,6 +401,7 @@ Report notes:
 - `summary.backup_drill_pass_rate.window_days` follows the same configurable drill pass-rate window as `db-ops:doctor`
 - `db-ops:doctor --format=json` uses the same health semantics as `db-ops:report`: `ok` is only `true` when every emitted health check is `pass`
 - `db-ops:status` emits JSON contract version `1`, `db-ops:doctor` emits `3`, and `db-ops:report` emits `2`
+- `--agent` outputs keep stable top-level fields: `result`, `code`, `summary`, `data`, and `suggestions`
 - `db-ops:report` includes both `limit_requested` and effective `limit` so automation can detect capped history responses
 - future JSON contract changes should stay additive within a version; breaking shape changes should increment the top-level `version`
 

@@ -72,7 +72,7 @@ it('matches the operational report json fixture', function (): void {
     CommandJsonFixtureSupport::seedOperatorState();
 
     CommandJsonFixtureSupport::withEmptyPath(function (): void {
-        Artisan::call('db-ops:report', ['--limit' => 2]);
+        Artisan::call('db-ops:report', ['--limit' => 2, '--format' => 'json']);
     });
 
     checkpoint_assert_matches_fixture(
@@ -88,7 +88,7 @@ it('matches the failed operational report json fixture', function (): void {
     config()->set('checkpoint.queue.timeout', 3600);
     config()->set('checkpoint.queue.retry_after', 300);
 
-    Artisan::call('db-ops:report', ['--limit' => 2]);
+    Artisan::call('db-ops:report', ['--limit' => 2, '--format' => 'json']);
 
     checkpoint_assert_matches_fixture(
         json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR),

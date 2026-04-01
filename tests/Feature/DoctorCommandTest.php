@@ -247,6 +247,22 @@ it('returns a failed machine-readable json report for invalid config', function 
         ))->toBeTrue();
 });
 
+it('renders compact agent-friendly doctor output', function (): void {
+    Artisan::call('db-ops:doctor', ['--agent' => true]);
+
+    $report = json_decode(Artisan::output(), true);
+
+    expect($report)->toBeArray()
+        ->and($report['version'])->toBe(3)
+        ->and($report['surface'])->toBe('doctor')
+        ->and($report['result'])->toBeString()
+        ->and($report['code'])->toBeString()
+        ->and($report['summary'])->toBeString()
+        ->and($report['data']['ok'])->toBeBool()
+        ->and($report['data']['checks'])->toBeArray()
+        ->and($report['suggestions'])->toBeArray();
+});
+
 it('warns when the last known good backup is stale and the latest run is anomalously slow', function (): void {
     config()->set('checkpoint.observability.max_last_known_good_age_hours', 12);
     config()->set('checkpoint.observability.backup_duration_anomaly_factor', 2.0);
