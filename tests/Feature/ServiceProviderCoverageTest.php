@@ -29,6 +29,10 @@ it('registers command and drill policies on boot', function (): void {
 });
 
 it('registers the default scheduled checkpoint commands', function (): void {
+    config()->set('checkpoint.schedule.backup_drill_enabled', true);
+
+    app()->forgetInstance(Schedule::class);
+
     $events = collect(resolve(Schedule::class)->events());
     $commands = $events
         ->map(static fn ($event): ?string => $event->command)
@@ -36,6 +40,7 @@ it('registers the default scheduled checkpoint commands', function (): void {
         ->implode("\n");
 
     expect($commands)->toContain('db-ops:enqueue-backup')
+        ->toContain('db-ops:enqueue-drill')
         ->toContain('db-ops:health-check')
         ->toContain('db-ops:recover-orphans')
         ->toContain('db-ops:prune');
@@ -47,19 +52,22 @@ it('registers the default scheduled checkpoint commands', function (): void {
     });
 });
 
-it('registers the public report command', function (): void {
+it('registers the public report and catalog commands', function (): void {
 
-    expect(Artisan::all())->toHaveKey('db-ops:report');
+    expect(Artisan::all())->toHaveKey('db-ops:report')
+        ->toHaveKey('db-ops:catalog-export')
+        ->toHaveKey('db-ops:pitr-readiness')
+        ->toHaveKey('db-ops:retention-policy')
+        ->toHaveKey('db-ops:enqueue-drill');
 });
 
 it('registers the replicate command interface', function (): void {
     expect(Artisan::all())->toHaveKey('db-ops:replicate');
 });
 
-
 it('registers published migrations in dependency order', function (): void {
     $provider = new LaravelCheckpointServiceProvider(app());
-    $package = new Package();
+    $package = new Package;
 
     $provider->configurePackage($package);
 
@@ -71,6 +79,7 @@ it('registers published migrations in dependency order', function (): void {
         'add_operator_summary_columns_to_command_runs_table',
         'create_checkpoint_restore_decision_events_table',
         'create_checkpoint_backup_drill_runs_table',
+        'create_checkpoint_verification_runs_table',
         'add_reporting_indexes_to_checkpoint_tables',
     ]);
 });

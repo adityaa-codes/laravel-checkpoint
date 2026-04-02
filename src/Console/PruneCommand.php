@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
-use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
+use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Console\Command;
+
+use function Laravel\Prompts\intro;
+use function Laravel\Prompts\outro;
 
 final class PruneCommand extends Command
 {
@@ -16,10 +19,20 @@ final class PruneCommand extends Command
 
     public function handle(): int
     {
+        if ($this->enhancedInteractiveMode()) {
+            intro('Prune Checkpoint Records');
+        }
+
         $commandRunCount = (new CommandRun)->pruneAll();
         $backupDrillCount = (new BackupDrillRun)->pruneAll();
 
-        $this->info($this->prunedMessage($commandRunCount, $backupDrillCount));
+        $message = $this->prunedMessage($commandRunCount, $backupDrillCount);
+
+        if ($this->enhancedInteractiveMode()) {
+            outro($message);
+        } else {
+            $this->info($message);
+        }
 
         return self::SUCCESS;
     }
@@ -40,5 +53,10 @@ final class PruneCommand extends Command
         }
 
         return (string) $message;
+    }
+
+    private function enhancedInteractiveMode(): bool
+    {
+        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
     }
 }

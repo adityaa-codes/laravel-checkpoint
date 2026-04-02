@@ -1,21 +1,22 @@
 {
-  "version": 1,
-  "surface": "status",
-  "mode": "runs",
-  "limit": 1,
-  "runs": [
-    {
-      "id": 2,
-      "operation": "pgbackrest_info",
-      "status": "succeeded",
-      "exit_code": 0,
-      "backup": "full:20260311-010101F",
-      "verification_state": "verified",
-      "restore_target": null,
-      "restore_audit": null,
-      "last_known_good_at": "2026-03-11 11:50:00",
-      "started_at": null,
-      "finished_at": null
-    }
-  ]
+    "mode": "runs",
+    "limit": 1,
+    "runs": [
+        {
+            "id": 2,
+            "operation": "pgbackrest_info",
+            "status": "succeeded",
+            "exit_code": 0,
+            "backup": "full:20260311-010101F",
+            "verification_state": "verified",
+            "restore_target": null,
+            "restore_audit": null,
+            "post_restore_verification": null,
+            "last_known_good_at": "2026-03-11 11:50:00",
+            "started_at": null,
+            "finished_at": null
+        }
+    ],
+    "version": 1,
+    "surface": "status"
 }

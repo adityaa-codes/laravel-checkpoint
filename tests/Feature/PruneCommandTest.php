@@ -8,8 +8,9 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Date;
 
 it('prunes old runs and expired backup drill records while retaining recent protected rows', function (): void {
-    config()->set('checkpoint.schedule.prune_keep_days', 30);
-    config()->set('checkpoint.schedule.prune_keep_failed_days', 365);
+    config()->set('checkpoint.retention.default_days', 30);
+    config()->set('checkpoint.retention.failed_days', 365);
+    config()->set('checkpoint.retention.tiers', ['hot' => 14, 'warm' => 60, 'cold' => 180]);
     config()->set('checkpoint.schedule.prune_keep_backup_drill_days', 60);
 
     $prunableSucceeded = CommandRun::query()->create([

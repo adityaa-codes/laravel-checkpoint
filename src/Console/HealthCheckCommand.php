@@ -11,6 +11,9 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Log\LogManager;
 
+use function Laravel\Prompts\intro;
+use function Laravel\Prompts\outro;
+
 final class HealthCheckCommand extends Command
 {
     protected $signature = 'db-ops:health-check';
@@ -27,6 +30,10 @@ final class HealthCheckCommand extends Command
 
     public function handle(): int
     {
+        if ($this->enhancedInteractiveMode()) {
+            intro('Health Check: Running Command Timeout Sweep');
+        }
+
         $timeoutSeconds = max(1, (int) $this->config->get('checkpoint.queue.timeout', 3600));
         $threshold = now()->subSeconds($timeoutSeconds);
         $graceSeconds = max(0, (int) $this->config->get('checkpoint.queue.heartbeat_grace_seconds', 60));
@@ -61,6 +68,10 @@ final class HealthCheckCommand extends Command
 
                 $this->line($this->recoveryMessage((int) $run->getKey(), $timeoutSeconds));
             });
+
+        if ($this->enhancedInteractiveMode()) {
+            outro('Health check completed.');
+        }
 
         return self::SUCCESS;
     }
@@ -100,5 +111,10 @@ final class HealthCheckCommand extends Command
             'duration_seconds' => $run->duration_seconds,
             ...$extra,
         ], static fn (mixed $value): bool => $value !== null);
+    }
+
+    private function enhancedInteractiveMode(): bool
+    {
+        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
     }
 }

@@ -24,6 +24,15 @@ it('tracks versions independently per command surface', function (): void {
     expect($contract->envelope('status', []))->toMatchArray([
         'version' => 1,
         'surface' => 'status',
+    ])->and($contract->envelope('catalog_export', []))->toMatchArray([
+        'version' => 1,
+        'surface' => 'catalog_export',
+    ])->and($contract->envelope('pitr_readiness', []))->toMatchArray([
+        'version' => 1,
+        'surface' => 'pitr_readiness',
+    ])->and($contract->envelope('retention_policy', []))->toMatchArray([
+        'version' => 1,
+        'surface' => 'retention_policy',
     ])->and($contract->envelope('doctor', []))->toMatchArray([
         'version' => 3,
         'surface' => 'doctor',

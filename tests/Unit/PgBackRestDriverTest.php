@@ -211,22 +211,43 @@ it('records restore audit metadata for pgbackrest restore runs', function (): vo
         ->and($run->metadata)->toMatchArray([
             'driver' => 'pgbackrest',
             'repository_type' => 'posix',
-            'restore_audit' => [
-                'environment' => (string) config('app.env'),
-                'database' => ':memory:',
-                'target' => '20260312-010101F',
-                'confirmation_required' => true,
-                'confirmation_satisfied_via' => 'token',
-                'verified_backup_required' => false,
-                'verified_signal_run_id' => null,
-                'verified_signal_operation' => null,
-                'verified_signal_backup_label' => null,
-                'verified_signal_artifact_path' => null,
-                'verified_signal_last_known_good_at' => null,
-                'pitr_base_target' => null,
-                'pitr_binlog_files' => [],
-            ],
         ]);
+
+    expect($run->metadata['restore_audit'] ?? null)->toMatchArray([
+        'environment' => (string) config('app.env'),
+        'database' => ':memory:',
+        'target' => '20260312-010101F',
+        'confirmation_required' => true,
+        'confirmation_satisfied_via' => 'token',
+        'verified_backup_required' => false,
+        'verified_signal_run_id' => null,
+        'verified_signal_operation' => null,
+        'verified_signal_backup_label' => null,
+        'verified_signal_artifact_path' => null,
+        'verified_signal_last_known_good_at' => null,
+        'pitr_base_target' => null,
+        'pitr_binlog_files' => [],
+    ]);
+
+    $postVerification = $run->metadata['restore_audit']['post_restore_verification'] ?? null;
+
+    expect($postVerification)->toBeArray()
+        ->and($postVerification)->toMatchArray([
+            'contract_version' => 1,
+            'command_run_id' => (int) $run->getKey(),
+            'operation' => 'pgbackrest_restore',
+            'aggregate_result' => 'pass',
+            'generated_at' => now()->toIso8601String(),
+            'checks_performed' => [
+                'restore_audit_recorded',
+                'restore_target_recorded',
+                'command_exit_code_zero',
+                'verified_backup_signal_linkage',
+            ],
+        ])
+        ->and($postVerification['checks'])->toBeArray()
+        ->and($postVerification['checks'])->toHaveCount(4)
+        ->and($postVerification['checks'][0])->toHaveKeys(['name', 'passed', 'status', 'description', 'observed']);
 });
 
 it('truncates persisted pgbackrest output and records capture metadata', function (): void {
@@ -548,12 +569,13 @@ it('rethrows pgbackrest runtime exceptions after marking the run failed', functi
     $logger->shouldReceive('info')
         ->once()
         ->andThrow(new RuntimeException('logger runtime failure'));
+    $logger->shouldReceive('warning')->atLeast()->once();
     $logger->shouldReceive('error')
         ->once()
         ->with('pgBackRest operation crashed', Mockery::on(
             fn (array $context): bool => $context['error'] === 'logger runtime failure'
         ));
-    Log::shouldReceive('channel')->twice()->andReturn($logger);
+    Log::shouldReceive('channel')->times(4)->andReturn($logger);
 
     $run = CommandRun::query()->create([
         'operation' => 'pgbackrest_info',

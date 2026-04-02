@@ -7,6 +7,7 @@ use AdityaaCodes\LaravelCheckpoint\Facades\LaravelCheckpoint as LaravelCheckpoin
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpoint;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
 use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use Illuminate\Database\Eloquent\Model;
@@ -96,4 +97,10 @@ it('allows viewing backup drill runs but forbids mutations', function (): void {
         ->and($policy->create($user))->toBeFalse()
         ->and($policy->update($user, $run))->toBeFalse()
         ->and($policy->delete($user, $run))->toBeFalse();
+});
+
+it('exposes verification runs as a public model surface', function (): void {
+    $verificationRun = VerificationRun::factory()->make();
+
+    expect($verificationRun)->toBeInstanceOf(VerificationRun::class);
 });

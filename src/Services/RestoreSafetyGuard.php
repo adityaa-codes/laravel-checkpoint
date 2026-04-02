@@ -38,6 +38,15 @@ final readonly class RestoreSafetyGuard
             $confirmation = $this->ensureConfirmationSatisfied();
             $restoreTarget = $this->ensureRestoreTargetValid($run, $context);
             $verificationSignal = $this->ensureVerificationSignal($run, $restoreTarget, $context);
+            $blastRadius = $this->blastRadiusAssessment(
+                operation: $run->operation,
+                environment: $environment,
+                database: $database,
+                restoreTarget: $restoreTarget,
+                verifiedBackupRequired: $verificationSignal['required'],
+                verifiedSignalRunId: $verificationSignal['run_id'],
+            );
+            $this->assertBlastRadiusPolicy($blastRadius);
         } catch (ConfigurationException $exception) {
             $this->recordDecisionEvent($run, 'block', 'restore_safety_blocked', [
                 'message' => $exception->getMessage(),
@@ -62,6 +71,7 @@ final readonly class RestoreSafetyGuard
                 'verified_signal_backup_label' => $verificationSignal['backup_label'],
                 'verified_signal_artifact_path' => $verificationSignal['artifact_path'],
                 'verified_signal_last_known_good_at' => $verificationSignal['last_known_good_at'],
+                'blast_radius' => $blastRadius,
             ],
         ];
 
@@ -460,5 +470,145 @@ final readonly class RestoreSafetyGuard
         $baseTarget = trim($baseTarget);
 
         return $baseTarget !== '' ? $baseTarget : null;
+    }
+
+    /**
+     * @return array{
+     *   enabled:bool,
+     *   score:int,
+     *   status:string,
+     *   warn_score:int,
+     *   block_score:int,
+     *   factors:list<array{name:string,weight:int,contributes:bool,note:string}>
+     * }
+     */
+    private function blastRadiusAssessment(
+        string $operation,
+        string $environment,
+        string $database,
+        string $restoreTarget,
+        bool $verifiedBackupRequired,
+        ?int $verifiedSignalRunId,
+    ): array {
+        $enabled = (bool) $this->config->get('checkpoint.restore.blast_radius.enabled', true);
+        $warnScore = max(0, min(100, (int) $this->config->get('checkpoint.restore.blast_radius.warn_score', 50)));
+        $blockScore = max(0, min(100, (int) $this->config->get('checkpoint.restore.blast_radius.block_score', 80)));
+        $weights = $this->blastRadiusWeights();
+
+        if (! $enabled) {
+            return [
+                'enabled' => false,
+                'score' => 0,
+                'status' => 'disabled',
+                'warn_score' => $warnScore,
+                'block_score' => $blockScore,
+                'factors' => [],
+            ];
+        }
+
+        $factors = [
+            [
+                'name' => 'environment',
+                'weight' => $weights['environment'],
+                'contributes' => in_array($environment, ['production', 'prod'], true),
+                'note' => in_array($environment, ['production', 'prod'], true)
+                    ? sprintf('restore running in %s environment', $environment)
+                    : sprintf('restore running in %s environment', $environment),
+            ],
+            [
+                'name' => 'database',
+                'weight' => $weights['database'],
+                'contributes' => $database !== '' && ! in_array(strtolower($database), ['checkpoint_shadow', 'checkpoint_restore_shadow'], true),
+                'note' => $database !== '' ? sprintf('database target %s', $database) : 'database target unknown',
+            ],
+            [
+                'name' => 'target',
+                'weight' => $weights['target'],
+                'contributes' => $operation === 'logical_restore_latest' || str_contains(strtolower($restoreTarget), 'latest'),
+                'note' => $restoreTarget !== '' ? sprintf('restore target %s', $restoreTarget) : 'restore target unresolved',
+            ],
+            [
+                'name' => 'verification',
+                'weight' => $weights['verification'],
+                'contributes' => $verifiedBackupRequired && ! is_int($verifiedSignalRunId),
+                'note' => $verifiedBackupRequired
+                    ? (is_int($verifiedSignalRunId)
+                        ? sprintf('verified signal linked to run %d', $verifiedSignalRunId)
+                        : 'verified signal required but missing')
+                    : 'verified signal requirement disabled',
+            ],
+        ];
+
+        $score = 0;
+
+        foreach ($factors as $factor) {
+            if ($factor['contributes'] === true) {
+                $score += $factor['weight'];
+            }
+        }
+
+        $score = max(0, min(100, $score));
+        $status = $score >= $blockScore ? 'block' : ($score >= $warnScore ? 'warn' : 'pass');
+
+        return [
+            'enabled' => true,
+            'score' => $score,
+            'status' => $status,
+            'warn_score' => $warnScore,
+            'block_score' => $blockScore,
+            'factors' => $factors,
+        ];
+    }
+
+    /**
+     * @param  array{
+     *   enabled:bool,
+     *   score:int,
+     *   status:string,
+     *   warn_score:int,
+     *   block_score:int,
+     *   factors:list<array{name:string,weight:int,contributes:bool,note:string}>
+     * }  $blastRadius
+     */
+    private function assertBlastRadiusPolicy(array $blastRadius): void
+    {
+        if (($blastRadius['enabled'] ?? false) !== true) {
+            return;
+        }
+
+        if (($blastRadius['status'] ?? 'pass') !== 'block') {
+            return;
+        }
+
+        throw new ConfigurationException(sprintf(
+            'Restore blast radius score [%d] exceeds block threshold [%d].',
+            (int) ($blastRadius['score'] ?? 0),
+            (int) ($blastRadius['block_score'] ?? 0),
+        ));
+    }
+
+    /**
+     * @return array{environment:int,database:int,target:int,verification:int}
+     */
+    private function blastRadiusWeights(): array
+    {
+        $configured = $this->config->get('checkpoint.restore.blast_radius.weights', []);
+        $weights = is_array($configured) ? $configured : [];
+
+        return [
+            'environment' => $this->normalizedWeight($weights['environment'] ?? 30),
+            'database' => $this->normalizedWeight($weights['database'] ?? 25),
+            'target' => $this->normalizedWeight($weights['target'] ?? 20),
+            'verification' => $this->normalizedWeight($weights['verification'] ?? 25),
+        ];
+    }
+
+    private function normalizedWeight(mixed $value): int
+    {
+        if (! is_int($value)) {
+            return 0;
+        }
+
+        return max(0, min(100, $value));
     }
 }

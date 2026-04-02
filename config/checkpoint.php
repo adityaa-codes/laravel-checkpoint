@@ -10,7 +10,7 @@ use Illuminate\Foundation\Auth\User;
 
 /** @phpstan-ignore-next-line */
 $env = static fn (string $key, mixed $default = null): mixed => env($key, $default);
-$appEnv = (string) $env('APP_ENV', 'production');
+$appEnv = (string) (getenv('APP_ENV') ?: $env('APP_ENV', 'production'));
 $nonLocalPosture = ! in_array($appEnv, ['local', 'testing'], true);
 
 return [
@@ -49,12 +49,31 @@ return [
         'allow_in_ci' => (bool) $env('DB_OPS_RESTORE_ALLOW_IN_CI', false),
         'ci' => (bool) $env('CI', false),
         'require_verified_backup' => (bool) $env('DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP', $nonLocalPosture),
+        'blast_radius' => [
+            'enabled' => (bool) $env('DB_OPS_RESTORE_BLAST_RADIUS_ENABLED', true),
+            'warn_score' => (int) $env('DB_OPS_RESTORE_BLAST_RADIUS_WARN_SCORE', 50),
+            'block_score' => (int) $env('DB_OPS_RESTORE_BLAST_RADIUS_BLOCK_SCORE', 80),
+            'weights' => [
+                'environment' => (int) $env('DB_OPS_RESTORE_BLAST_RADIUS_WEIGHT_ENVIRONMENT', 30),
+                'database' => (int) $env('DB_OPS_RESTORE_BLAST_RADIUS_WEIGHT_DATABASE', 25),
+                'target' => (int) $env('DB_OPS_RESTORE_BLAST_RADIUS_WEIGHT_TARGET', 20),
+                'verification' => (int) $env('DB_OPS_RESTORE_BLAST_RADIUS_WEIGHT_VERIFICATION', 25),
+            ],
+        ],
     ],
 
     'replication' => [
         'require_confirmation_token' => (bool) $env('DB_OPS_REPLICATION_REQUIRE_CONFIRMATION_TOKEN', true),
         'block_in_ci' => (bool) $env('DB_OPS_REPLICATION_BLOCK_IN_CI', true),
         'require_dry_run_before_apply' => (bool) $env('DB_OPS_REPLICATION_REQUIRE_DRY_RUN_BEFORE_APPLY', true),
+        'enforce_change_window' => (bool) $env('DB_OPS_REPLICATION_ENFORCE_CHANGE_WINDOW', false),
+        'change_window_timezone' => (string) $env('DB_OPS_REPLICATION_CHANGE_WINDOW_TIMEZONE', 'UTC'),
+        'change_window_days' => array_values(array_filter(array_map(
+            static fn (string $value): string => trim($value),
+            explode(',', (string) $env('DB_OPS_REPLICATION_CHANGE_WINDOW_DAYS', 'mon,tue,wed,thu,fri,sat,sun')),
+        ), static fn (string $value): bool => $value !== '')),
+        'change_window_start' => (string) $env('DB_OPS_REPLICATION_CHANGE_WINDOW_START', '00:00'),
+        'change_window_end' => (string) $env('DB_OPS_REPLICATION_CHANGE_WINDOW_END', '23:59'),
         'allowlisted_destinations' => array_values(array_filter(array_map(
             static fn (string $value): string => trim($value),
             explode(',', (string) $env('DB_OPS_REPLICATION_ALLOWLISTED_DESTINATIONS', '')),
@@ -70,6 +89,9 @@ return [
         'logical_backup_enabled' => (bool) $env('DB_OPS_BACKUP_SCHEDULE_ENABLED', true),
         'logical_backup_daily_at' => $env('DB_OPS_BACKUP_DAILY_AT', '16:00'),
         'logical_backup_timezone' => $env('DB_OPS_BACKUP_TIMEZONE', 'UTC'),
+        'backup_drill_enabled' => (bool) $env('DB_OPS_BACKUP_DRILL_SCHEDULE_ENABLED', false),
+        'backup_drill_daily_at' => $env('DB_OPS_BACKUP_DRILL_DAILY_AT', '03:00'),
+        'backup_drill_timezone' => $env('DB_OPS_BACKUP_DRILL_TIMEZONE', 'UTC'),
         'health_check_enabled' => (bool) $env('DB_OPS_HEALTH_CHECK_ENABLED', true),
         'recover_orphans_enabled' => (bool) $env('DB_OPS_RECOVER_ORPHANS_ENABLED', true),
         'prune_enabled' => (bool) $env('DB_OPS_PRUNE_ENABLED', true),
@@ -93,6 +115,48 @@ return [
     ],
     'reporting' => [
         'max_recent_runs' => (int) $env('DB_OPS_REPORTING_MAX_RECENT_RUNS', 100),
+    ],
+    'retention' => [
+        'enabled' => (bool) $env('DB_OPS_RETENTION_ENABLED', true),
+        'default_days' => (int) $env('DB_OPS_RETENTION_DEFAULT_DAYS', (int) $env('DB_OPS_PRUNE_KEEP_DAYS', 90)),
+        'failed_days' => (int) $env('DB_OPS_RETENTION_FAILED_DAYS', (int) $env('DB_OPS_PRUNE_KEEP_FAILED_DAYS', 365)),
+        'tiers' => [
+            'hot' => (int) $env('DB_OPS_RETENTION_TIER_HOT_DAYS', 14),
+            'warm' => (int) $env('DB_OPS_RETENTION_TIER_WARM_DAYS', 60),
+            'cold' => (int) $env('DB_OPS_RETENTION_TIER_COLD_DAYS', 180),
+        ],
+    ],
+    'notifications' => [
+        'enabled' => (bool) $env('DB_OPS_NOTIFICATIONS_ENABLED', false),
+        'events' => array_values(array_filter(array_map(
+            static fn (string $value): string => trim($value),
+            explode(',', (string) $env('DB_OPS_NOTIFICATIONS_EVENTS', '')),
+        ), static fn (string $value): bool => $value !== '')),
+        'routing' => [
+            'info' => array_values(array_filter(array_map(
+                static fn (string $value): string => trim($value),
+                explode(',', (string) $env('DB_OPS_NOTIFICATIONS_ROUTE_INFO', 'log')),
+            ), static fn (string $value): bool => $value !== '')),
+            'warning' => array_values(array_filter(array_map(
+                static fn (string $value): string => trim($value),
+                explode(',', (string) $env('DB_OPS_NOTIFICATIONS_ROUTE_WARNING', 'log,mail')),
+            ), static fn (string $value): bool => $value !== '')),
+            'critical' => array_values(array_filter(array_map(
+                static fn (string $value): string => trim($value),
+                explode(',', (string) $env('DB_OPS_NOTIFICATIONS_ROUTE_CRITICAL', 'log,mail,webhook')),
+            ), static fn (string $value): bool => $value !== '')),
+        ],
+        'mail' => [
+            'to' => array_values(array_filter(array_map(
+                static fn (string $value): string => trim($value),
+                explode(',', (string) $env('DB_OPS_NOTIFICATIONS_MAIL_TO', '')),
+            ), static fn (string $value): bool => $value !== '')),
+        ],
+        'webhook' => [
+            'url' => $env('DB_OPS_NOTIFICATIONS_WEBHOOK_URL'),
+            'provider' => $env('DB_OPS_NOTIFICATIONS_WEBHOOK_PROVIDER', 'generic'),
+            'timeout_seconds' => (int) $env('DB_OPS_NOTIFICATIONS_WEBHOOK_TIMEOUT_SECONDS', 5),
+        ],
     ],
     'output' => [
         'max_persisted_bytes' => (int) $env('DB_OPS_OUTPUT_MAX_PERSISTED_BYTES', 65536),

@@ -253,6 +253,82 @@ it('captures pitr baseline and binlog chain metadata during planning', function 
         ]);
 });
 
+it('records post-restore verification contract for mysql logical restores', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-restore-audit-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary mysql restore audit path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    $target = $outputDir.'/nightly-2026-03-11.sql';
+    file_put_contents($target, 'restore source');
+
+    config()->set('checkpoint.restore.require_confirmation', true);
+    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
+    config()->set('checkpoint.drivers.mysql.mysql_binary', fakeMysqlScript("#!/bin/sh\nprintf 'restore complete'\n"));
+    config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
+    config()->set('checkpoint.drivers.mysql.file_extension', 'sql');
+
+    $run = CommandRun::query()->create([
+        'operation' => 'logical_restore_file',
+        'argument_text' => 'nightly-2026-03-11',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+    ]);
+
+    (new MysqlDriver)->execute($run);
+
+    $run->refresh();
+
+    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+        ->and($run->metadata)->toMatchArray([
+            'driver' => 'mysql',
+            'database' => ':memory:',
+            'restore_mode' => 'logical',
+            'restored_via' => 'mysql',
+        ]);
+
+    expect($run->metadata['restore_audit'] ?? null)->toMatchArray([
+        'environment' => (string) config('app.env'),
+        'database' => ':memory:',
+        'target' => $target,
+        'confirmation_required' => true,
+        'confirmation_satisfied_via' => 'token',
+        'verified_backup_required' => false,
+        'verified_signal_run_id' => null,
+        'verified_signal_operation' => null,
+        'verified_signal_backup_label' => null,
+        'verified_signal_artifact_path' => null,
+        'verified_signal_last_known_good_at' => null,
+        'pitr_base_target' => null,
+        'pitr_binlog_files' => [],
+    ]);
+
+    $postVerification = $run->metadata['restore_audit']['post_restore_verification'] ?? null;
+
+    expect($postVerification)->toBeArray()
+        ->and($postVerification)->toMatchArray([
+            'contract_version' => 1,
+            'command_run_id' => (int) $run->getKey(),
+            'operation' => 'logical_restore_file',
+            'aggregate_result' => 'pass',
+            'generated_at' => now()->toIso8601String(),
+            'checks_performed' => [
+                'restore_audit_recorded',
+                'restore_target_recorded',
+                'command_exit_code_zero',
+                'verified_backup_signal_linkage',
+            ],
+        ])
+        ->and($postVerification['checks'])->toBeArray()
+        ->and($postVerification['checks'])->toHaveCount(4)
+        ->and($postVerification['checks'][0])->toHaveKeys(['name', 'passed', 'status', 'description', 'observed']);
+});
+
 it('does not persist mysql pitr baseline artifacts into non-existent command run columns', function (): void {
     $driver = new MysqlDriver;
     $method = new ReflectionMethod($driver, 'persistedPlannedMetadata');

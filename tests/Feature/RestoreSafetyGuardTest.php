@@ -137,7 +137,11 @@ it('accepts restores when a matching verified backup signal exists', function ()
         ->and($audit['restore_audit']['verified_signal_operation'])->toBe('pgbackrest_check')
         ->and($audit['restore_audit']['verified_signal_backup_label'])->toBe('20260312-010101F')
         ->and($audit['restore_audit']['verified_signal_artifact_path'])->toBeNull()
-        ->and($audit['restore_audit']['verified_signal_last_known_good_at'])->toBeString();
+        ->and($audit['restore_audit']['verified_signal_last_known_good_at'])->toBeString()
+        ->and($audit['restore_audit']['blast_radius'])->toBeArray()
+        ->and($audit['restore_audit']['blast_radius']['status'])->toBe('pass')
+        ->and($audit['restore_audit']['blast_radius']['score'])->toBeInt()
+        ->and($audit['restore_audit']['post_restore_verification'] ?? null)->toBeNull();
 });
 
 it('does not treat pgbackrest info runs as a verified restore signal', function (): void {
@@ -521,5 +525,61 @@ it('records append-only restore decision evidence for successful restore checks'
         ->and($events[1]->decision)->toBe('allow')
         ->and($events[1]->reason)->toBe('restore_safety_passed')
         ->and($events[1]->payload['restore_audit']['verified_signal_run_id'] ?? null)->toBe((int) $verified->id)
+        ->and($events[1]->payload['restore_audit']['blast_radius']['status'] ?? null)->toBeString()
         ->and($audit['restore_audit']['verified_signal_run_id'])->toBe((int) $verified->id);
+});
+
+it('blocks restore execution when blast radius score exceeds block threshold', function (): void {
+    config()->set('app.env', 'production');
+    config()->set('checkpoint.restore.allowed_environments', ['production']);
+    config()->set('checkpoint.restore.allowed_databases', [':memory:']);
+    config()->set('checkpoint.restore.require_confirmation', false);
+    config()->set('checkpoint.restore.require_verified_backup', false);
+    config()->set('checkpoint.restore.blast_radius.enabled', true);
+    config()->set('checkpoint.restore.blast_radius.warn_score', 30);
+    config()->set('checkpoint.restore.blast_radius.block_score', 50);
+    config()->set('checkpoint.restore.blast_radius.weights', [
+        'environment' => 30,
+        'database' => 25,
+        'target' => 20,
+        'verification' => 25,
+    ]);
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'logical_restore_latest',
+        'argument_text' => 'latest',
+    ]);
+
+    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
+        'restore_target' => 'latest',
+    ]))->toThrow(ConfigurationException::class, 'Restore blast radius score [75] exceeds block threshold [50].');
+});
+
+it('allows restore with warn blast radius status when below block threshold', function (): void {
+    config()->set('app.env', 'production');
+    config()->set('checkpoint.restore.allowed_environments', ['production']);
+    config()->set('checkpoint.restore.allowed_databases', [':memory:']);
+    config()->set('checkpoint.restore.require_confirmation', false);
+    config()->set('checkpoint.restore.require_verified_backup', false);
+    config()->set('checkpoint.restore.blast_radius.enabled', true);
+    config()->set('checkpoint.restore.blast_radius.warn_score', 30);
+    config()->set('checkpoint.restore.blast_radius.block_score', 80);
+    config()->set('checkpoint.restore.blast_radius.weights', [
+        'environment' => 30,
+        'database' => 0,
+        'target' => 20,
+        'verification' => 25,
+    ]);
+
+    $run = CommandRun::factory()->make([
+        'operation' => 'logical_restore_latest',
+        'argument_text' => 'latest',
+    ]);
+
+    $audit = resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
+        'restore_target' => 'latest',
+    ]);
+
+    expect($audit['restore_audit']['blast_radius']['status'] ?? null)->toBe('warn')
+        ->and($audit['restore_audit']['blast_radius']['score'] ?? null)->toBe(50);
 });

@@ -15,6 +15,9 @@ use Illuminate\Contracts\Events\Dispatcher as EventDispatcher;
 use Illuminate\Log\LogManager;
 use Throwable;
 
+use function Laravel\Prompts\intro;
+use function Laravel\Prompts\outro;
+
 final class RecoverOrphansCommand extends Command
 {
     protected $signature = 'db-ops:recover-orphans';
@@ -32,6 +35,10 @@ final class RecoverOrphansCommand extends Command
 
     public function handle(): int
     {
+        if ($this->enhancedInteractiveMode()) {
+            intro('Recover Orphaned Queue Runs');
+        }
+
         $thresholdMinutes = max(1, (int) $this->config->get('checkpoint.queue.orphan_threshold', 10));
         $threshold = now()->subMinutes($thresholdMinutes);
         $claimTimeoutMinutes = max(1, (int) $this->config->get('checkpoint.queue.orphan_claim_timeout', 1));
@@ -140,6 +147,12 @@ final class RecoverOrphansCommand extends Command
             throw $dispatchFailure;
         }
 
+        if ($this->enhancedInteractiveMode()) {
+            outro($claimedRunCount > 0
+                ? sprintf('Recovered %d orphaned run(s).', $claimedRunCount)
+                : 'No orphaned runs found.');
+        }
+
         return self::SUCCESS;
     }
 
@@ -182,5 +195,10 @@ final class RecoverOrphansCommand extends Command
             'duration_seconds' => $run->duration_seconds,
             ...$extra,
         ], static fn (mixed $value): bool => $value !== null);
+    }
+
+    private function enhancedInteractiveMode(): bool
+    {
+        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
     }
 }

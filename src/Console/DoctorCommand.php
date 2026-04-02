@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
-use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
+use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
+
+use function Laravel\Prompts\intro;
 
 final class DoctorCommand extends Command
 {
@@ -31,6 +33,10 @@ final class DoctorCommand extends Command
         $agentMode = (bool) $this->option('agent');
         $outputMode = $agentMode ? 'agent' : (in_array($format, ['table', 'json'], true) ? $format : 'table');
 
+        if ($this->enhancedInteractiveMode() && $outputMode === 'table') {
+            intro('Checkpoint Doctor: Health Checks');
+        }
+
         try {
             $this->validator->validate();
             $checks = $this->reportBuilder->healthChecks();
@@ -47,10 +53,10 @@ final class DoctorCommand extends Command
 
             if ($outputMode === 'json') {
                 $this->line($this->jsonReport($checks));
- 
+
                 return self::FAILURE;
             }
- 
+
             if ($outputMode === 'agent') {
                 $this->line($this->agentReport($checks));
 
@@ -67,10 +73,10 @@ final class DoctorCommand extends Command
 
         if ($outputMode === 'json') {
             $this->line($this->jsonReport($checks));
- 
+
             return self::SUCCESS;
         }
- 
+
         if ($outputMode === 'agent') {
             $this->line($this->agentReport($checks));
 
@@ -141,6 +147,7 @@ final class DoctorCommand extends Command
                     'notes' => $check['notes'],
                     'data' => $check['data'],
                 ], $checks),
+                'slo' => $this->sloPayload($checks, $failedCount, $warnCount),
             ],
             'suggestions' => $this->suggestionsFromChecks($checks),
         ];
@@ -167,21 +174,47 @@ final class DoctorCommand extends Command
 
             if ($code === 'config.validation') {
                 $suggestions[] = 'Fix checkpoint config validation errors and rerun db-ops:doctor --agent.';
+
                 continue;
             }
 
             if ($code === 'queue.orphaned_runs') {
                 $suggestions[] = 'Run db-ops:recover-orphans and ensure queue workers emit regular heartbeats.';
+
                 continue;
             }
 
             if (str_starts_with($code, 'backup_drill.')) {
-                $suggestions[] = 'Record or run a backup drill and verify observability thresholds.';
+                $suggestions[] = 'Run db-ops:enqueue-drill (or record a drill run) and verify freshness, pass-rate, and trend thresholds.';
+
+                $playbookCommands = $check['data']['recommended_commands'] ?? null;
+
+                if (is_array($playbookCommands)) {
+                    foreach ($playbookCommands as $command) {
+                        if (is_string($command) && trim($command) !== '') {
+                            $suggestions[] = 'Run '.$command.' to execute the drill remediation playbook.';
+                        }
+                    }
+                }
+
                 continue;
             }
 
             if ($code === 'backup.last_known_good') {
                 $suggestions[] = 'Queue a fresh backup and verify last-known-good signals are updated.';
+
+                continue;
+            }
+
+            if ($code === 'restore.post_verification') {
+                $suggestions[] = 'Inspect latest restore post-verification checks in doctor/report output and rerun restore with corrected inputs if checks failed.';
+
+                continue;
+            }
+
+            if ($code === 'verification.runs') {
+                $suggestions[] = 'Run verification commands and inspect failed verification runs to restore healthy verification coverage.';
+
                 continue;
             }
         }
@@ -189,5 +222,49 @@ final class DoctorCommand extends Command
         $suggestions = array_values(array_unique($suggestions));
 
         return array_slice($suggestions, 0, 5);
+    }
+
+    private function enhancedInteractiveMode(): bool
+    {
+        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
+    }
+
+    /**
+     * @param  list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>  $checks
+     * @return array{window:string,indicators:list<array{name:string,target:int|float,current:int|float,status:string,unit:string}>,overall_status:string}
+     */
+    private function sloPayload(array $checks, int $failedCount, int $warnCount): array
+    {
+        $totalChecks = count($checks);
+        $passCount = max(0, $totalChecks - $failedCount - $warnCount);
+        $indicators = [
+            [
+                'name' => 'failed_checks',
+                'target' => 0,
+                'current' => $failedCount,
+                'status' => $failedCount > 0 ? 'fail' : 'pass',
+                'unit' => 'checks',
+            ],
+            [
+                'name' => 'warning_checks',
+                'target' => 0,
+                'current' => $warnCount,
+                'status' => $warnCount > 0 ? 'warn' : 'pass',
+                'unit' => 'checks',
+            ],
+            [
+                'name' => 'passing_checks',
+                'target' => $totalChecks,
+                'current' => $passCount,
+                'status' => $failedCount > 0 ? 'fail' : ($warnCount > 0 ? 'warn' : 'pass'),
+                'unit' => 'checks',
+            ],
+        ];
+
+        return [
+            'window' => 'current_health_snapshot',
+            'indicators' => $indicators,
+            'overall_status' => $failedCount > 0 ? 'fail' : ($warnCount > 0 ? 'warn' : 'pass'),
+        ];
     }
 }

@@ -1,294 +1,452 @@
 {
-  "checks": [
-    {
-      "check": "Config: driver",
-      "code": "config.driver",
-      "data": {
-        "driver": "shell"
-      },
-      "notes": "shell",
-      "status": "pass"
-    },
-    {
-      "check": "Config: queue.name",
-      "code": "config.queue_name",
-      "data": {
-        "queue_name": "db-ops"
-      },
-      "notes": "db-ops",
-      "status": "pass"
-    },
-    {
-      "check": "Config: log_channel",
-      "code": "config.log_channel",
-      "data": {
-        "log_channel": "stack"
-      },
-      "notes": "stack",
-      "status": "pass"
-    },
-    {
-      "check": "Config: pgbackrest.stanza",
-      "code": "config.pgbackrest_stanza",
-      "data": {
-        "stanza": "main"
-      },
-      "notes": "main",
-      "status": "pass"
-    },
-    {
-      "check": "Config: pgbackrest.repo",
-      "code": "config.pgbackrest_repo",
-      "data": {
-        "repository": 1
-      },
-      "notes": "1",
-      "status": "pass"
-    },
-    {
-      "check": "Config: pgbackrest.repositories",
-      "code": "config.pgbackrest_repositories",
-      "data": {
-        "repository_count": 1
-      },
-      "notes": "1",
-      "status": "pass"
-    },
-    {
-      "check": "Config: pgbackrest.process_max",
-      "code": "config.pgbackrest_process_max",
-      "data": {
-        "process_max": 2
-      },
-      "notes": "2",
-      "status": "pass"
-    },
-    {
-      "check": "Repo: pgbackrest.active",
-      "code": "repo.pgbackrest_active",
-      "data": {
-        "repository": 1,
-        "type": "posix"
-      },
-      "notes": "repo1 (posix)",
-      "status": "pass"
-    },
-    {
-      "check": "Repo: pgbackrest.target",
-      "code": "repo.pgbackrest_target",
-      "data": {
-        "path": "/tmp/checkpoint-pgbackrest-repo1",
-        "type": "posix"
-      },
-      "notes": "/tmp/checkpoint-pgbackrest-repo1",
-      "status": "pass"
-    },
-    {
-      "check": "Repo: pgbackrest.tls",
-      "code": "repo.pgbackrest_tls",
-      "data": {
-        "ca_file": null,
-        "verify": true
-      },
-      "notes": "verify enabled",
-      "status": "pass"
-    },
-    {
-      "check": "Repo: pgbackrest.encryption",
-      "code": "repo.pgbackrest_encryption",
-      "data": {
-        "cipher_type": "aes-256-cbc",
-        "enabled": false
-      },
-      "notes": "disabled",
-      "status": "warn"
-    },
-    {
-      "check": "Binary: pg_dump",
-      "code": "binary.pg_dump",
-      "data": {
-        "binary": "pg_dump",
-        "found": false,
-        "path": null,
-        "reason": "not_found",
-        "required": false
-      },
-      "notes": "pg_dump not found on PATH",
-      "status": "warn"
-    },
-    {
-      "check": "Binary: pgBackRest",
-      "code": "binary.pgbackrest",
-      "data": {
-        "binary": "pgbackrest",
-        "found": false,
-        "path": null,
-        "reason": "not_found",
-        "required": false
-      },
-      "notes": "pgbackrest not found on PATH",
-      "status": "warn"
-    },
-    {
-      "check": "Binary: gzip",
-      "code": "binary.gzip",
-      "data": {
-        "binary": "gzip",
-        "found": false,
-        "path": null,
-        "reason": "not_found",
-        "required": false
-      },
-      "notes": "gzip not found on PATH",
-      "status": "warn"
-    },
-    {
-      "check": "DB: command_runs table",
-      "code": "db.command_runs_table",
-      "data": {
-        "exists": true,
-        "row_count": 3,
-        "table": "db_ops_command_runs"
-      },
-      "notes": "3 rows",
-      "status": "pass"
-    },
-    {
-      "check": "DB: backup_drill_runs table",
-      "code": "db.backup_drill_runs_table",
-      "data": {
-        "exists": true,
-        "row_count": 1,
-        "table": "db_ops_backup_drill_runs"
-      },
-      "notes": "1 rows",
-      "status": "pass"
-    },
-    {
-      "check": "Queue: db-ops",
-      "code": "queue.worker_visibility",
-      "data": {
-        "queue_name": "db-ops"
-      },
-      "notes": "Cannot verify queue without running worker",
-      "status": "warn"
-    },
-    {
-      "check": "Orphaned runs",
-      "code": "queue.orphaned_runs",
-      "data": {
-        "orphaned_run_count": 0,
-        "threshold_minutes": 10
-      },
-      "notes": "0 pending runs beyond threshold",
-      "status": "pass"
-    },
-    {
-      "check": "Restore posture: environments",
-      "code": "restore.posture.environments",
-      "data": {
-        "allowed_environments": [
-          "local",
-          "testing",
-          "staging"
-        ],
-        "environment": "testing",
-        "reason": "local_or_testing"
-      },
-      "notes": "not enforced in local/testing",
-      "status": "pass"
-    },
-    {
-      "check": "Restore posture: databases",
-      "code": "restore.posture.databases",
-      "data": {
-        "allowed_databases": [
-          "checkpoint_shadow"
-        ],
-        "database": ":memory:",
-        "environment": "testing",
-        "reason": "local_or_testing"
-      },
-      "notes": "not enforced in local/testing",
-      "status": "pass"
-    },
-    {
-      "check": "Restore posture: CI bypass",
-      "code": "restore.posture.ci_bypass",
-      "data": {
-        "allow_in_ci": false,
-        "environment": "testing",
-        "reason": "local_or_testing"
-      },
-      "notes": "not enforced in local/testing",
-      "status": "pass"
-    },
-    {
-      "check": "Restore posture: verified backup",
-      "code": "restore.posture.verified_backup",
-      "data": {
-        "environment": "testing",
-        "reason": "local_or_testing",
-        "require_verified_backup": true
-      },
-      "notes": "not enforced in local/testing",
-      "status": "pass"
-    },
-    {
-      "check": "Backups: last known good",
-      "code": "backup.last_known_good",
-      "data": {
-        "age_hours": 1,
-        "reason": "fresh",
-        "threshold_hours": 24
-      },
-      "notes": "1 hours old (threshold: 24)",
-      "status": "pass"
-    },
-    {
-      "check": "Backups: duration anomaly",
-      "code": "backup.duration_anomaly",
-      "data": {
-        "factor": 2,
-        "min_samples": 3,
-        "reason": "insufficient_samples",
-        "sample_count": 0
-      },
-      "notes": "Not enough successful backup samples",
-      "status": "warn"
-    },
-    {
-      "check": "Backup drills: latest run",
-      "code": "backup_drill.latest_run",
-      "data": {
-        "age_days": 1,
-        "overall_result": "fail",
-        "reason": "fresh",
-        "run_uuid": "drill-fail-001",
-        "threshold_days": 30
-      },
-      "notes": "FAIL 1 days old (drill-fail-001)",
-      "status": "pass"
-    },
-    {
-      "check": "Backup drills: pass rate",
-      "code": "backup_drill.pass_rate",
-      "data": {
-        "latest_run_uuid": "drill-fail-001",
-        "pass_rate_percent": 0,
-        "passing": 0,
-        "reason": "below_threshold",
-        "threshold_percent": 100,
-        "total": 1,
-        "window_days": 14
-      },
-      "notes": "0/1 passed in the last 14 days (0.0%, threshold: 100.0%)",
-      "status": "warn"
-    }
-  ],
-  "driver": "shell",
-  "generated_at": "2026-03-11T12:00:00+00:00",
-  "ok": false,
-  "surface": "doctor",
-  "version": 3
+    "ok": false,
+    "driver": "shell",
+    "generated_at": "2026-03-11T12:00:00+00:00",
+    "checks": [
+        {
+            "code": "config.driver",
+            "check": "Config: driver",
+            "status": "pass",
+            "notes": "shell",
+            "data": {
+                "driver": "shell"
+            }
+        },
+        {
+            "code": "config.queue_name",
+            "check": "Config: queue.name",
+            "status": "pass",
+            "notes": "db-ops",
+            "data": {
+                "queue_name": "db-ops"
+            }
+        },
+        {
+            "code": "config.log_channel",
+            "check": "Config: log_channel",
+            "status": "pass",
+            "notes": "stack",
+            "data": {
+                "log_channel": "stack"
+            }
+        },
+        {
+            "code": "config.pgbackrest_stanza",
+            "check": "Config: pgbackrest.stanza",
+            "status": "pass",
+            "notes": "main",
+            "data": {
+                "stanza": "main"
+            }
+        },
+        {
+            "code": "config.pgbackrest_repo",
+            "check": "Config: pgbackrest.repo",
+            "status": "pass",
+            "notes": "1",
+            "data": {
+                "repository": 1
+            }
+        },
+        {
+            "code": "config.pgbackrest_repositories",
+            "check": "Config: pgbackrest.repositories",
+            "status": "pass",
+            "notes": "1",
+            "data": {
+                "repository_count": 1
+            }
+        },
+        {
+            "code": "config.pgbackrest_process_max",
+            "check": "Config: pgbackrest.process_max",
+            "status": "pass",
+            "notes": "2",
+            "data": {
+                "process_max": 2
+            }
+        },
+        {
+            "code": "repo.pgbackrest_active",
+            "check": "Repo: pgbackrest.active",
+            "status": "pass",
+            "notes": "repo1 (posix)",
+            "data": {
+                "repository": 1,
+                "type": "posix"
+            }
+        },
+        {
+            "code": "repo.pgbackrest_target",
+            "check": "Repo: pgbackrest.target",
+            "status": "pass",
+            "notes": "/tmp/checkpoint-pgbackrest-repo1",
+            "data": {
+                "type": "posix",
+                "path": "/tmp/checkpoint-pgbackrest-repo1"
+            }
+        },
+        {
+            "code": "repo.pgbackrest_tls",
+            "check": "Repo: pgbackrest.tls",
+            "status": "pass",
+            "notes": "verify enabled",
+            "data": {
+                "verify": true,
+                "ca_file": null
+            }
+        },
+        {
+            "code": "repo.pgbackrest_encryption",
+            "check": "Repo: pgbackrest.encryption",
+            "status": "warn",
+            "notes": "disabled",
+            "data": {
+                "enabled": false,
+                "cipher_type": "aes-256-cbc"
+            }
+        },
+        {
+            "code": "binary.pg_dump",
+            "check": "Binary: pg_dump",
+            "status": "warn",
+            "notes": "pg_dump not found on PATH",
+            "data": {
+                "binary": "pg_dump",
+                "required": false,
+                "found": false,
+                "path": null,
+                "reason": "not_found"
+            }
+        },
+        {
+            "code": "binary.pgbackrest",
+            "check": "Binary: pgBackRest",
+            "status": "warn",
+            "notes": "pgbackrest not found on PATH",
+            "data": {
+                "binary": "pgbackrest",
+                "required": false,
+                "found": false,
+                "path": null,
+                "reason": "not_found"
+            }
+        },
+        {
+            "code": "binary.gzip",
+            "check": "Binary: gzip",
+            "status": "warn",
+            "notes": "gzip not found on PATH",
+            "data": {
+                "binary": "gzip",
+                "required": false,
+                "found": false,
+                "path": null,
+                "reason": "not_found"
+            }
+        },
+        {
+            "code": "db.command_runs_table",
+            "check": "DB: command_runs table",
+            "status": "pass",
+            "notes": "3 rows",
+            "data": {
+                "table": "db_ops_command_runs",
+                "exists": true,
+                "row_count": 3
+            }
+        },
+        {
+            "code": "db.backup_drill_runs_table",
+            "check": "DB: backup_drill_runs table",
+            "status": "pass",
+            "notes": "1 rows",
+            "data": {
+                "table": "db_ops_backup_drill_runs",
+                "exists": true,
+                "row_count": 1
+            }
+        },
+        {
+            "code": "db.verification_runs_table",
+            "check": "DB: verification_runs table",
+            "status": "pass",
+            "notes": "2 rows",
+            "data": {
+                "table": "db_ops_verification_runs",
+                "exists": true,
+                "row_count": 2
+            }
+        },
+        {
+            "code": "queue.worker_visibility",
+            "check": "Queue: db-ops",
+            "status": "warn",
+            "notes": "Cannot verify queue without running worker",
+            "data": {
+                "queue_name": "db-ops"
+            }
+        },
+        {
+            "code": "queue.orphaned_runs",
+            "check": "Orphaned runs",
+            "status": "pass",
+            "notes": "0 pending runs beyond threshold",
+            "data": {
+                "orphaned_run_count": 0,
+                "threshold_minutes": 10
+            }
+        },
+        {
+            "code": "restore.posture.environments",
+            "check": "Restore posture: environments",
+            "status": "pass",
+            "notes": "not enforced in local/testing",
+            "data": {
+                "environment": "testing",
+                "allowed_environments": [
+                    "local",
+                    "testing",
+                    "staging"
+                ],
+                "reason": "local_or_testing"
+            }
+        },
+        {
+            "code": "restore.posture.databases",
+            "check": "Restore posture: databases",
+            "status": "pass",
+            "notes": "not enforced in local/testing",
+            "data": {
+                "environment": "testing",
+                "database": ":memory:",
+                "allowed_databases": [
+                    "checkpoint_shadow"
+                ],
+                "reason": "local_or_testing"
+            }
+        },
+        {
+            "code": "restore.posture.ci_bypass",
+            "check": "Restore posture: CI bypass",
+            "status": "pass",
+            "notes": "not enforced in local/testing",
+            "data": {
+                "environment": "testing",
+                "allow_in_ci": false,
+                "reason": "local_or_testing"
+            }
+        },
+        {
+            "code": "restore.posture.verified_backup",
+            "check": "Restore posture: verified backup",
+            "status": "pass",
+            "notes": "not enforced in local/testing",
+            "data": {
+                "environment": "testing",
+                "require_verified_backup": true,
+                "reason": "local_or_testing"
+            }
+        },
+        {
+            "code": "restore.post_verification",
+            "check": "Restore posture: post-restore verification",
+            "status": "warn",
+            "notes": "latest restore post-verification result: fail",
+            "data": {
+                "latest_restore_run_id": 3,
+                "operation": "logical_restore_file",
+                "aggregate_result": "fail",
+                "post_restore_verification": {
+                    "contract_version": 1,
+                    "command_run_id": 3,
+                    "operation": "logical_restore_file",
+                    "generated_at": "2026-03-11T11:42:00+00:00",
+                    "aggregate_result": "fail",
+                    "checks_performed": [
+                        "restore_audit_recorded",
+                        "restore_target_recorded",
+                        "command_exit_code_zero",
+                        "verified_backup_signal_linkage"
+                    ],
+                    "checks": [
+                        {
+                            "name": "restore_audit_recorded",
+                            "passed": true,
+                            "status": "pass",
+                            "description": "restore guard decision metadata was persisted",
+                            "observed": "recorded"
+                        },
+                        {
+                            "name": "restore_target_recorded",
+                            "passed": true,
+                            "status": "pass",
+                            "description": "restore target is present for post-restore verification linkage",
+                            "observed": "nightly.sql"
+                        },
+                        {
+                            "name": "command_exit_code_zero",
+                            "passed": false,
+                            "status": "fail",
+                            "description": "restore command finished with exit code 0",
+                            "observed": 1
+                        },
+                        {
+                            "name": "verified_backup_signal_linkage",
+                            "passed": true,
+                            "status": "pass",
+                            "description": "verified-backup requirement is satisfied when enabled",
+                            "observed": {
+                                "required": true,
+                                "verified_signal_run_id": 2
+                            }
+                        }
+                    ]
+                },
+                "reason": "check_failed"
+            }
+        },
+        {
+            "code": "backup.last_known_good",
+            "check": "Backups: last known good",
+            "status": "pass",
+            "notes": "1 hours old (threshold: 24)",
+            "data": {
+                "age_hours": 1,
+                "threshold_hours": 24,
+                "reason": "fresh"
+            }
+        },
+        {
+            "code": "backup.duration_anomaly",
+            "check": "Backups: duration anomaly",
+            "status": "warn",
+            "notes": "Not enough successful backup samples",
+            "data": {
+                "factor": 2,
+                "min_samples": 3,
+                "sample_count": 0,
+                "reason": "insufficient_samples"
+            }
+        },
+        {
+            "code": "backup_drill.latest_run",
+            "check": "Backup drills: latest run",
+            "status": "pass",
+            "notes": "FAIL 1 days old (drill-fail-001)",
+            "data": {
+                "run_uuid": "drill-fail-001",
+                "overall_result": "fail",
+                "age_days": 1,
+                "threshold_days": 30,
+                "reason": "fresh"
+            }
+        },
+        {
+            "code": "backup_drill.pass_rate",
+            "check": "Backup drills: pass rate",
+            "status": "warn",
+            "notes": "0/1 passed in the last 14 days (0.0%, threshold: 100.0%)",
+            "data": {
+                "window_days": 14,
+                "total": 1,
+                "passing": 0,
+                "pass_rate_percent": 0,
+                "threshold_percent": 100,
+                "latest_run_uuid": "drill-fail-001",
+                "reason": "below_threshold"
+            }
+        },
+        {
+            "code": "backup_drill.trend",
+            "check": "Backup drills: trend",
+            "status": "pass",
+            "notes": "Stable (FAIL streak x1, n=1)",
+            "data": {
+                "label": "Stable (FAIL streak x1, n=1)",
+                "window_days": 14,
+                "sample_size": 1,
+                "latest_result": "fail",
+                "latest_run_uuid": "drill-fail-001",
+                "latest_executed_at": "2026-03-11 09:00:00",
+                "streak": {
+                    "type": "fail",
+                    "length": 1
+                },
+                "recent": {
+                    "results": [
+                        "fail"
+                    ],
+                    "passing": 0,
+                    "failing": 1,
+                    "outcomes": [
+                        {
+                            "run_uuid": "drill-fail-001",
+                            "result": "fail",
+                            "executed_at": "2026-03-11 09:00:00"
+                        }
+                    ]
+                },
+                "trajectory": "insufficient_data",
+                "status": "stable"
+            }
+        },
+        {
+            "code": "backup_drill.playbook",
+            "check": "Backup drills: remediation playbook",
+            "status": "warn",
+            "notes": "Backup drill pass rate is below threshold",
+            "data": {
+                "signature": "drill.pass_rate_below_threshold",
+                "severity": "warn",
+                "title": "Backup drill pass rate is below threshold",
+                "summary": "Drill pass rate is 0.0% in the last 14 day(s), below the configured 100.0% threshold.",
+                "recommended_commands": [
+                    "db-ops:enqueue-drill",
+                    "db-ops:status --summary --format=json"
+                ],
+                "steps": [
+                    "Run a new drill and validate marker, RTO, and RPO checks.",
+                    "Prioritize fixes for the most common failing check dimensions.",
+                    "Increase successful drill frequency until pass-rate SLO is restored."
+                ],
+                "evidence": {
+                    "window_days": 14,
+                    "total": 1,
+                    "passing": 0,
+                    "pass_rate_percent": 0,
+                    "minimum_pass_rate_percent": 100,
+                    "latest_result": "fail",
+                    "latest_run_uuid": "drill-fail-001",
+                    "latest_age_days": 1,
+                    "max_age_days": 30,
+                    "trend_status": "stable",
+                    "trend_trajectory": "insufficient_data"
+                }
+            }
+        },
+        {
+            "code": "verification.runs",
+            "check": "Verification: runs",
+            "status": "warn",
+            "notes": "2 total (1 verified, 1 failed)",
+            "data": {
+                "total_runs": 2,
+                "verified_runs": 1,
+                "failed_runs": 1,
+                "success_rate_percent": 50,
+                "health_status": "warn",
+                "latest": {
+                    "id": 2,
+                    "command_run_id": 3,
+                    "verification_type": "pgbackrest_check",
+                    "status": "failed",
+                    "verified_at": "2026-03-11 11:57:00"
+                },
+                "reason": "failed_runs_present"
+            }
+        }
+    ],
+    "version": 3,
+    "surface": "doctor"
 }

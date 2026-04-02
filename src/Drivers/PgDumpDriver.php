@@ -14,6 +14,7 @@ use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
+use AdityaaCodes\LaravelCheckpoint\Services\PostRestoreVerificationBuilder;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationFailureSuggestionMapper;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use Illuminate\Support\Facades\Log;
@@ -727,6 +728,23 @@ final class PgDumpDriver implements BackupDriver
             ];
         }
 
+        if (is_array($completed['metadata'] ?? null)) {
+            $postRestoreVerification = $this->postRestoreVerificationBuilder()->build(
+                run: $run,
+                exitCode: $exitCode,
+                metadata: $completed['metadata'],
+                restoreTarget: is_string($plannedMetadata['restore_target'] ?? null) ? $plannedMetadata['restore_target'] : null,
+            );
+
+            if (is_array($postRestoreVerification)) {
+                $restoreAudit = is_array($completed['metadata']['restore_audit'] ?? null)
+                    ? $completed['metadata']['restore_audit']
+                    : [];
+                $restoreAudit['post_restore_verification'] = $postRestoreVerification;
+                $completed['metadata']['restore_audit'] = $restoreAudit;
+            }
+        }
+
         return $completed;
     }
 
@@ -771,6 +789,11 @@ final class PgDumpDriver implements BackupDriver
     private function restoreSafetyGuard(): RestoreSafetyGuard
     {
         return resolve(RestoreSafetyGuard::class);
+    }
+
+    private function postRestoreVerificationBuilder(): PostRestoreVerificationBuilder
+    {
+        return resolve(PostRestoreVerificationBuilder::class);
     }
 
     /**

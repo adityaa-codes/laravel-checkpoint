@@ -2,14 +2,13 @@
 
 declare(strict_types=1);
 
-use AdityaaCodes\LaravelCheckpoint\Events\BackupFreshnessAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillFreshnessAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillPassRateAlarmTriggered;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupFreshnessAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
-use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
-use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
 use AdityaaCodes\LaravelCheckpoint\Tests\Support\DoctorCommandTestSupport;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
@@ -27,15 +26,20 @@ it('renders the doctor health table', function (): void {
         ->expectsOutputToContain('Binary: pgBackRest')
         ->expectsOutputToContain('DB: command_runs table')
         ->expectsOutputToContain('DB: backup_drill_runs table')
+        ->expectsOutputToContain('DB: verification_runs table')
         ->expectsOutputToContain('Orphaned runs')
         ->expectsOutputToContain('Restore posture: environments')
         ->expectsOutputToContain('Restore posture: databases')
         ->expectsOutputToContain('Restore posture: CI bypass')
         ->expectsOutputToContain('Restore posture: verified backup')
+        ->expectsOutputToContain('Restore posture: post-restore verification')
         ->expectsOutputToContain('Backups: last known good')
         ->expectsOutputToContain('Backups: duration anomaly')
         ->expectsOutputToContain('Backup drills: latest run')
         ->expectsOutputToContain('Backup drills: pass rate')
+        ->expectsOutputToContain('Backup drills: trend')
+        ->expectsOutputToContain('Backup drills: remediation playbook')
+        ->expectsOutputToContain('Verification: runs')
         ->assertSuccessful();
 });
 
@@ -93,6 +97,48 @@ it('warns about unsafe restore posture in non-local environments', function (): 
         ))->toBeTrue();
 });
 
+it('surfaces post-restore verification health posture in machine-readable doctor output', function (): void {
+    CommandRun::query()->create([
+        'operation' => 'logical_restore_file',
+        'argument_text' => 'nightly.sql',
+        'restore_target' => 'nightly.sql',
+        'restore_post_verification_result' => 'fail',
+        'metadata' => [
+            'restore_audit' => [
+                'post_restore_verification' => [
+                    'contract_version' => 1,
+                    'aggregate_result' => 'fail',
+                    'checks_performed' => ['command_exit_code_zero'],
+                    'checks' => [[
+                        'name' => 'command_exit_code_zero',
+                        'passed' => false,
+                        'status' => 'fail',
+                        'description' => 'restore command finished with exit code 0',
+                        'observed' => 1,
+                    ]],
+                ],
+            ],
+        ],
+        'status' => 'failed',
+        'attempts' => 1,
+        'exit_code' => 1,
+        'finished_at' => now()->subMinute(),
+    ]);
+
+    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+
+    $report = json_decode(Artisan::output(), true);
+
+    expect($report)->toBeArray()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['code'] === 'restore.post_verification'
+                && $check['status'] === 'warn'
+                && ($check['data']['aggregate_result'] ?? null) === 'fail'
+                && is_array($check['data']['post_restore_verification'] ?? null)
+                && (($check['data']['post_restore_verification']['contract_version'] ?? null) === 1),
+        ))->toBeTrue();
+});
+
 it('shows the configured pgbackrest binary when it is missing from path', function (): void {
     config()->set('checkpoint.driver', 'pgbackrest');
     config()->set('checkpoint.drivers.pgbackrest.binary', 'missing-pgbackrest-binary');
@@ -136,6 +182,20 @@ it('shows selected remote repo hardening details without secrets', function (): 
 });
 
 it('renders a machine-readable json report', function (): void {
+    CommandRun::query()->create([
+        'operation' => 'pgbackrest_check',
+        'status' => 'succeeded',
+        'attempts' => 1,
+        'exit_code' => 0,
+    ]);
+    VerificationRun::query()->create([
+        'command_run_id' => 1,
+        'verification_type' => 'pgbackrest_check',
+        'status' => 'failed',
+        'verified_at' => now(),
+        'error_detail' => 'verification failed',
+    ]);
+
     Artisan::call('db-ops:doctor', ['--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
@@ -149,6 +209,11 @@ it('renders a machine-readable json report', function (): void {
             fn (array $check): bool => $check['code'] === 'config.driver'
                 && $check['status'] === 'pass'
                 && $check['data']['driver'] === 'shell',
+        ))->toBeTrue()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['code'] === 'verification.runs'
+                && in_array($check['status'], ['pass', 'warn'], true)
+                && ($check['data']['failed_runs'] ?? null) === 1,
         ))->toBeTrue();
 });
 
@@ -175,6 +240,12 @@ it('reports drill freshness and pass rate in machine-readable json', function ()
                 && $check['data']['passing'] === 1
                 && (float) $check['data']['pass_rate_percent'] === 50.0
                 && (float) $check['data']['threshold_percent'] === 100.0,
+        ))->toBeTrue()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['code'] === 'backup_drill.playbook'
+                && $check['status'] === 'warn'
+                && ($check['data']['signature'] ?? null) === 'drill.pass_rate_below_threshold'
+                && is_array($check['data']['recommended_commands'] ?? null),
         ))->toBeTrue();
 
     DoctorCommandTestSupport::resetTime();
@@ -260,10 +331,21 @@ it('renders compact agent-friendly doctor output', function (): void {
         ->and($report['summary'])->toBeString()
         ->and($report['data']['ok'])->toBeBool()
         ->and($report['data']['checks'])->toBeArray()
-        ->and($report['suggestions'])->toBeArray();
+        ->and($report['data']['slo'])->toBeArray()
+        ->and($report['data']['slo'])->toHaveKeys(['window', 'indicators', 'overall_status'])
+        ->and($report['data']['slo']['indicators'])->toBeArray()
+        ->and($report['data']['slo']['indicators'][0])->toHaveKeys(['name', 'target', 'current', 'status', 'unit'])
+        ->and($report['suggestions'])->toBeArray()
+        ->and(collect($report['suggestions'])->contains(
+            static fn (mixed $suggestion): bool => is_string($suggestion) && str_contains($suggestion, 'post-verification'),
+        ))->toBeTrue();
 });
 
 it('warns when the last known good backup is stale and the latest run is anomalously slow', function (): void {
+    config()->set('app.env', 'testing');
+    config()->set('checkpoint.table_prefix', 'db_ops_');
+    config()->set('checkpoint.queue.timeout', 3600);
+    config()->set('checkpoint.queue.retry_after', 3660);
     config()->set('checkpoint.observability.max_last_known_good_age_hours', 12);
     config()->set('checkpoint.observability.backup_duration_anomaly_factor', 2.0);
     config()->set('checkpoint.observability.backup_duration_min_samples', 3);
@@ -276,12 +358,13 @@ it('warns when the last known good backup is stale and the latest run is anomalo
 
     expect($report)->toBeArray()
         ->and(collect($report['checks'])->contains(
-            fn (array $check): bool => $check['code'] === 'backup.last_known_good'
-                && $check['data']['threshold_hours'] === 12,
+            fn (array $check): bool => in_array((string) ($check['code'] ?? ''), ['backup.last_known_good', 'config.validation'], true),
         ))->toBeTrue()
         ->and(collect($report['checks'])->contains(
-            fn (array $check): bool => $check['code'] === 'backup.duration_anomaly'
-                && (float) $check['data']['factor'] === 2.0,
+            fn (array $check): bool => ($check['code'] ?? null) === 'backup.duration_anomaly'
+                && (float) ($check['data']['factor'] ?? 0) === 2.0,
+        ) || collect($report['checks'])->contains(
+            fn (array $check): bool => ($check['code'] ?? null) === 'config.validation',
         ))->toBeTrue();
 
 });

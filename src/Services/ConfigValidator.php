@@ -6,6 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Services;
 
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
+use AdityaaCodes\LaravelCheckpoint\Support\NotificationEventMap;
 use Illuminate\Contracts\Config\Repository;
 
 /** @internal */
@@ -25,8 +26,10 @@ final readonly class ConfigValidator
         $this->validateDriverTimeoutBudgets();
         $this->validateRestoreSettings();
         $this->validateScheduleSettings();
+        $this->validateRetentionSettings();
         $this->validateObservabilitySettings();
         $this->validateReportingSettings();
+        $this->validateNotificationSettings();
         $this->validateOutputSettings();
         $this->validateReplicationSettings();
         $this->validateCustomOperations();
@@ -530,6 +533,42 @@ final readonly class ConfigValidator
             }
         }
 
+        $blastRadius = $config['blast_radius'] ?? [];
+
+        if (! is_array($blastRadius)) {
+            throw new ConfigurationException('checkpoint.restore.blast_radius must be an array.');
+        }
+
+        if (! is_bool($blastRadius['enabled'] ?? null)) {
+            throw new ConfigurationException('checkpoint.restore.blast_radius.enabled must be a boolean.');
+        }
+
+        foreach (['warn_score', 'block_score'] as $key) {
+            $value = $blastRadius[$key] ?? null;
+
+            if (! is_int($value) || $value < 0 || $value > 100) {
+                throw new ConfigurationException(sprintf('checkpoint.restore.blast_radius.%s must be between 0 and 100.', $key));
+            }
+        }
+
+        if (($blastRadius['warn_score'] ?? 0) > ($blastRadius['block_score'] ?? 100)) {
+            throw new ConfigurationException('checkpoint.restore.blast_radius.warn_score must be less than or equal to checkpoint.restore.blast_radius.block_score.');
+        }
+
+        $weights = $blastRadius['weights'] ?? [];
+
+        if (! is_array($weights)) {
+            throw new ConfigurationException('checkpoint.restore.blast_radius.weights must be an array.');
+        }
+
+        foreach (['environment', 'database', 'target', 'verification'] as $key) {
+            $value = $weights[$key] ?? null;
+
+            if (! is_int($value) || $value < 0 || $value > 100) {
+                throw new ConfigurationException(sprintf('checkpoint.restore.blast_radius.weights.%s must be between 0 and 100.', $key));
+            }
+        }
+
         $confirmationPhrase = $config['confirmation_phrase'] ?? null;
         $confirmationToken = $config['confirmation_token'] ?? null;
 
@@ -614,6 +653,99 @@ final readonly class ConfigValidator
         }
     }
 
+    private function validateNotificationSettings(): void
+    {
+        $config = $this->config->get('checkpoint.notifications', []);
+
+        if (! is_array($config)) {
+            throw new ConfigurationException('checkpoint.notifications must be an array.');
+        }
+
+        if (! is_bool($config['enabled'] ?? null)) {
+            throw new ConfigurationException('checkpoint.notifications.enabled must be a boolean.');
+        }
+
+        $events = $config['events'] ?? [];
+
+        if (! is_array($events)) {
+            throw new ConfigurationException('checkpoint.notifications.events must be an array.');
+        }
+
+        foreach ($events as $event) {
+            if (! is_string($event) || trim($event) === '') {
+                throw new ConfigurationException('checkpoint.notifications.events must contain non-empty strings.');
+            }
+
+            if (! NotificationEventMap::supportsKey($event)) {
+                throw new ConfigurationException(sprintf('checkpoint.notifications.events contains unsupported event key [%s].', $event));
+            }
+        }
+
+        $routing = $config['routing'] ?? [];
+
+        if (! is_array($routing)) {
+            throw new ConfigurationException('checkpoint.notifications.routing must be an array.');
+        }
+
+        foreach (['info', 'warning', 'critical'] as $level) {
+            $channels = $routing[$level] ?? null;
+
+            if (! is_array($channels)) {
+                throw new ConfigurationException(sprintf('checkpoint.notifications.routing.%s must be an array.', $level));
+            }
+
+            foreach ($channels as $channel) {
+                if (! is_string($channel) || ! in_array($channel, ['log', 'mail', 'webhook'], true)) {
+                    throw new ConfigurationException(
+                        sprintf('checkpoint.notifications.routing.%s must only contain: log, mail, webhook.', $level),
+                    );
+                }
+            }
+        }
+
+        $mail = $config['mail'] ?? [];
+
+        if (! is_array($mail)) {
+            throw new ConfigurationException('checkpoint.notifications.mail must be an array.');
+        }
+
+        $mailTo = $mail['to'] ?? [];
+
+        if (! is_array($mailTo)) {
+            throw new ConfigurationException('checkpoint.notifications.mail.to must be an array.');
+        }
+
+        foreach ($mailTo as $address) {
+            if (! is_string($address) || ! filter_var($address, FILTER_VALIDATE_EMAIL)) {
+                throw new ConfigurationException('checkpoint.notifications.mail.to must contain valid email addresses.');
+            }
+        }
+
+        $webhook = $config['webhook'] ?? [];
+
+        if (! is_array($webhook)) {
+            throw new ConfigurationException('checkpoint.notifications.webhook must be an array.');
+        }
+
+        $webhookUrl = $webhook['url'] ?? null;
+
+        if ($webhookUrl !== null && (! is_string($webhookUrl) || trim($webhookUrl) === '' || ! filter_var($webhookUrl, FILTER_VALIDATE_URL))) {
+            throw new ConfigurationException('checkpoint.notifications.webhook.url must be null or a valid URL.');
+        }
+
+        $timeoutSeconds = $webhook['timeout_seconds'] ?? null;
+
+        if (! is_int($timeoutSeconds) || $timeoutSeconds < 1 || $timeoutSeconds > 60) {
+            throw new ConfigurationException('checkpoint.notifications.webhook.timeout_seconds must be between 1 and 60.');
+        }
+
+        $provider = $webhook['provider'] ?? 'generic';
+
+        if (! is_string($provider) || ! in_array($provider, ['generic', 'slack', 'telegram'], true)) {
+            throw new ConfigurationException('checkpoint.notifications.webhook.provider must be generic, slack, or telegram.');
+        }
+    }
+
     private function validateOutputSettings(): void
     {
         $config = $this->config->get('checkpoint.output', []);
@@ -682,6 +814,7 @@ final readonly class ConfigValidator
 
         foreach ([
             'logical_backup_enabled',
+            'backup_drill_enabled',
             'health_check_enabled',
             'recover_orphans_enabled',
             'prune_enabled',
@@ -699,10 +832,22 @@ final readonly class ConfigValidator
             throw new ConfigurationException('checkpoint.schedule.logical_backup_daily_at must use HH:MM 24-hour format.');
         }
 
+        $backupDrillDailyAt = $config['backup_drill_daily_at'] ?? null;
+
+        if (! is_string($backupDrillDailyAt) || preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $backupDrillDailyAt) !== 1) {
+            throw new ConfigurationException('checkpoint.schedule.backup_drill_daily_at must use HH:MM 24-hour format.');
+        }
+
         $timezone = $config['logical_backup_timezone'] ?? null;
 
         if (! is_string($timezone) || ! in_array($timezone, timezone_identifiers_list(), true)) {
             throw new ConfigurationException('checkpoint.schedule.logical_backup_timezone must be a valid timezone identifier.');
+        }
+
+        $backupDrillTimezone = $config['backup_drill_timezone'] ?? null;
+
+        if (! is_string($backupDrillTimezone) || ! in_array($backupDrillTimezone, timezone_identifiers_list(), true)) {
+            throw new ConfigurationException('checkpoint.schedule.backup_drill_timezone must be a valid timezone identifier.');
         }
 
         foreach (['overlap_expires_at', 'prune_keep_days', 'prune_keep_failed_days', 'prune_keep_backup_drill_days'] as $key) {
@@ -753,6 +898,47 @@ final readonly class ConfigValidator
                         $driver,
                     ),
                 );
+            }
+        }
+    }
+
+    private function validateRetentionSettings(): void
+    {
+        $config = $this->config->get('checkpoint.retention', []);
+
+        if (! is_array($config)) {
+            throw new ConfigurationException('checkpoint.retention must be an array.');
+        }
+
+        if (! is_bool($config['enabled'] ?? null)) {
+            throw new ConfigurationException('checkpoint.retention.enabled must be a boolean.');
+        }
+
+        foreach (['default_days', 'failed_days'] as $key) {
+            if (! is_int($config[$key] ?? null) || $config[$key] < 1) {
+                throw new ConfigurationException(sprintf('checkpoint.retention.%s must be greater than zero.', $key));
+            }
+        }
+
+        $tiers = $config['tiers'] ?? [];
+
+        if (! is_array($tiers)) {
+            throw new ConfigurationException('checkpoint.retention.tiers must be an array.');
+        }
+
+        foreach ($tiers as $tier => $days) {
+            if (! is_string($tier) || trim($tier) === '') {
+                throw new ConfigurationException('checkpoint.retention.tiers keys must be non-empty strings.');
+            }
+
+            $normalizedTier = strtolower(trim($tier));
+
+            if (preg_match('/^[a-z][a-z0-9_-]*$/', $normalizedTier) !== 1) {
+                throw new ConfigurationException(sprintf('checkpoint.retention.tiers.%s key must use lowercase alphanumeric, underscore, or hyphen characters.', (string) $tier));
+            }
+
+            if (! is_int($days) || $days < 1) {
+                throw new ConfigurationException(sprintf('checkpoint.retention.tiers.%s must be greater than zero.', $normalizedTier));
             }
         }
     }
@@ -816,9 +1002,36 @@ final readonly class ConfigValidator
             'require_confirmation_token',
             'block_in_ci',
             'require_dry_run_before_apply',
+            'enforce_change_window',
         ] as $flag) {
             if (! is_bool($config[$flag] ?? null)) {
                 throw new ConfigurationException(sprintf('checkpoint.replication.%s must be a boolean.', $flag));
+            }
+        }
+
+        $changeWindowTimezone = $config['change_window_timezone'] ?? null;
+
+        if (! is_string($changeWindowTimezone) || trim($changeWindowTimezone) === '' || ! in_array($changeWindowTimezone, timezone_identifiers_list(), true)) {
+            throw new ConfigurationException('checkpoint.replication.change_window_timezone must be a valid timezone identifier.');
+        }
+
+        $changeWindowDays = $config['change_window_days'] ?? [];
+
+        if (! is_array($changeWindowDays)) {
+            throw new ConfigurationException('checkpoint.replication.change_window_days must be an array.');
+        }
+
+        foreach ($changeWindowDays as $day) {
+            if (! is_string($day) || ! preg_match('/^(mon|tue|wed|thu|fri|sat|sun)$/i', trim($day))) {
+                throw new ConfigurationException('checkpoint.replication.change_window_days must only contain mon,tue,wed,thu,fri,sat,sun.');
+            }
+        }
+
+        foreach (['change_window_start', 'change_window_end'] as $windowKey) {
+            $value = $config[$windowKey] ?? null;
+
+            if (! is_string($value) || ! preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', trim($value))) {
+                throw new ConfigurationException(sprintf('checkpoint.replication.%s must use HH:MM 24-hour format.', $windowKey));
             }
         }
 

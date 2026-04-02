@@ -1,70 +1,219 @@
 {
-  "version": 1,
-  "surface": "status",
-  "mode": "summary",
-  "summary": {
-    "pending_runs": 1,
-    "running_runs": 0,
-    "failed_runs_24h": 1,
-    "last_known_good_backup": {
-      "label": "full:20260311-010101F at 2026-03-11 11:50:00",
-      "timestamp": "2026-03-11 11:50:00",
-      "operation": "pgbackrest_backup_full"
+    "mode": "summary",
+    "summary": {
+        "pending_runs": 1,
+        "running_runs": 0,
+        "failed_runs_24h": 1,
+        "last_known_good_backup": {
+            "label": "full:20260311-010101F at 2026-03-11 11:50:00",
+            "timestamp": "2026-03-11 11:50:00",
+            "operation": "pgbackrest_backup_full"
+        },
+        "latest_verified_backup": {
+            "label": "full:20260311-010101F at 2026-03-11 11:55:00",
+            "timestamp": "2026-03-11 11:55:00",
+            "operation": "pgbackrest_backup_full"
+        },
+        "latest_backup_drill": {
+            "label": "drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00",
+            "timestamp": "2026-03-11 09:00:00",
+            "run_uuid": "drill-fail-001",
+            "overall_result": "fail",
+            "executed_by": "ops-user"
+        },
+        "latest_failed_backup_drill": {
+            "label": "drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00",
+            "timestamp": "2026-03-11 09:00:00",
+            "run_uuid": "drill-fail-001",
+            "overall_result": "fail",
+            "executed_by": "ops-user"
+        },
+        "backup_drill_pass_rate": {
+            "label": "0/1 (0.0%)",
+            "window_days": 30,
+            "total": 1,
+            "passing": 0,
+            "pass_rate_percent": 0
+        },
+        "backup_drill_trend": {
+            "label": "Stable (FAIL streak x1, n=1)",
+            "window_days": 30,
+            "sample_size": 1,
+            "latest_result": "fail",
+            "latest_run_uuid": "drill-fail-001",
+            "latest_executed_at": "2026-03-11 09:00:00",
+            "streak": {
+                "type": "fail",
+                "length": 1
+            },
+            "recent": {
+                "results": [
+                    "fail"
+                ],
+                "passing": 0,
+                "failing": 1,
+                "outcomes": [
+                    {
+                        "run_uuid": "drill-fail-001",
+                        "result": "fail",
+                        "executed_at": "2026-03-11 09:00:00"
+                    }
+                ]
+            },
+            "trajectory": "insufficient_data",
+            "status": "stable"
+        },
+        "backup_drill_remediation_playbook": {
+            "signature": "drill.pass_rate_below_threshold",
+            "severity": "warn",
+            "title": "Backup drill pass rate is below threshold",
+            "summary": "Drill pass rate is 0.0% in the last 30 day(s), below the configured 100.0% threshold.",
+            "recommended_commands": [
+                "db-ops:enqueue-drill",
+                "db-ops:status --summary --format=json"
+            ],
+            "steps": [
+                "Run a new drill and validate marker, RTO, and RPO checks.",
+                "Prioritize fixes for the most common failing check dimensions.",
+                "Increase successful drill frequency until pass-rate SLO is restored."
+            ],
+            "evidence": {
+                "window_days": 30,
+                "total": 1,
+                "passing": 0,
+                "pass_rate_percent": 0,
+                "minimum_pass_rate_percent": 100,
+                "latest_result": "fail",
+                "latest_run_uuid": "drill-fail-001",
+                "latest_age_days": 1,
+                "max_age_days": 30,
+                "trend_status": "stable",
+                "trend_trajectory": "insufficient_data"
+            }
+        },
+        "latest_restore_run": {
+            "label": "logical_restore_file [failed] (nightly.sql) {confirm=token, verified_run=2, post_verify=fail} at 2026-03-11 11:42:00",
+            "timestamp": "2026-03-11 11:42:00",
+            "operation": "logical_restore_file",
+            "status": "failed",
+            "target": "nightly.sql",
+            "blast_radius": null,
+            "audit": {
+                "environment": "testing",
+                "database": ":memory:",
+                "target": "nightly.sql",
+                "confirmation_required": true,
+                "confirmation_satisfied_via": "token",
+                "verified_backup_required": true,
+                "verified_signal_run_id": 2,
+                "post_restore_verification": {
+                    "contract_version": 1,
+                    "command_run_id": 3,
+                    "operation": "logical_restore_file",
+                    "generated_at": "2026-03-11T11:42:00+00:00",
+                    "aggregate_result": "fail",
+                    "checks_performed": [
+                        "restore_audit_recorded",
+                        "restore_target_recorded",
+                        "command_exit_code_zero",
+                        "verified_backup_signal_linkage"
+                    ],
+                    "checks": [
+                        {
+                            "name": "restore_audit_recorded",
+                            "passed": true,
+                            "status": "pass",
+                            "description": "restore guard decision metadata was persisted",
+                            "observed": "recorded"
+                        },
+                        {
+                            "name": "restore_target_recorded",
+                            "passed": true,
+                            "status": "pass",
+                            "description": "restore target is present for post-restore verification linkage",
+                            "observed": "nightly.sql"
+                        },
+                        {
+                            "name": "command_exit_code_zero",
+                            "passed": false,
+                            "status": "fail",
+                            "description": "restore command finished with exit code 0",
+                            "observed": 1
+                        },
+                        {
+                            "name": "verified_backup_signal_linkage",
+                            "passed": true,
+                            "status": "pass",
+                            "description": "verified-backup requirement is satisfied when enabled",
+                            "observed": {
+                                "required": true,
+                                "verified_signal_run_id": 2
+                            }
+                        }
+                    ]
+                }
+            },
+            "post_restore_verification": {
+                "contract_version": 1,
+                "command_run_id": 3,
+                "operation": "logical_restore_file",
+                "generated_at": "2026-03-11T11:42:00+00:00",
+                "aggregate_result": "fail",
+                "checks_performed": [
+                    "restore_audit_recorded",
+                    "restore_target_recorded",
+                    "command_exit_code_zero",
+                    "verified_backup_signal_linkage"
+                ],
+                "checks": [
+                    {
+                        "name": "restore_audit_recorded",
+                        "passed": true,
+                        "status": "pass",
+                        "description": "restore guard decision metadata was persisted",
+                        "observed": "recorded"
+                    },
+                    {
+                        "name": "restore_target_recorded",
+                        "passed": true,
+                        "status": "pass",
+                        "description": "restore target is present for post-restore verification linkage",
+                        "observed": "nightly.sql"
+                    },
+                    {
+                        "name": "command_exit_code_zero",
+                        "passed": false,
+                        "status": "fail",
+                        "description": "restore command finished with exit code 0",
+                        "observed": 1
+                    },
+                    {
+                        "name": "verified_backup_signal_linkage",
+                        "passed": true,
+                        "status": "pass",
+                        "description": "verified-backup requirement is satisfied when enabled",
+                        "observed": {
+                            "required": true,
+                            "verified_signal_run_id": 2
+                        }
+                    }
+                ]
+            }
+        },
+        "latest_restore_failure": {
+            "label": "logical_restore_file (nightly.sql) at 2026-03-11 11:42:00",
+            "timestamp": "2026-03-11 11:42:00",
+            "operation": "logical_restore_file",
+            "target": "nightly.sql"
+        },
+        "backup_drill_pass_rate_30d": {
+            "label": "0/1 (0.0%)",
+            "window_days": 30,
+            "total": 1,
+            "passing": 0,
+            "pass_rate_percent": 0
+        }
     },
-    "latest_verified_backup": {
-      "label": "full:20260311-010101F at 2026-03-11 11:55:00",
-      "timestamp": "2026-03-11 11:55:00",
-      "operation": "pgbackrest_backup_full"
-    },
-    "latest_backup_drill": {
-      "label": "drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00",
-      "timestamp": "2026-03-11 09:00:00",
-      "run_uuid": "drill-fail-001",
-      "overall_result": "fail",
-      "executed_by": "ops-user"
-    },
-    "latest_failed_backup_drill": {
-      "label": "drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00",
-      "timestamp": "2026-03-11 09:00:00",
-      "run_uuid": "drill-fail-001",
-      "overall_result": "fail",
-      "executed_by": "ops-user"
-    },
-    "backup_drill_pass_rate": {
-      "label": "0/1 (0.0%)",
-      "window_days": 30,
-      "total": 1,
-      "passing": 0,
-      "pass_rate_percent": 0
-    },
-    "latest_restore_run": {
-      "label": "logical_restore_file [failed] (nightly.sql) {confirm=token, verified_run=2} at 2026-03-11 11:42:00",
-      "timestamp": "2026-03-11 11:42:00",
-      "operation": "logical_restore_file",
-      "status": "failed",
-      "target": "nightly.sql",
-      "audit": {
-        "environment": "testing",
-        "database": ":memory:",
-        "target": "nightly.sql",
-        "confirmation_required": true,
-        "confirmation_satisfied_via": "token",
-        "verified_backup_required": true,
-        "verified_signal_run_id": 2
-      }
-    },
-    "latest_restore_failure": {
-      "label": "logical_restore_file (nightly.sql) at 2026-03-11 11:42:00",
-      "timestamp": "2026-03-11 11:42:00",
-      "operation": "logical_restore_file",
-      "target": "nightly.sql"
-    },
-    "backup_drill_pass_rate_30d": {
-      "label": "0/1 (0.0%)",
-      "window_days": 30,
-      "total": 1,
-      "passing": 0,
-      "pass_rate_percent": 0
-    }
-  }
+    "version": 1,
+    "surface": "status"
 }

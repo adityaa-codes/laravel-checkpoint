@@ -7,10 +7,16 @@ namespace AdityaaCodes\LaravelCheckpoint\Tests\Support;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
 use Illuminate\Support\Facades\Date;
 
 final class CommandJsonFixtureSupport
 {
+    /**
+     * @var list<string>
+     */
+    private static array $temporaryPitrFiles = [];
+
     public static function freezeTime(): void
     {
         Date::setTestNow('2026-03-11 12:00:00');
@@ -19,6 +25,12 @@ final class CommandJsonFixtureSupport
     public static function resetTime(): void
     {
         Date::setTestNow();
+
+        foreach (self::$temporaryPitrFiles as $file) {
+            @unlink($file);
+        }
+
+        self::$temporaryPitrFiles = [];
     }
 
     public static function seedStatusRuns(): void
@@ -82,6 +94,52 @@ final class CommandJsonFixtureSupport
                     'confirmation_satisfied_via' => 'token',
                     'verified_backup_required' => true,
                     'verified_signal_run_id' => 2,
+                    'post_restore_verification' => [
+                        'contract_version' => 1,
+                        'command_run_id' => 3,
+                        'operation' => 'logical_restore_file',
+                        'generated_at' => now()->subMinutes(18)->toIso8601String(),
+                        'aggregate_result' => 'fail',
+                        'checks_performed' => [
+                            'restore_audit_recorded',
+                            'restore_target_recorded',
+                            'command_exit_code_zero',
+                            'verified_backup_signal_linkage',
+                        ],
+                        'checks' => [
+                            [
+                                'name' => 'restore_audit_recorded',
+                                'passed' => true,
+                                'status' => 'pass',
+                                'description' => 'restore guard decision metadata was persisted',
+                                'observed' => 'recorded',
+                            ],
+                            [
+                                'name' => 'restore_target_recorded',
+                                'passed' => true,
+                                'status' => 'pass',
+                                'description' => 'restore target is present for post-restore verification linkage',
+                                'observed' => 'nightly.sql',
+                            ],
+                            [
+                                'name' => 'command_exit_code_zero',
+                                'passed' => false,
+                                'status' => 'fail',
+                                'description' => 'restore command finished with exit code 0',
+                                'observed' => 1,
+                            ],
+                            [
+                                'name' => 'verified_backup_signal_linkage',
+                                'passed' => true,
+                                'status' => 'pass',
+                                'description' => 'verified-backup requirement is satisfied when enabled',
+                                'observed' => [
+                                    'required' => true,
+                                    'verified_signal_run_id' => 2,
+                                ],
+                            ],
+                        ],
+                    ],
                 ],
             ],
             'verification_state' => 'failed',
@@ -93,11 +151,117 @@ final class CommandJsonFixtureSupport
             'finished_at' => now()->subMinutes(18),
         ]);
 
+        VerificationRun::query()->create([
+            'command_run_id' => 2,
+            'verification_type' => 'pgbackrest_verify',
+            'status' => 'verified',
+            'verified_at' => now()->subMinutes(5),
+            'metadata' => [
+                'driver' => 'pgbackrest',
+                'summary' => ['ok' => true],
+            ],
+        ]);
+
+        VerificationRun::query()->create([
+            'command_run_id' => 3,
+            'verification_type' => 'pgbackrest_check',
+            'status' => 'failed',
+            'verified_at' => now()->subMinutes(3),
+            'metadata' => [
+                'driver' => 'pgbackrest',
+            ],
+            'error_detail' => 'Restore verification failed',
+        ]);
+
         BackupDrillRun::query()->create([
             'run_uuid' => 'drill-fail-001',
             'overall_result' => 'fail',
             'executed_by' => 'ops-user',
             'executed_at' => now()->subHours(3),
+        ]);
+    }
+
+    public static function seedCatalogExports(): void
+    {
+        CommandRun::query()->create([
+            'operation' => 'pgbackrest_backup_full',
+            'driver_name' => 'pgbackrest',
+            'repository' => 1,
+            'stanza' => 'main',
+            'backup_type' => 'full',
+            'backup_label' => '20260311-010101F',
+            'artifact_path' => '/var/backups/full-20260311.tar',
+            'backup_size_bytes' => 1048576,
+            'verification_state' => 'verified',
+            'verified_at' => now()->subMinutes(5),
+            'last_known_good_at' => now()->subMinutes(4),
+            'status' => CommandRunStatus::Succeeded,
+            'attempts' => 1,
+            'exit_code' => 0,
+            'metadata' => [
+                'driver' => 'pgbackrest',
+                'flags' => ['nightly'],
+                'storage' => ['class' => 'warm'],
+            ],
+            'created_at' => now()->subMinutes(12),
+            'updated_at' => now()->subMinutes(12),
+            'started_at' => now()->subMinutes(12),
+            'finished_at' => now()->subMinutes(10),
+        ]);
+
+        VerificationRun::query()->create([
+            'command_run_id' => 1,
+            'verification_type' => 'pgbackrest_verify',
+            'status' => 'verified',
+            'verified_at' => now()->subMinutes(5),
+            'metadata' => [
+                'driver' => 'pgbackrest',
+            ],
+        ]);
+
+        CommandRun::query()->create([
+            'operation' => 'logical_backup',
+            'backup_type' => 'logical_export',
+            'backup_label' => 'nightly-002',
+            'artifact_path' => '/var/backups/nightly-002.sql',
+            'backup_size_bytes' => 256000,
+            'verification_state' => 'not_applicable',
+            'status' => CommandRunStatus::Succeeded,
+            'attempts' => 1,
+            'exit_code' => 0,
+            'metadata' => [
+                'storage' => ['class' => 'hot'],
+            ],
+            'created_at' => now()->subMinutes(2),
+            'updated_at' => now()->subMinutes(2),
+            'started_at' => now()->subMinutes(2),
+            'finished_at' => now()->subMinute(),
+        ]);
+    }
+
+    public static function seedPitrReadinessState(): void
+    {
+        $baseline = '/tmp/checkpoint-pitr-fixture-baseline.sql';
+        $binlogA = '/tmp/checkpoint-pitr-fixture-binlog-a.log';
+        $binlogB = '/tmp/checkpoint-pitr-fixture-binlog-b.log';
+
+        file_put_contents($baseline, 'baseline');
+        file_put_contents($binlogA, 'binlog-a');
+        file_put_contents($binlogB, 'binlog-b');
+        self::$temporaryPitrFiles = [$baseline, $binlogA, $binlogB];
+
+        config()->set('checkpoint.drivers.mysql.pitr.binlog_files', [$binlogA, $binlogB]);
+
+        CommandRun::query()->create([
+            'operation' => 'logical_backup',
+            'backup_type' => 'logical_export',
+            'backup_label' => 'nightly-pitr-ready',
+            'artifact_path' => $baseline,
+            'verification_state' => 'verified',
+            'last_known_good_at' => now()->subHour(),
+            'status' => CommandRunStatus::Succeeded,
+            'attempts' => 1,
+            'exit_code' => 0,
         ]);
     }
 

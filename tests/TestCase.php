@@ -80,11 +80,27 @@ class TestCase extends Orchestra
                 'allow_in_ci' => true,
                 'ci' => false,
                 'require_verified_backup' => false,
+                'blast_radius' => [
+                    'enabled' => true,
+                    'warn_score' => 50,
+                    'block_score' => 80,
+                    'weights' => [
+                        'environment' => 30,
+                        'database' => 25,
+                        'target' => 20,
+                        'verification' => 25,
+                    ],
+                ],
             ],
             'replication' => [
                 'require_confirmation_token' => true,
                 'block_in_ci' => true,
                 'require_dry_run_before_apply' => true,
+                'enforce_change_window' => false,
+                'change_window_timezone' => 'UTC',
+                'change_window_days' => ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'],
+                'change_window_start' => '00:00',
+                'change_window_end' => '23:59',
                 'allowlisted_destinations' => ['staging-replica'],
                 'critical_tables' => [],
                 'profiles' => [
@@ -107,6 +123,23 @@ class TestCase extends Orchestra
             ],
             'reporting' => [
                 'max_recent_runs' => 100,
+            ],
+            'notifications' => [
+                'enabled' => false,
+                'events' => [],
+                'routing' => [
+                    'info' => ['log'],
+                    'warning' => ['log'],
+                    'critical' => ['log'],
+                ],
+                'mail' => [
+                    'to' => [],
+                ],
+                'webhook' => [
+                    'url' => null,
+                    'provider' => 'generic',
+                    'timeout_seconds' => 5,
+                ],
             ],
             'output' => [
                 'max_persisted_bytes' => 65536,
@@ -218,6 +251,9 @@ class TestCase extends Orchestra
                 'logical_backup_enabled' => true,
                 'logical_backup_daily_at' => '16:00',
                 'logical_backup_timezone' => 'UTC',
+                'backup_drill_enabled' => false,
+                'backup_drill_daily_at' => '03:00',
+                'backup_drill_timezone' => 'UTC',
                 'health_check_enabled' => true,
                 'recover_orphans_enabled' => true,
                 'prune_enabled' => true,
@@ -227,6 +263,16 @@ class TestCase extends Orchestra
                 'prune_keep_days' => 90,
                 'prune_keep_failed_days' => 365,
                 'prune_keep_backup_drill_days' => 365,
+            ],
+            'retention' => [
+                'enabled' => true,
+                'default_days' => 90,
+                'failed_days' => 365,
+                'tiers' => [
+                    'hot' => 14,
+                    'warm' => 60,
+                    'cold' => 180,
+                ],
             ],
             'custom_operations' => [],
         ]);
@@ -278,6 +324,11 @@ class TestCase extends Orchestra
 
         if (! Schema::hasTable('db_ops_backup_drill_runs')) {
             $migration = require __DIR__.'/../database/migrations/create_checkpoint_backup_drill_runs_table.php.stub';
+            $migration->up();
+        }
+
+        if (! Schema::hasTable('db_ops_verification_runs')) {
+            $migration = require __DIR__.'/../database/migrations/create_checkpoint_verification_runs_table.php.stub';
             $migration->up();
         }
 

@@ -9,6 +9,13 @@ use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use Illuminate\Console\Command;
 use Throwable;
 
+use function Laravel\Prompts\confirm;
+use function Laravel\Prompts\intro;
+use function Laravel\Prompts\note;
+use function Laravel\Prompts\outro;
+use function Laravel\Prompts\password;
+use function Laravel\Prompts\warning;
+
 final class ReplicateCommand extends Command
 {
     protected $signature = 'db-ops:replicate
@@ -27,20 +34,52 @@ final class ReplicateCommand extends Command
         BuildReplicationCommandPayloadAction $buildPayload,
     ): int {
         try {
+            if ($this->enhancedInteractiveMode()) {
+                intro('Replication Sync Wizard');
+                note('Default mode is dry-run. Use apply mode only after validation.');
+            }
+
+            $applyRequested = (bool) $this->option('apply');
+            $forceOverwriteRequested = (bool) $this->option('force-overwrite');
+
+            if ($this->enhancedInteractiveMode() && $applyRequested) {
+                warning('Apply mode can overwrite destination data.');
+
+                if (! confirm('Continue with apply mode?', default: false)) {
+                    return self::FAILURE;
+                }
+            }
+
             $payload = $buildPayload->execute(
                 source: $this->resolveEndpoint('source'),
                 destination: $this->resolveEndpoint('destination'),
-                apply: (bool) $this->option('apply'),
-                forceOverwrite: (bool) $this->option('force-overwrite'),
+                apply: $applyRequested,
+                forceOverwrite: $forceOverwriteRequested,
                 criticalTables: $this->criticalTableOptions(),
             );
+
+            if ($this->enhancedInteractiveMode()) {
+                $this->table(['Field', 'Value'], [
+                    ['Mode', ($payload['apply'] ?? false) ? 'apply' : 'dry-run'],
+                    ['Force overwrite', ($payload['force_overwrite'] ?? false) ? 'yes' : 'no'],
+                    ['Critical tables', implode(', ', $payload['critical_tables'] ?? []) ?: '-'],
+                    ['Source', $this->safeEndpointLabel((string) ($payload['source'] ?? ''))],
+                    ['Destination', $this->safeEndpointLabel((string) ($payload['destination'] ?? ''))],
+                ]);
+            }
 
             $run = $enqueueCommandRun->execute(
                 'replication_sync',
                 json_encode($payload, JSON_THROW_ON_ERROR),
             );
 
-            $this->info($this->queuedMessage((int) $run->getKey()));
+            $message = $this->queuedMessage((int) $run->getKey());
+
+            if ($this->enhancedInteractiveMode()) {
+                outro($message);
+            } else {
+                $this->info($message);
+            }
 
             return self::SUCCESS;
         } catch (Throwable $exception) {
@@ -62,6 +101,13 @@ final class ReplicateCommand extends Command
 
         if (is_string($argument) && trim($argument) !== '') {
             return trim($argument);
+        }
+
+        if ($this->enhancedInteractiveMode()) {
+            return trim(password(
+                label: sprintf('Enter %s replication endpoint', $role),
+                required: true,
+            ));
         }
 
         return trim((string) $this->secret(sprintf('Enter %s replication endpoint', $role)));
@@ -95,5 +141,38 @@ final class ReplicateCommand extends Command
         }
 
         return (string) $message;
+    }
+
+    private function enhancedInteractiveMode(): bool
+    {
+        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
+    }
+
+    private function safeEndpointLabel(string $endpoint): string
+    {
+        if ($endpoint === '') {
+            return '-';
+        }
+
+        if (str_starts_with($endpoint, 'profile:')) {
+            return $endpoint;
+        }
+
+        if (str_contains($endpoint, '://')) {
+            $parts = parse_url($endpoint);
+
+            if (is_array($parts) && isset($parts['scheme'])) {
+                $host = $parts['host'] ?? 'host';
+                $path = isset($parts['path']) && $parts['path'] !== '' ? $parts['path'] : '';
+
+                return sprintf('%s://%s%s', $parts['scheme'], $host, $path);
+            }
+        }
+
+        if (str_contains($endpoint, '=')) {
+            return 'kv-pairs(redacted)';
+        }
+
+        return '[redacted]';
     }
 }

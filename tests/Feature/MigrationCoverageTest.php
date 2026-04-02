@@ -2,14 +2,15 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
 
 it('applies the command run migrations on a fresh install', function (): void {
     Schema::dropIfExists('db_ops_restore_decision_events');
     Schema::dropIfExists('db_ops_restore_decision_events');
     Schema::dropIfExists('db_ops_backup_drill_runs');
+    Schema::dropIfExists('db_ops_verification_runs');
     Schema::dropIfExists('db_ops_command_runs');
 
     freshCommandRunMigration()->up();
@@ -19,6 +20,7 @@ it('applies the command run migrations on a fresh install', function (): void {
     operatorSummaryColumnsMigration()->up();
     restoreDecisionEventsMigration()->up();
     backupDrillRunMigration()->up();
+    verificationRunMigration()->up();
     reportingIndexesMigration()->up();
 
     expect(Schema::hasTable('db_ops_command_runs'))->toBeTrue()
@@ -28,6 +30,7 @@ it('applies the command run migrations on a fresh install', function (): void {
         ->and(Schema::hasColumn('db_ops_command_runs', 'driver_name'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'restore_confirmation_satisfied_via'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'restore_verified_signal_run_id'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'restore_post_verification_result'))->toBeTrue()
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_orphan_recovery_index')
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_running_heartbeat_index')
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_verified_at_lookup_index')
@@ -39,11 +42,15 @@ it('applies the command run migrations on a fresh install', function (): void {
         ->and(restoreDecisionEventIndexNames())->toContain('db_ops_restore_decision_events_run_created_at_index')
         ->and(restoreDecisionEventIndexNames())->toContain('db_ops_restore_decision_events_decision_created_at_index')
         ->and(backupDrillRunIndexNames())->toContain('db_ops_backup_drill_runs_executed_at_result_index')
-        ->and(backupDrillRunIndexNames())->toContain('db_ops_backup_drill_runs_result_executed_at_index');
+        ->and(backupDrillRunIndexNames())->toContain('db_ops_backup_drill_runs_result_executed_at_index')
+        ->and(Schema::hasTable('db_ops_verification_runs'))->toBeTrue()
+        ->and(verificationRunIndexNames())->toContain('db_ops_verification_runs_command_run_verified_at_index')
+        ->and(verificationRunIndexNames())->toContain('db_ops_verification_runs_status_verified_at_index');
 });
 
 it('adds operational summary columns and indexes on upgrade installs', function (): void {
     Schema::dropIfExists('db_ops_backup_drill_runs');
+    Schema::dropIfExists('db_ops_verification_runs');
     Schema::dropIfExists('db_ops_command_runs');
 
     Schema::create('db_ops_command_runs', function (Blueprint $table): void {
@@ -88,6 +95,7 @@ it('adds operational summary columns and indexes on upgrade installs', function 
     operatorSummaryColumnsMigration()->up();
     operatorSummaryColumnsMigration()->up();
     restoreDecisionEventsMigration()->up();
+    verificationRunMigration()->up();
     reportingIndexesMigration()->up();
     reportingIndexesMigration()->up();
 
@@ -96,6 +104,7 @@ it('adds operational summary columns and indexes on upgrade installs', function 
         ->and(Schema::hasColumn('db_ops_command_runs', 'driver_name'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'restore_confirmation_satisfied_via'))->toBeTrue()
         ->and(Schema::hasColumn('db_ops_command_runs', 'restore_verified_signal_run_id'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'restore_post_verification_result'))->toBeTrue()
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_orphan_recovery_index')
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_running_heartbeat_index')
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_verified_at_lookup_index')
@@ -105,7 +114,10 @@ it('adds operational summary columns and indexes on upgrade installs', function 
         ->and(commandRunIndexNames())->toContain('db_ops_command_runs_restore_activity_lookup_index')
         ->and(Schema::hasTable('db_ops_restore_decision_events'))->toBeTrue()
         ->and(restoreDecisionEventIndexNames())->toContain('db_ops_restore_decision_events_run_created_at_index')
-        ->and(restoreDecisionEventIndexNames())->toContain('db_ops_restore_decision_events_decision_created_at_index');
+        ->and(restoreDecisionEventIndexNames())->toContain('db_ops_restore_decision_events_decision_created_at_index')
+        ->and(Schema::hasTable('db_ops_verification_runs'))->toBeTrue()
+        ->and(verificationRunIndexNames())->toContain('db_ops_verification_runs_command_run_verified_at_index')
+        ->and(verificationRunIndexNames())->toContain('db_ops_verification_runs_status_verified_at_index');
 });
 
 /**
@@ -194,6 +206,17 @@ function backupDrillRunMigration(): object
 }
 
 /**
+ * @return object{up: callable():void}
+ */
+function verificationRunMigration(): object
+{
+    /** @var object{up: callable():void} $migration */
+    $migration = require __DIR__.'/../../database/migrations/create_checkpoint_verification_runs_table.php.stub';
+
+    return $migration;
+}
+
+/**
  * @return list<string>
  */
 function commandRunIndexNames(): array
@@ -215,6 +238,14 @@ function backupDrillRunIndexNames(): array
 function restoreDecisionEventIndexNames(): array
 {
     return indexNamesForTable('db_ops_restore_decision_events');
+}
+
+/**
+ * @return list<string>
+ */
+function verificationRunIndexNames(): array
+{
+    return indexNamesForTable('db_ops_verification_runs');
 }
 
 /**

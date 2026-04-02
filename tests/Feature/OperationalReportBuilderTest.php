@@ -6,6 +6,7 @@ use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillPassRateAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Date;
@@ -44,6 +45,8 @@ it('builds shared summary payloads with compatibility aliases', function (): voi
         'latest_verified_backup',
         'latest_backup_drill',
         'backup_drill_pass_rate',
+        'backup_drill_trend',
+        'backup_drill_remediation_playbook',
         'backup_drill_pass_rate_30d',
     ])->and($summary['backup_drill_pass_rate'])->toMatchArray([
         'label' => '0/1 (0.0%)',
@@ -51,6 +54,16 @@ it('builds shared summary payloads with compatibility aliases', function (): voi
         'total' => 1,
         'passing' => 0,
         'pass_rate_percent' => 0.0,
+    ])->and($summary['backup_drill_trend'])->toMatchArray([
+        'window_days' => 14,
+        'sample_size' => 1,
+        'latest_result' => 'fail',
+        'latest_run_uuid' => 'drill-fail-001',
+        'trajectory' => 'insufficient_data',
+        'status' => 'stable',
+    ])->and($summary['backup_drill_remediation_playbook'])->toMatchArray([
+        'signature' => 'drill.pass_rate_below_threshold',
+        'severity' => 'warn',
     ])->and($summary['backup_drill_pass_rate_30d'])->toBe($summary['backup_drill_pass_rate']);
 
     Date::setTestNow();
@@ -100,12 +113,137 @@ it('builds a combined report payload from a shared snapshot', function (): void 
         'last_known_good_at' => now()->subHour(),
     ]);
 
+    VerificationRun::query()->create([
+        'command_run_id' => 1,
+        'verification_type' => 'pgbackrest_verify',
+        'status' => 'verified',
+        'verified_at' => now(),
+        'metadata' => ['driver' => 'pgbackrest'],
+    ]);
+
     $payload = app(OperationalReportBuilder::class)->reportPayload(5);
 
-    expect($payload)->toHaveKeys(['recent_runs', 'summary', 'health'])
+    expect($payload)->toHaveKeys(['recent_runs', 'summary', 'verification', 'health'])
         ->and($payload['recent_runs'])->toHaveCount(1)
         ->and($payload['summary'])->toHaveKey('last_known_good_backup')
+        ->and($payload['summary']['latest_restore_run'])->toHaveKey('post_restore_verification')
+        ->and($payload['verification'])->toMatchArray([
+            'total_runs' => 1,
+            'verified_runs' => 1,
+            'failed_runs' => 0,
+            'health_status' => 'pass',
+        ])
         ->and($payload['health'])->toHaveKeys(['ok', 'checks']);
+
+    Date::setTestNow();
+});
+
+it('includes post-restore verification contract in recent run payloads', function (): void {
+    Date::setTestNow('2026-03-11 12:00:00');
+
+    CommandRun::query()->create([
+        'operation' => 'logical_restore_file',
+        'argument_text' => 'nightly.sql',
+        'restore_target' => 'nightly.sql',
+        'restore_post_verification_result' => 'fail',
+        'status' => CommandRunStatus::Failed,
+        'attempts' => 1,
+        'exit_code' => 1,
+        'finished_at' => now()->subMinute(),
+        'metadata' => [
+            'restore_audit' => [
+                'confirmation_satisfied_via' => 'token',
+                'verified_signal_run_id' => 22,
+                'post_restore_verification' => [
+                    'contract_version' => 1,
+                    'command_run_id' => 1,
+                    'operation' => 'logical_restore_file',
+                    'aggregate_result' => 'fail',
+                    'checks_performed' => [
+                        'restore_audit_recorded',
+                        'restore_target_recorded',
+                        'command_exit_code_zero',
+                        'verified_backup_signal_linkage',
+                    ],
+                ],
+            ],
+        ],
+    ]);
+
+    $runs = app(OperationalReportBuilder::class)->recentRuns(1);
+
+    expect($runs)->toHaveCount(1)
+        ->and($runs[0]['post_restore_verification'])->toMatchArray([
+            'contract_version' => 1,
+            'aggregate_result' => 'fail',
+            'checks_performed' => [
+                'restore_audit_recorded',
+                'restore_target_recorded',
+                'command_exit_code_zero',
+                'verified_backup_signal_linkage',
+            ],
+        ]);
+
+    Date::setTestNow();
+});
+
+it('exposes verification health details in health checks', function (): void {
+    CommandRun::query()->create([
+        'operation' => 'pgbackrest_check',
+        'status' => CommandRunStatus::Failed,
+        'attempts' => 1,
+        'exit_code' => 1,
+    ]);
+
+    VerificationRun::query()->create([
+        'command_run_id' => 1,
+        'verification_type' => 'pgbackrest_check',
+        'status' => 'failed',
+        'verified_at' => now(),
+        'error_detail' => 'Verification command failed',
+        'metadata' => ['driver' => 'pgbackrest'],
+    ]);
+
+    $checks = app(OperationalReportBuilder::class)->healthChecks();
+
+    expect(collect($checks)->contains(
+        fn (array $check): bool => $check['code'] === 'verification.runs'
+            && $check['status'] === 'warn'
+            && ($check['data']['failed_runs'] ?? null) === 1
+            && ($check['data']['total_runs'] ?? null) === 1,
+    ))->toBeTrue();
+});
+
+it('emits drill trend health checks from drill history', function (): void {
+    Date::setTestNow('2026-03-11 12:00:00');
+
+    BackupDrillRun::query()->create([
+        'run_uuid' => 'drill-fail-002',
+        'overall_result' => 'fail',
+        'executed_at' => now()->subDays(1),
+    ]);
+
+    BackupDrillRun::query()->create([
+        'run_uuid' => 'drill-fail-001',
+        'overall_result' => 'fail',
+        'executed_at' => now()->subDays(2),
+    ]);
+
+    $checks = app(OperationalReportBuilder::class)->healthChecks();
+
+    expect(collect($checks)->contains(
+        fn (array $check): bool => $check['code'] === 'backup_drill.trend'
+            && $check['status'] === 'warn'
+            && ($check['data']['status'] ?? null) === 'degrading'
+            && ($check['data']['streak']['type'] ?? null) === 'fail'
+            && ($check['data']['streak']['length'] ?? null) === 2,
+    ))->toBeTrue();
+
+    expect(collect($checks)->contains(
+        fn (array $check): bool => $check['code'] === 'backup_drill.playbook'
+            && $check['status'] === 'warn'
+            && ($check['data']['signature'] ?? null) === 'drill.degrading_trend',
+    ))->toBeTrue();
 
     Date::setTestNow();
 });
@@ -134,6 +272,12 @@ it('includes replication metadata in recent run payloads when available', functi
                 'apply_requested' => false,
                 'force_requested' => false,
                 'overwrite_destination' => false,
+                'governance_preflight' => [
+                    'policy_version' => 1,
+                    'mode' => 'dry_run',
+                    'allowed' => true,
+                    'blocked_reasons' => [],
+                ],
                 'result' => 'dry_run_only',
                 'sanity' => [
                     'method' => 'artifact_hash',
@@ -166,6 +310,12 @@ it('includes replication metadata in recent run payloads when available', functi
             'apply_requested' => false,
             'force_requested' => false,
             'overwrite_destination' => false,
+            'governance_preflight' => [
+                'policy_version' => 1,
+                'mode' => 'dry_run',
+                'allowed' => true,
+                'blocked_reasons' => [],
+            ],
             'result' => 'dry_run_only',
         ])
         ->and($runs[0]['replication']['failure_analysis'] ?? null)->toMatchArray([
@@ -189,11 +339,25 @@ it('prefers denormalized restore audit fields in restore summaries', function ()
         'restore_target' => '/managed/export/latest',
         'restore_confirmation_satisfied_via' => 'token',
         'restore_verified_signal_run_id' => 77,
+        'restore_post_verification_result' => 'pass',
         'finished_at' => now()->subMinute(),
         'metadata' => [
             'restore_audit' => [
                 'confirmation_satisfied_via' => 'stale',
                 'verified_signal_run_id' => 3,
+                'blast_radius' => [
+                    'enabled' => true,
+                    'score' => 60,
+                    'status' => 'warn',
+                    'warn_score' => 50,
+                    'block_score' => 80,
+                    'factors' => [
+                        ['name' => 'environment', 'weight' => 30, 'contributes' => true, 'note' => 'restore running in production environment'],
+                    ],
+                ],
+                'post_restore_verification' => [
+                    'aggregate_result' => 'stale-fail',
+                ],
             ],
         ],
     ]);
@@ -206,10 +370,22 @@ it('prefers denormalized restore audit fields in restore summaries', function ()
         'target' => '/managed/export/latest',
     ])->and($summary['latest_restore_run']['label'])->toContain('confirm=token')
         ->and($summary['latest_restore_run']['label'])->toContain('verified_run=77')
+        ->and($summary['latest_restore_run']['label'])->toContain('post_verify=pass')
         ->and($summary['latest_restore_run']['label'])->not->toContain('verified_run=3')
+        ->and($summary['latest_restore_run']['label'])->not->toContain('stale-fail')
+        ->and($summary['latest_restore_run']['blast_radius'])->toMatchArray([
+            'score' => 60,
+            'status' => 'warn',
+        ])
         ->and($summary['latest_restore_run']['audit'])->toMatchArray([
             'confirmation_satisfied_via' => 'token',
             'verified_signal_run_id' => 77,
+            'post_restore_verification' => [
+                'aggregate_result' => 'pass',
+            ],
+        ])
+        ->and($summary['latest_restore_run']['post_restore_verification'])->toMatchArray([
+            'aggregate_result' => 'pass',
         ]);
 
     Date::setTestNow();

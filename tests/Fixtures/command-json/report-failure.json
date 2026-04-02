@@ -1,80 +1,148 @@
 {
-  "driver": "shell",
-  "generated_at": "2026-03-11T12:00:00+00:00",
-  "limit": 2,
-  "limit_requested": 2,
-  "health": {
-    "checks": [
-      {
-        "check": "Config validation",
-        "code": "config.validation",
-        "data": {
-          "exception": "AdityaaCodes\\LaravelCheckpoint\\Exceptions\\ConfigurationException"
+    "generated_at": "2026-03-11T12:00:00+00:00",
+    "driver": "shell",
+    "limit_requested": 2,
+    "limit": 2,
+    "recent_runs": [],
+    "summary": {
+        "pending_runs": 0,
+        "running_runs": 0,
+        "failed_runs_24h": 0,
+        "last_known_good_backup": {
+            "label": "-",
+            "timestamp": null,
+            "operation": null
         },
-        "notes": "checkpoint.queue.retry_after must be greater than checkpoint.queue.timeout to avoid duplicate job processing.",
-        "status": "fail"
-      }
-    ],
-    "ok": false
-  },
-  "recent_runs": [],
-  "summary": {
-    "backup_drill_pass_rate": {
-      "label": "-",
-      "pass_rate_percent": null,
-      "passing": 0,
-      "total": 0,
-      "window_days": 30
+        "latest_verified_backup": {
+            "label": "-",
+            "timestamp": null,
+            "operation": null
+        },
+        "latest_backup_drill": {
+            "label": "-",
+            "timestamp": null,
+            "run_uuid": null,
+            "overall_result": null,
+            "executed_by": null
+        },
+        "latest_failed_backup_drill": {
+            "label": "-",
+            "timestamp": null,
+            "run_uuid": null,
+            "overall_result": null,
+            "executed_by": null
+        },
+        "backup_drill_pass_rate": {
+            "label": "-",
+            "window_days": 30,
+            "total": 0,
+            "passing": 0,
+            "pass_rate_percent": null
+        },
+        "backup_drill_pass_rate_30d": {
+            "label": "-",
+            "window_days": 30,
+            "total": 0,
+            "passing": 0,
+            "pass_rate_percent": null
+        },
+        "backup_drill_trend": {
+            "label": "-",
+            "window_days": 30,
+            "sample_size": 0,
+            "latest_result": null,
+            "latest_run_uuid": null,
+            "latest_executed_at": null,
+            "streak": {
+                "type": null,
+                "length": 0
+            },
+            "recent": {
+                "results": [],
+                "passing": 0,
+                "failing": 0,
+                "outcomes": []
+            },
+            "trajectory": "insufficient_data",
+            "status": "insufficient_data"
+        },
+        "backup_drill_remediation_playbook": {
+            "signature": "drill.missing_run",
+            "severity": "critical",
+            "title": "No backup drill evidence available",
+            "summary": "No backup drill run is recorded. Schedule and record a drill run before relying on restore readiness.",
+            "recommended_commands": [
+                "db-ops:enqueue-drill"
+            ],
+            "steps": [],
+            "evidence": {
+                "window_days": 30,
+                "total": 0,
+                "passing": 0,
+                "pass_rate_percent": 0,
+                "minimum_pass_rate_percent": 100,
+                "latest_result": null,
+                "latest_run_uuid": null,
+                "latest_age_days": null,
+                "max_age_days": 30,
+                "trend_status": "insufficient_data",
+                "trend_trajectory": "insufficient_data"
+            }
+        },
+        "latest_restore_run": {
+            "label": "-",
+            "timestamp": null,
+            "operation": null,
+            "status": null,
+            "target": null,
+            "audit": null
+        },
+        "latest_restore_failure": {
+            "label": "-",
+            "timestamp": null,
+            "operation": null,
+            "target": null
+        }
     },
-    "backup_drill_pass_rate_30d": {
-      "label": "-",
-      "pass_rate_percent": null,
-      "passing": 0,
-      "total": 0,
-      "window_days": 30
+    "breakdown": {
+        "window": {
+            "failed_runs_hours": 24
+        },
+        "totals": {
+            "groups": 0,
+            "runs": 0,
+            "failed_runs_24h": 0
+        },
+        "by_target": []
     },
-    "failed_runs_24h": 0,
-    "last_known_good_backup": {
-      "label": "-",
-      "operation": null,
-      "timestamp": null
+    "verification": {
+        "total_runs": 0,
+        "verified_runs": 0,
+        "failed_runs": 0,
+        "success_rate_percent": null,
+        "health_status": "warn",
+        "latest": {
+            "id": null,
+            "command_run_id": null,
+            "verification_type": null,
+            "status": null,
+            "verified_at": null
+        }
     },
-    "latest_backup_drill": {
-      "executed_by": null,
-      "label": "-",
-      "overall_result": null,
-      "run_uuid": null,
-      "timestamp": null
+    "health": {
+        "ok": false,
+        "checks": [
+            {
+                "code": "config.validation",
+                "check": "Config validation",
+                "status": "fail",
+                "notes": "checkpoint.queue.retry_after must be greater than checkpoint.queue.timeout to avoid duplicate job processing.",
+                "data": {
+                    "exception": "AdityaaCodes\\LaravelCheckpoint\\Exceptions\\ConfigurationException"
+                }
+            }
+        ]
     },
-    "latest_failed_backup_drill": {
-      "executed_by": null,
-      "label": "-",
-      "overall_result": null,
-      "run_uuid": null,
-      "timestamp": null
-    },
-    "latest_restore_failure": {
-      "label": "-",
-      "operation": null,
-      "target": null,
-      "timestamp": null
-    },
-    "latest_restore_run": {
-      "audit": null,
-      "label": "-",
-      "operation": null,
-      "status": null,
-      "target": null,
-      "timestamp": null
-    },
-    "latest_verified_backup": {
-      "label": "-",
-      "operation": null,
-      "timestamp": null
-    },
-    "pending_runs": 0,
-    "running_runs": 0
-  },
-  "surface": "report",
-  "version": 2
+    "version": 2,
+    "surface": "report"
 }

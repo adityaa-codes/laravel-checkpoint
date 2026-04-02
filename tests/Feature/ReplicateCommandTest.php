@@ -56,6 +56,7 @@ it('prompts for missing source and destination endpoints using hidden input', fu
 it('queues apply mode with force-overwrite and explicit critical tables', function (): void {
     Bus::fake();
     Event::fake([BackupQueued::class]);
+    config()->set('checkpoint.replication.allowlisted_destinations', ['profile:pg-destination']);
 
     checkpoint_artisan('db-ops:replicate --source=profile:pg-source --destination=profile:pg-destination --apply --force-overwrite --critical-table=users --critical-table=orders')
         ->expectsOutput('Queued Replication Sync run #1.')
@@ -123,6 +124,23 @@ it('fails when apply mode is requested with empty critical-table values', functi
 
     checkpoint_artisan('db-ops:replicate --source=profile:pg-source --destination=profile:pg-destination --apply --critical-table=')
         ->expectsOutput('Critical tables must be non-empty strings.')
+        ->assertFailed();
+
+    expect(CommandRun::query()->count())->toBe(0);
+    Bus::assertNothingDispatched();
+});
+
+it('fails apply mode when destination is outside replication governance allowlist', function (): void {
+    Bus::fake();
+
+    config()->set('checkpoint.replication.profiles', [
+        'pg-source' => ['engine' => 'pgsql'],
+        'prod-destination' => ['engine' => 'pgsql'],
+    ]);
+    config()->set('checkpoint.replication.allowlisted_destinations', ['staging-replica']);
+
+    checkpoint_artisan('db-ops:replicate --source=profile:pg-source --destination=profile:prod-destination --apply')
+        ->expectsOutput('Replication apply is blocked by governance preflight: destination_not_allowlisted.')
         ->assertFailed();
 
     expect(CommandRun::query()->count())->toBe(0);

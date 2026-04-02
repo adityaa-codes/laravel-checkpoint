@@ -9,6 +9,7 @@ use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Foundation\Auth\User;
 
 it('defaults restore verification requirement outside local and testing environments', function (): void {
+    putenv('DB_OPS_REPLICATION_CHANGE_WINDOW_DAYS');
     putenv('APP_ENV=production');
     putenv('DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP');
 
@@ -20,6 +21,7 @@ it('defaults restore verification requirement outside local and testing environm
 });
 
 it('defaults restore verification requirement off in testing environment', function (): void {
+    putenv('DB_OPS_REPLICATION_CHANGE_WINDOW_DAYS');
     putenv('APP_ENV=testing');
     putenv('DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP');
 
@@ -87,6 +89,20 @@ it('rejects an invalid backup schedule timezone', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.schedule.logical_backup_timezone must be a valid timezone identifier.');
 });
 
+it('rejects an invalid backup drill schedule time', function (): void {
+    config()->set('checkpoint.schedule.backup_drill_daily_at', '24:60');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.schedule.backup_drill_daily_at must use HH:MM 24-hour format.');
+});
+
+it('rejects an invalid backup drill schedule timezone', function (): void {
+    config()->set('checkpoint.schedule.backup_drill_timezone', 'Pluto/Crater');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.schedule.backup_drill_timezone must be a valid timezone identifier.');
+});
+
 it('rejects custom operations with invalid safety flags', function (): void {
     config()->set('checkpoint.custom_operations.audit_snapshot', [
         'label' => 'Audit Snapshot',
@@ -108,6 +124,55 @@ it('rejects invalid replication configuration structure', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.replication must be an array.');
 });
 
+it('rejects an invalid notifications configuration structure', function (): void {
+    config()->set('checkpoint.notifications', 'invalid');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.notifications must be an array.');
+});
+
+it('rejects notifications with unsupported event keys', function (): void {
+    config()->set('checkpoint.notifications.enabled', true);
+    config()->set('checkpoint.notifications.events', ['backup.failed', 'unsupported.event']);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.notifications.events contains unsupported event key [unsupported.event].');
+});
+
+it('rejects notifications with invalid routing channels', function (): void {
+    config()->set('checkpoint.notifications.routing.warning', ['log', 'pagerduty']);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.notifications.routing.warning must only contain: log, mail, webhook.');
+});
+
+it('rejects notifications with invalid email recipients', function (): void {
+    config()->set('checkpoint.notifications.mail.to', ['ops@example.com', 'invalid-email']);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.notifications.mail.to must contain valid email addresses.');
+});
+
+it('rejects notifications with invalid webhook url', function (): void {
+    config()->set('checkpoint.notifications.webhook.url', 'not-a-url');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.notifications.webhook.url must be null or a valid URL.');
+});
+
+it('rejects notifications with invalid webhook timeout', function (): void {
+    config()->set('checkpoint.notifications.webhook.timeout_seconds', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.notifications.webhook.timeout_seconds must be between 1 and 60.');
+});
+
+it('rejects notifications with invalid webhook provider', function (): void {
+    config()->set('checkpoint.notifications.webhook.provider', 'discord');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.notifications.webhook.provider must be generic, slack, or telegram.');
+});
 
 it('rejects non-array replication critical tables configuration', function (): void {
     config()->set('checkpoint.replication.critical_tables', 'users');
@@ -208,6 +273,31 @@ it('rejects an empty restore confirmation phrase', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.restore.confirmation_phrase must be a non-empty string.');
 });
 
+it('rejects malformed restore blast radius policy settings', function (): void {
+    config()->set('checkpoint.restore.blast_radius.enabled', 'yes');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.restore.blast_radius.enabled must be a boolean.');
+
+    config()->set('checkpoint.restore.blast_radius.enabled', true);
+    config()->set('checkpoint.restore.blast_radius.warn_score', 101);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.restore.blast_radius.warn_score must be between 0 and 100.');
+
+    config()->set('checkpoint.restore.blast_radius.warn_score', 50);
+    config()->set('checkpoint.restore.blast_radius.block_score', 40);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.restore.blast_radius.warn_score must be less than or equal to checkpoint.restore.blast_radius.block_score.');
+
+    config()->set('checkpoint.restore.blast_radius.block_score', 80);
+    config()->set('checkpoint.restore.blast_radius.weights.target', 101);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.restore.blast_radius.weights.target must be between 0 and 100.');
+});
+
 it('rejects observability anomaly factors that are not greater than one', function (): void {
     config()->set('checkpoint.observability.backup_duration_anomaly_factor', 1.0);
 
@@ -255,6 +345,36 @@ it('rejects a non-positive backup drill prune retention', function (): void {
 
     expect(fn () => resolve(ConfigValidator::class)->validate())
         ->toThrow(ConfigurationException::class, 'checkpoint.schedule.prune_keep_backup_drill_days must be greater than zero.');
+});
+
+it('rejects retention defaults that are not positive integers', function (): void {
+    config()->set('checkpoint.retention.default_days', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.retention.default_days must be greater than zero.');
+
+    config()->set('checkpoint.retention.default_days', 90);
+    config()->set('checkpoint.retention.failed_days', 0);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.retention.failed_days must be greater than zero.');
+});
+
+it('rejects malformed retention tiers', function (): void {
+    config()->set('checkpoint.retention.tiers', ['' => 30]);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.retention.tiers keys must be non-empty strings.');
+
+    config()->set('checkpoint.retention.tiers', ['Warm Tier' => 30]);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.retention.tiers.Warm Tier key must use lowercase alphanumeric, underscore, or hyphen characters.');
+
+    config()->set('checkpoint.retention.tiers', ['warm' => 0]);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.retention.tiers.warm must be greater than zero.');
 });
 
 it('rejects backup drill retention shorter than the drill freshness window', function (): void {
@@ -324,6 +444,27 @@ it('rejects an empty checkpoint temp directory path', function (): void {
 
     expect(fn () => resolve(ConfigValidator::class)->validate())
         ->toThrow(ConfigurationException::class, 'checkpoint.temp_dir must be a non-empty string.');
+});
+
+it('rejects invalid replication change-window timezone', function (): void {
+    config()->set('checkpoint.replication.change_window_timezone', 'Mars/Olympus');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.replication.change_window_timezone must be a valid timezone identifier.');
+});
+
+it('rejects replication change-window days outside mon-sun', function (): void {
+    config()->set('checkpoint.replication.change_window_days', ['mon', 'funday']);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.replication.change_window_days must only contain mon,tue,wed,thu,fri,sat,sun.');
+});
+
+it('rejects replication change-window bounds with invalid time format', function (): void {
+    config()->set('checkpoint.replication.change_window_start', '7pm');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.replication.change_window_start must use HH:MM 24-hour format.');
 });
 
 it('rejects pgdump parallel jobs for non-directory formats', function (): void {

@@ -51,7 +51,9 @@ it('shows an operator-facing summary of recent checkpoint health signals', funct
                 ['Latest backup drill', 'drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00'],
                 ['Latest failed drill', 'drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00'],
                 ['Backup drill pass rate (30d)', '1/2 (50.0%)'],
-                ['Latest restore run', 'logical_restore_file [failed] (nightly.sql) {confirm=token, verified_run=2} at 2026-03-11 11:42:00'],
+                ['Backup drill trend', 'Stable (FAIL streak x1, n=2)'],
+                ['Backup drill playbook', 'Backup drill pass rate is below threshold'],
+                ['Latest restore run', 'logical_restore_file [failed] (nightly.sql) {confirm=token, verified_run=2, post_verify=fail} at 2026-03-11 11:42:00'],
                 ['Latest restore failure', 'logical_restore_file (nightly.sql) at 2026-03-11 11:42:00'],
             ],
         )
@@ -83,6 +85,7 @@ it('renders recent runs as machine-readable json', function (): void {
             'verification_state' => 'verified',
             'restore_target' => null,
             'restore_audit' => null,
+            'post_restore_verification' => null,
             'last_known_good_at' => '2026-03-11 11:50:00',
         ]);
 
@@ -131,13 +134,36 @@ it('renders summary signals as machine-readable json', function (): void {
             'total' => 2,
             'passing' => 1,
             'pass_rate_percent' => 50.0,
+        ])->and($report['summary']['backup_drill_trend'])->toMatchArray([
+            'window_days' => 30,
+            'sample_size' => 2,
+            'latest_result' => 'fail',
+            'latest_run_uuid' => 'drill-fail-001',
+            'trajectory' => 'stable',
+            'status' => 'stable',
+        ])->and($report['summary']['backup_drill_trend']['streak'])->toMatchArray([
+            'type' => 'fail',
+            'length' => 1,
+        ])->and($report['summary']['backup_drill_remediation_playbook'])->toMatchArray([
+            'signature' => 'drill.pass_rate_below_threshold',
+            'severity' => 'warn',
+        ])->and($report['summary']['backup_drill_trend']['recent'])->toMatchArray([
+            'results' => ['fail', 'pass'],
+            'passing' => 1,
+            'failing' => 1,
         ])
         ->and($report['summary']['latest_restore_run'])->toMatchArray([
-            'label' => 'logical_restore_file [failed] (nightly.sql) {confirm=token, verified_run=2} at 2026-03-11 11:42:00',
+            'label' => 'logical_restore_file [failed] (nightly.sql) {confirm=token, verified_run=2, post_verify=fail} at 2026-03-11 11:42:00',
             'timestamp' => '2026-03-11 11:42:00',
             'operation' => 'logical_restore_file',
             'status' => 'failed',
             'target' => 'nightly.sql',
+        ])
+        ->and($report['summary']['latest_restore_run']['post_restore_verification'])->toMatchArray([
+            'contract_version' => 1,
+            'command_run_id' => 3,
+            'operation' => 'logical_restore_file',
+            'aggregate_result' => 'fail',
         ])
         ->and($report['summary']['latest_restore_run']['audit'])->toMatchArray([
             'environment' => 'testing',
@@ -147,6 +173,15 @@ it('renders summary signals as machine-readable json', function (): void {
             'confirmation_satisfied_via' => 'token',
             'verified_backup_required' => true,
             'verified_signal_run_id' => 2,
+        ])
+        ->and($report['summary']['latest_restore_run']['audit']['post_restore_verification'])->toMatchArray([
+            'aggregate_result' => 'fail',
+            'checks_performed' => [
+                'restore_audit_recorded',
+                'restore_target_recorded',
+                'command_exit_code_zero',
+                'verified_backup_signal_linkage',
+            ],
         ])
         ->and($report['summary']['latest_restore_failure'])->toMatchArray([
             'label' => 'logical_restore_file (nightly.sql) at 2026-03-11 11:42:00',
@@ -180,6 +215,10 @@ it('renders compact agent-friendly status output for runs', function (): void {
         ->and($report['data']['mode'])->toBe('runs')
         ->and($report['data']['run_count'])->toBe(1)
         ->and($report['data']['runs'])->toHaveCount(1)
+        ->and($report['data']['slo'])->toBeArray()
+        ->and($report['data']['slo'])->toHaveKeys(['window', 'indicators', 'overall_status'])
+        ->and($report['data']['slo']['indicators'])->toBeArray()
+        ->and($report['data']['slo']['indicators'][0])->toHaveKeys(['name', 'target', 'current', 'status', 'unit'])
         ->and($report['suggestions'])->toBeArray();
 
     OperatorCommandTestSupport::resetTime();
@@ -200,6 +239,10 @@ it('renders compact agent-friendly status output for summary', function (): void
         ->and($report['code'])->toBe('status.summary.degraded')
         ->and($report['data']['mode'])->toBe('summary')
         ->and($report['data']['summary']['failed_runs_24h'])->toBe(1)
+        ->and($report['data']['slo'])->toBeArray()
+        ->and($report['data']['slo'])->toHaveKeys(['window', 'indicators', 'overall_status'])
+        ->and($report['data']['slo']['indicators'])->toBeArray()
+        ->and($report['data']['slo']['indicators'][0])->toHaveKeys(['name', 'target', 'current', 'status', 'unit'])
         ->and($report['suggestions'])->toBeArray();
 
     OperatorCommandTestSupport::resetTime();

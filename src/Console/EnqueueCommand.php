@@ -9,6 +9,10 @@ use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
 use Illuminate\Console\Command;
 use Throwable;
 
+use function Laravel\Prompts\intro;
+use function Laravel\Prompts\note;
+use function Laravel\Prompts\outro;
+
 final class EnqueueCommand extends Command
 {
     protected $signature = 'db-ops:enqueue {operation?} {--argument=}';
@@ -20,12 +24,23 @@ final class EnqueueCommand extends Command
         CommandRunCatalog $catalog,
     ): int {
         try {
+            if ($this->enhancedInteractiveMode()) {
+                intro('Checkpoint Operation Queue');
+                note('Choose an operation, then optionally provide its argument.');
+            }
+
             $operation = $this->resolveOperation($catalog);
             $argument = $this->resolveArgument($catalog, $operation);
 
             $run = $enqueueCommandRun->execute($operation, $argument);
 
-            $this->info($this->queuedMessage($operation, (int) $run->getKey()));
+            $message = $this->queuedMessage($operation, (int) $run->getKey());
+
+            if ($this->enhancedInteractiveMode()) {
+                outro($message);
+            } else {
+                $this->info($message);
+            }
 
             return self::SUCCESS;
         } catch (Throwable $exception) {
@@ -112,5 +127,10 @@ final class EnqueueCommand extends Command
                 ->title()
                 ->toString(),
         };
+    }
+
+    private function enhancedInteractiveMode(): bool
+    {
+        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
     }
 }

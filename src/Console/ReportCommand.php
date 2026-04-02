@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
-use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
+use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
+
+use function Laravel\Prompts\intro;
 
 final class ReportCommand extends Command
 {
@@ -31,6 +33,10 @@ final class ReportCommand extends Command
         $format = (string) $this->option('format');
         $outputMode = $agentMode ? 'agent' : $this->normalizedOutputMode($format);
 
+        if ($this->enhancedInteractiveMode() && $outputMode === 'table') {
+            intro('Checkpoint Operational Report');
+        }
+
         if ($outputMode === '') {
             $this->error('The --format option must be table or json.');
 
@@ -47,16 +53,18 @@ final class ReportCommand extends Command
             $reportPayload = [
                 'recent_runs' => [],
                 'summary' => $this->emptySummary(),
+                'breakdown' => $this->emptyBreakdown(),
+                'verification' => $this->emptyVerificationSummary(),
                 'health' => [
                     'ok' => false,
                     'checks' => [[
-                    'code' => 'config.validation',
-                    'check' => 'Config validation',
-                    'status' => 'fail',
-                    'notes' => $exception->getMessage(),
-                    'data' => [
-                        'exception' => $exception::class,
-                    ],
+                        'code' => 'config.validation',
+                        'check' => 'Config validation',
+                        'status' => 'fail',
+                        'notes' => $exception->getMessage(),
+                        'data' => [
+                            'exception' => $exception::class,
+                        ],
                     ]],
                 ],
             ];
@@ -77,6 +85,8 @@ final class ReportCommand extends Command
                 'limit' => $effectiveLimit,
                 'recent_runs' => $reportPayload['recent_runs'],
                 'summary' => $reportPayload['summary'],
+                'breakdown' => $reportPayload['breakdown'],
+                'verification' => $reportPayload['verification'],
                 'health' => $reportPayload['health'],
             ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
         } else {
@@ -129,13 +139,85 @@ final class ReportCommand extends Command
             'latest_failed_backup_drill' => ['label' => '-', 'timestamp' => null, 'run_uuid' => null, 'overall_result' => null, 'executed_by' => null],
             'backup_drill_pass_rate' => $drillPassRate,
             'backup_drill_pass_rate_30d' => $drillPassRate,
+            'backup_drill_trend' => [
+                'label' => '-',
+                'window_days' => $windowDays,
+                'sample_size' => 0,
+                'latest_result' => null,
+                'latest_run_uuid' => null,
+                'latest_executed_at' => null,
+                'streak' => ['type' => null, 'length' => 0],
+                'recent' => ['results' => [], 'passing' => 0, 'failing' => 0, 'outcomes' => []],
+                'trajectory' => 'insufficient_data',
+                'status' => 'insufficient_data',
+            ],
+            'backup_drill_remediation_playbook' => [
+                'signature' => 'drill.missing_run',
+                'severity' => 'critical',
+                'title' => 'No backup drill evidence available',
+                'summary' => 'No backup drill run is recorded. Schedule and record a drill run before relying on restore readiness.',
+                'recommended_commands' => ['db-ops:enqueue-drill'],
+                'steps' => [],
+                'evidence' => [
+                    'window_days' => $windowDays,
+                    'total' => 0,
+                    'passing' => 0,
+                    'pass_rate_percent' => 0.0,
+                    'minimum_pass_rate_percent' => (float) $this->config->get('checkpoint.observability.backup_drill_min_pass_rate', 100.0),
+                    'latest_result' => null,
+                    'latest_run_uuid' => null,
+                    'latest_age_days' => null,
+                    'max_age_days' => max(1, (int) $this->config->get('checkpoint.observability.max_backup_drill_age_days', 30)),
+                    'trend_status' => 'insufficient_data',
+                    'trend_trajectory' => 'insufficient_data',
+                ],
+            ],
             'latest_restore_run' => ['label' => '-', 'timestamp' => null, 'operation' => null, 'status' => null, 'target' => null, 'audit' => null],
             'latest_restore_failure' => ['label' => '-', 'timestamp' => null, 'operation' => null, 'target' => null],
         ];
     }
 
     /**
-     * @param  array{recent_runs:list<array<string,mixed>>,summary:array<string,mixed>,health:array{ok:bool,checks:list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>}}  $reportPayload
+     * @return array<string,mixed>
+     */
+    private function emptyBreakdown(): array
+    {
+        return [
+            'window' => [
+                'failed_runs_hours' => 24,
+            ],
+            'totals' => [
+                'groups' => 0,
+                'runs' => 0,
+                'failed_runs_24h' => 0,
+            ],
+            'by_target' => [],
+        ];
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function emptyVerificationSummary(): array
+    {
+        return [
+            'total_runs' => 0,
+            'verified_runs' => 0,
+            'failed_runs' => 0,
+            'success_rate_percent' => null,
+            'health_status' => 'warn',
+            'latest' => [
+                'id' => null,
+                'command_run_id' => null,
+                'verification_type' => null,
+                'status' => null,
+                'verified_at' => null,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array{recent_runs:list<array<string,mixed>>,summary:array<string,mixed>,breakdown:array<string,mixed>,verification:array<string,mixed>,health:array{ok:bool,checks:list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>}}  $reportPayload
      * @return array<string,mixed>
      */
     private function agentReportPayload(int $requestedLimit, int $effectiveLimit, array $reportPayload): array
@@ -164,9 +246,106 @@ final class ReportCommand extends Command
                 'limit' => $effectiveLimit,
                 'recent_runs' => $reportPayload['recent_runs'],
                 'summary' => $reportPayload['summary'],
+                'breakdown' => $reportPayload['breakdown'],
+                'verification' => $reportPayload['verification'],
                 'health' => $reportPayload['health'],
+                'slo' => $this->sloPayload(
+                    reportPayload: $reportPayload,
+                    effectiveLimit: $effectiveLimit,
+                    failedRuns: $failedRuns,
+                    failedChecks: $failedChecks,
+                    warnChecks: $warnChecks,
+                ),
             ],
             'suggestions' => $this->reportSuggestions($checks, $failedRuns),
+        ];
+    }
+
+    /**
+     * @param  array{recent_runs:list<array<string,mixed>>,summary:array<string,mixed>,breakdown:array<string,mixed>,verification:array<string,mixed>,health:array{ok:bool,checks:list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>}}  $reportPayload
+     * @return array{window:string,indicators:list<array{name:string,target:int|float,current:int|float,status:string,unit:string}>,overall_status:string}
+     */
+    private function sloPayload(array $reportPayload, int $effectiveLimit, int $failedRuns, int $failedChecks, int $warnChecks): array
+    {
+        $runCount = count($reportPayload['recent_runs']);
+        $failureRate = $runCount > 0 ? round(($failedRuns / $runCount) * 100, 2) : 0.0;
+        $drillTarget = (float) $this->config->get('checkpoint.observability.backup_drill_min_pass_rate', 100.0);
+        $drillCurrent = $reportPayload['summary']['backup_drill_pass_rate']['pass_rate_percent'] ?? null;
+        $drillCurrentValue = is_numeric($drillCurrent) ? (float) $drillCurrent : 0.0;
+        $drillWindowDays = (int) ($reportPayload['summary']['backup_drill_pass_rate']['window_days'] ?? 30);
+        $drillStatus = is_numeric($drillCurrent) && $drillCurrentValue >= $drillTarget ? 'pass' : 'warn';
+        $verificationStatus = (string) ($reportPayload['verification']['health_status'] ?? 'warn');
+        $verificationFailed = is_numeric($reportPayload['verification']['failed_runs'] ?? null) ? (int) $reportPayload['verification']['failed_runs'] : 0;
+        $verificationSuccessRate = is_numeric($reportPayload['verification']['success_rate_percent'] ?? null) ? (float) $reportPayload['verification']['success_rate_percent'] : 0.0;
+        $failedTargets24h = 0;
+
+        if (is_numeric($reportPayload['breakdown']['totals']['failed_runs_24h'] ?? null)) {
+            $failedTargets24h = (int) $reportPayload['breakdown']['totals']['failed_runs_24h'];
+        }
+
+        $indicators = [
+            [
+                'name' => 'failed_runs',
+                'target' => 0,
+                'current' => $failedRuns,
+                'status' => $failedRuns > 0 ? 'fail' : 'pass',
+                'unit' => 'runs',
+            ],
+            [
+                'name' => 'failed_checks',
+                'target' => 0,
+                'current' => $failedChecks,
+                'status' => $failedChecks > 0 ? 'fail' : 'pass',
+                'unit' => 'checks',
+            ],
+            [
+                'name' => 'warning_checks',
+                'target' => 0,
+                'current' => $warnChecks,
+                'status' => $warnChecks > 0 ? 'warn' : 'pass',
+                'unit' => 'checks',
+            ],
+            [
+                'name' => 'recent_failure_rate',
+                'target' => 0,
+                'current' => $failureRate,
+                'status' => $failedRuns > 0 ? 'fail' : 'pass',
+                'unit' => 'percent',
+            ],
+            [
+                'name' => 'backup_drill_pass_rate',
+                'target' => $drillTarget,
+                'current' => round($drillCurrentValue, 2),
+                'status' => $drillStatus,
+                'unit' => 'percent',
+            ],
+            [
+                'name' => 'verification_failed_runs',
+                'target' => 0,
+                'current' => $verificationFailed,
+                'status' => $verificationStatus === 'pass' ? 'pass' : 'warn',
+                'unit' => 'runs',
+            ],
+            [
+                'name' => 'verification_success_rate',
+                'target' => 100,
+                'current' => round($verificationSuccessRate, 2),
+                'status' => $verificationStatus === 'pass' ? 'pass' : 'warn',
+                'unit' => 'percent',
+            ],
+            [
+                'name' => 'failed_runs_24h_by_target',
+                'target' => 0,
+                'current' => $failedTargets24h,
+                'status' => $failedTargets24h > 0 ? 'fail' : 'pass',
+                'unit' => 'runs',
+            ],
+        ];
+
+        return [
+            'window' => sprintf('latest_%d_runs+%dd_drills', $effectiveLimit, $drillWindowDays),
+            'indicators' => $indicators,
+            'overall_status' => $this->overallSloStatus($indicators),
         ];
     }
 
@@ -195,6 +374,16 @@ final class ReportCommand extends Command
                 $suggestions[] = 'Run db-ops:recover-orphans and verify worker heartbeat settings.';
             } elseif (str_starts_with($code, 'backup_drill.')) {
                 $suggestions[] = 'Run a backup drill and track pass-rate/freshness health signals.';
+
+                $playbookCommands = $check['data']['recommended_commands'] ?? null;
+
+                if (is_array($playbookCommands)) {
+                    foreach ($playbookCommands as $command) {
+                        if (is_string($command) && trim($command) !== '') {
+                            $suggestions[] = 'Run '.$command.' to execute the drill remediation playbook.';
+                        }
+                    }
+                }
             } elseif ($code === 'backup.last_known_good') {
                 $suggestions[] = 'Queue a successful backup to refresh the last-known-good signal.';
             }
@@ -206,7 +395,7 @@ final class ReportCommand extends Command
     }
 
     /**
-     * @param  array{recent_runs:list<array<string,mixed>>,summary:array<string,mixed>,health:array{ok:bool,checks:list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>}}  $reportPayload
+     * @param  array{recent_runs:list<array<string,mixed>>,summary:array<string,mixed>,verification:array<string,mixed>,health:array{ok:bool,checks:list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>}}  $reportPayload
      */
     private function renderTableReport(array $reportPayload, int $requestedLimit, int $effectiveLimit): void
     {
@@ -223,8 +412,13 @@ final class ReportCommand extends Command
             ['Latest verified backup', (string) ($reportPayload['summary']['latest_verified_backup']['label'] ?? '-')],
             ['Latest backup drill', (string) ($reportPayload['summary']['latest_backup_drill']['label'] ?? '-')],
             ['Latest failed drill', (string) ($reportPayload['summary']['latest_failed_backup_drill']['label'] ?? '-')],
+            ['Drill remediation playbook', (string) ($reportPayload['summary']['backup_drill_remediation_playbook']['title'] ?? '-')],
             ['Latest restore run', (string) ($reportPayload['summary']['latest_restore_run']['label'] ?? '-')],
             ['Latest restore failure', (string) ($reportPayload['summary']['latest_restore_failure']['label'] ?? '-')],
+            ['Latest restore post-verification', (string) (($reportPayload['summary']['latest_restore_run']['post_restore_verification']['aggregate_result'] ?? '-') ?? '-')],
+            ['Verification runs', (string) ($reportPayload['verification']['total_runs'] ?? 0)],
+            ['Verification failed', (string) ($reportPayload['verification']['failed_runs'] ?? 0)],
+            ['Verification health', (string) ($reportPayload['verification']['health_status'] ?? 'warn')],
         ]);
 
         $recentRuns = $reportPayload['recent_runs'];
@@ -253,5 +447,30 @@ final class ReportCommand extends Command
             ],
             $reportPayload['health']['checks'],
         ));
+    }
+
+    private function enhancedInteractiveMode(): bool
+    {
+        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
+    }
+
+    /**
+     * @param  list<array{name:string,target:int|float,current:int|float,status:string,unit:string}>  $indicators
+     */
+    private function overallSloStatus(array $indicators): string
+    {
+        foreach ($indicators as $indicator) {
+            if ($indicator['status'] === 'fail') {
+                return 'fail';
+            }
+        }
+
+        foreach ($indicators as $indicator) {
+            if ($indicator['status'] === 'warn') {
+                return 'warn';
+            }
+        }
+
+        return 'pass';
     }
 }

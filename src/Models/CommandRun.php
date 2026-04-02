@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Models;
 
+use AdityaaCodes\LaravelCheckpoint\Actions\EvaluateRetentionPolicyAction;
 use AdityaaCodes\LaravelCheckpoint\Database\Factories\CommandRunFactory;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 
@@ -30,8 +32,9 @@ use Illuminate\Support\Carbon;
  * @property string|null $verification_state
  * @property string|null $restore_target
  * @property string|null $restore_confirmation_satisfied_via
- * @property int|null $restore_verified_signal_run_id
- * @property string|null $artifact_path
+     * @property int|null $restore_verified_signal_run_id
+ * @property string|null $restore_post_verification_result
+     * @property string|null $artifact_path
  * @property int|null $backup_size_bytes
  * @property int|null $duration_seconds
  * @property int|null $throughput_bytes_per_second
@@ -77,6 +80,7 @@ class CommandRun extends Model
             'metadata' => 'array',
             'repository' => 'integer',
             'restore_verified_signal_run_id' => 'integer',
+            'restore_post_verification_result' => 'string',
             'status' => CommandRunStatus::class,
             'started_at' => 'datetime',
             'heartbeat_at' => 'datetime',
@@ -101,6 +105,12 @@ class CommandRun extends Model
     public function requestedBy(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    /** @return HasMany<VerificationRun, $this> */
+    public function verificationRuns(): HasMany
+    {
+        return $this->hasMany(VerificationRun::class);
     }
 
     /**
@@ -177,10 +187,15 @@ class CommandRun extends Model
      */
     public function recordMetadata(array $attributes): self
     {
+        $originalVerificationState = $this->verification_state;
+        $originalVerifiedAt = $this->verified_at;
+
         $this->forceFill([
             ...$attributes,
             ...$this->denormalizedMetadataColumns($attributes),
         ])->save();
+
+        $this->persistVerificationOutcome($attributes, $originalVerificationState, $originalVerifiedAt);
 
         return $this;
     }
@@ -222,6 +237,31 @@ class CommandRun extends Model
         return [
             'confirmation_satisfied_via' => $confirmation,
             'verified_signal_run_id' => $verifiedSignalRunId,
+        ];
+    }
+
+    /**
+     * @return array{aggregate_result:?string}
+     */
+    public function restorePostVerificationSummary(): array
+    {
+        $metadata = is_array($this->metadata) ? $this->metadata : [];
+        $restoreAudit = is_array($metadata['restore_audit'] ?? null) ? $metadata['restore_audit'] : [];
+        $postVerification = is_array($restoreAudit['post_restore_verification'] ?? null)
+            ? $restoreAudit['post_restore_verification']
+            : [];
+        $aggregateResult = $this->restore_post_verification_result;
+
+        if (
+            $aggregateResult === null
+            && is_string($postVerification['aggregate_result'] ?? null)
+            && $postVerification['aggregate_result'] !== ''
+        ) {
+            $aggregateResult = $postVerification['aggregate_result'];
+        }
+
+        return [
+            'aggregate_result' => $aggregateResult,
         ];
     }
 
@@ -396,20 +436,10 @@ class CommandRun extends Model
     /** @return Builder<static> */
     public function prunable(): Builder
     {
-        $keepDays = (int) config('checkpoint.schedule.prune_keep_days', 90);
-        $keepFailedDays = (int) config('checkpoint.schedule.prune_keep_failed_days', 365);
+        $query = static::query();
+        resolve(EvaluateRetentionPolicyAction::class)->applyEligibleRetentionPredicate($query, now());
 
-        return static::query()
-            ->where(function (Builder $query) use ($keepDays): void {
-                $query
-                    ->where('status', '!=', CommandRunStatus::Failed)
-                    ->where('created_at', '<=', now()->subDays($keepDays));
-            })
-            ->orWhere(function (Builder $query) use ($keepFailedDays): void {
-                $query
-                    ->where('status', CommandRunStatus::Failed)
-                    ->where('created_at', '<=', now()->subDays($keepFailedDays));
-            });
+        return $query;
     }
 
     public function pruneAll(): int
@@ -474,6 +504,55 @@ class CommandRun extends Model
 
     /**
      * @param  array<string, mixed>  $attributes
+     */
+    private function persistVerificationOutcome(array $attributes, ?string $originalVerificationState, ?Carbon $originalVerifiedAt): void
+    {
+        $verificationState = $this->verification_state;
+        $verifiedAt = $this->verified_at;
+
+        if (! in_array($verificationState, ['verified', 'failed'], true) || ! $verifiedAt instanceof Carbon) {
+            return;
+        }
+
+        $stateChanged = $originalVerificationState !== $verificationState;
+        $timestampChanged = ! $originalVerifiedAt instanceof Carbon || ! $originalVerifiedAt->equalTo($verifiedAt);
+
+        if (! $stateChanged && ! $timestampChanged) {
+            return;
+        }
+
+        $metadata = is_array($attributes['metadata'] ?? null) ? $attributes['metadata'] : (is_array($this->metadata) ? $this->metadata : null);
+        $errorDetail = $verificationState === 'failed' ? $this->resolvedVerificationErrorDetail($attributes) : null;
+
+        $this->verificationRuns()->create([
+            'verification_type' => $this->operation,
+            'status' => $verificationState,
+            'verified_at' => $verifiedAt,
+            'metadata' => $metadata,
+            'error_detail' => $errorDetail,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function resolvedVerificationErrorDetail(array $attributes): ?string
+    {
+        $errorDetail = $attributes['error_detail'] ?? null;
+
+        if (is_string($errorDetail) && $errorDetail !== '') {
+            return $errorDetail;
+        }
+
+        if (is_string($this->command_output) && $this->command_output !== '') {
+            return mb_substr($this->command_output, 0, 4000);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
      * @return array<string, mixed>
      */
     private function denormalizedMetadataColumns(array $attributes): array
@@ -488,6 +567,7 @@ class CommandRun extends Model
             'driver_name' => null,
             'restore_confirmation_satisfied_via' => null,
             'restore_verified_signal_run_id' => null,
+            'restore_post_verification_result' => null,
         ];
 
         if (is_string($metadata['driver'] ?? null) && $metadata['driver'] !== '') {
@@ -503,6 +583,18 @@ class CommandRun extends Model
 
             if (is_numeric($restoreAudit['verified_signal_run_id'] ?? null)) {
                 $columns['restore_verified_signal_run_id'] = (int) $restoreAudit['verified_signal_run_id'];
+            }
+
+            $postVerification = is_array($restoreAudit['post_restore_verification'] ?? null)
+                ? $restoreAudit['post_restore_verification']
+                : null;
+
+            if (
+                is_array($postVerification)
+                && is_string($postVerification['aggregate_result'] ?? null)
+                && $postVerification['aggregate_result'] !== ''
+            ) {
+                $columns['restore_post_verification_result'] = $postVerification['aggregate_result'];
             }
         }
 

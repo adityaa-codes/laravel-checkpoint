@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
-use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
+use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
 use Illuminate\Console\Command;
+use Illuminate\Contracts\Config\Repository;
+
+use function Laravel\Prompts\intro;
 
 final class StatusCommand extends Command
 {
@@ -18,7 +21,7 @@ final class StatusCommand extends Command
     public function __construct(
         private readonly OperationalReportBuilder $reportBuilder,
         private readonly CommandJsonContract $jsonContract,
-        private readonly \Illuminate\Contracts\Config\Repository $config,
+        private readonly Repository $config,
     ) {
         parent::__construct();
     }
@@ -27,6 +30,11 @@ final class StatusCommand extends Command
     {
         $format = (string) $this->option('format');
         $agentMode = (bool) $this->option('agent');
+        $summaryMode = (bool) $this->option('summary');
+
+        if ($this->enhancedInteractiveMode() && ! $agentMode && $format === 'table') {
+            intro($summaryMode ? 'Checkpoint Status Summary' : 'Checkpoint Status: Recent Runs');
+        }
 
         if (! $agentMode && ! in_array($format, ['table', 'json'], true)) {
             $this->error('The --format option must be table or json.');
@@ -34,7 +42,7 @@ final class StatusCommand extends Command
             return self::FAILURE;
         }
 
-        if ((bool) $this->option('summary')) {
+        if ($summaryMode) {
             $this->renderSummary($format, $agentMode);
 
             return self::SUCCESS;
@@ -45,16 +53,18 @@ final class StatusCommand extends Command
 
         if ($agentMode) {
             $failedRuns = count(array_filter($runs, static fn (array $run): bool => (string) ($run['status'] ?? '') === 'failed'));
+            $runCount = count($runs);
             $this->line(json_encode($this->jsonContract->envelope('status', [
                 'result' => $failedRuns > 0 ? 'failed' : 'passed',
                 'code' => $failedRuns > 0 ? 'status.runs.failed' : 'status.runs.ok',
-                'summary' => sprintf('%d failed run(s) in the latest %d run(s).', $failedRuns, count($runs)),
+                'summary' => sprintf('%d failed run(s) in the latest %d run(s).', $failedRuns, $runCount),
                 'data' => [
                     'mode' => 'runs',
                     'limit' => $limit,
-                    'run_count' => count($runs),
+                    'run_count' => $runCount,
                     'failed_run_count' => $failedRuns,
                     'runs' => $runs,
+                    'slo' => $this->runsSlo($runCount, $failedRuns),
                 ],
                 'suggestions' => $this->replicationFailureSuggestions($runs),
             ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
@@ -107,6 +117,7 @@ final class StatusCommand extends Command
                 'data' => [
                     'mode' => 'summary',
                     'summary' => $summary,
+                    'slo' => $this->summarySlo($summary),
                 ],
                 'suggestions' => $this->summarySuggestions($summary),
             ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
@@ -134,6 +145,8 @@ final class StatusCommand extends Command
             ['Latest backup drill', $summary['latest_backup_drill']['label'] ?? '-'],
             ['Latest failed drill', $summary['latest_failed_backup_drill']['label'] ?? '-'],
             [sprintf('Backup drill pass rate (%dd)', $windowDays), $summary['backup_drill_pass_rate']['label'] ?? '-'],
+            ['Backup drill trend', $summary['backup_drill_trend']['label'] ?? '-'],
+            ['Backup drill playbook', $summary['backup_drill_remediation_playbook']['title'] ?? '-'],
             ['Latest restore run', $summary['latest_restore_run']['label'] ?? '-'],
             ['Latest restore failure', $summary['latest_restore_failure']['label'] ?? '-'],
         ]);
@@ -237,6 +250,129 @@ final class StatusCommand extends Command
             $suggestions[] = 'Run db-ops:doctor --format=json to check queue heartbeat and orphan signals.';
         }
 
-        return $suggestions;
+        $playbook = $summary['backup_drill_remediation_playbook'] ?? null;
+
+        if (is_array($playbook)) {
+            $commands = $playbook['recommended_commands'] ?? [];
+
+            if (is_array($commands)) {
+                foreach ($commands as $command) {
+                    if (is_string($command) && trim($command) !== '') {
+                        $suggestions[] = 'Run '.$command.' to remediate drill posture.';
+                    }
+                }
+            }
+        }
+
+        $suggestions = array_values(array_unique($suggestions));
+
+        return array_slice($suggestions, 0, 5);
+    }
+
+    private function enhancedInteractiveMode(): bool
+    {
+        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
+    }
+
+    /**
+     * @return array{window:string,indicators:list<array{name:string,target:int|float,current:int|float,status:string,unit:string}>,overall_status:string}
+     */
+    private function runsSlo(int $runCount, int $failedRuns): array
+    {
+        $failureRate = $runCount > 0 ? round(($failedRuns / $runCount) * 100, 2) : 0.0;
+        $indicators = [
+            [
+                'name' => 'failed_runs',
+                'target' => 0,
+                'current' => $failedRuns,
+                'status' => $failedRuns > 0 ? 'fail' : 'pass',
+                'unit' => 'runs',
+            ],
+            [
+                'name' => 'failure_rate',
+                'target' => 0,
+                'current' => $failureRate,
+                'status' => $failedRuns > 0 ? 'fail' : 'pass',
+                'unit' => 'percent',
+            ],
+        ];
+
+        return [
+            'window' => sprintf('latest_%d_runs', $runCount),
+            'indicators' => $indicators,
+            'overall_status' => $failedRuns > 0 ? 'fail' : 'pass',
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $summary
+     * @return array{window:string,indicators:list<array{name:string,target:int|float,current:int|float,status:string,unit:string}>,overall_status:string}
+     */
+    private function summarySlo(array $summary): array
+    {
+        $failedRuns24h = (int) ($summary['failed_runs_24h'] ?? 0);
+        $pendingRuns = (int) ($summary['pending_runs'] ?? 0);
+        $runningRuns = (int) ($summary['running_runs'] ?? 0);
+        $drillTarget = (float) $this->config->get('checkpoint.observability.backup_drill_min_pass_rate', 100.0);
+        $drillCurrent = $summary['backup_drill_pass_rate']['pass_rate_percent'] ?? null;
+        $drillCurrentValue = is_numeric($drillCurrent) ? (float) $drillCurrent : 0.0;
+        $drillWindowDays = (int) ($summary['backup_drill_pass_rate']['window_days'] ?? 30);
+        $drillStatus = is_numeric($drillCurrent) && $drillCurrentValue >= $drillTarget ? 'pass' : 'warn';
+        $indicators = [
+            [
+                'name' => 'failed_runs_24h',
+                'target' => 0,
+                'current' => $failedRuns24h,
+                'status' => $failedRuns24h > 0 ? 'fail' : 'pass',
+                'unit' => 'runs',
+            ],
+            [
+                'name' => 'pending_runs',
+                'target' => 0,
+                'current' => $pendingRuns,
+                'status' => $pendingRuns > 0 ? 'warn' : 'pass',
+                'unit' => 'runs',
+            ],
+            [
+                'name' => 'running_runs',
+                'target' => 0,
+                'current' => $runningRuns,
+                'status' => $runningRuns > 0 ? 'warn' : 'pass',
+                'unit' => 'runs',
+            ],
+            [
+                'name' => 'backup_drill_pass_rate',
+                'target' => $drillTarget,
+                'current' => round($drillCurrentValue, 2),
+                'status' => $drillStatus,
+                'unit' => 'percent',
+            ],
+        ];
+
+        return [
+            'window' => sprintf('24h_runs+%dd_drills', $drillWindowDays),
+            'indicators' => $indicators,
+            'overall_status' => $this->overallSloStatus($indicators),
+        ];
+    }
+
+    /**
+     * @param  list<array{name:string,target:int|float,current:int|float,status:string,unit:string}>  $indicators
+     */
+    private function overallSloStatus(array $indicators): string
+    {
+        foreach ($indicators as $indicator) {
+            if ($indicator['status'] === 'fail') {
+                return 'fail';
+            }
+        }
+
+        foreach ($indicators as $indicator) {
+            if ($indicator['status'] === 'warn') {
+                return 'warn';
+            }
+        }
+
+        return 'pass';
     }
 }

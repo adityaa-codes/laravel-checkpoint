@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Services;
 
+use AdityaaCodes\LaravelCheckpoint\Actions\BuildDrillRemediationPlaybookAction;
+use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillFreshnessAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillPassRateAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFreshnessAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\QueryException;
@@ -22,6 +25,7 @@ final readonly class OperationalReportBuilder
     public function __construct(
         private Repository $config,
         private DatabaseManager $database,
+        private BuildDrillRemediationPlaybookAction $buildDrillRemediationPlaybook,
     ) {}
 
     /**
@@ -44,6 +48,7 @@ final readonly class OperationalReportBuilder
                 'argument_text',
                 'restore_confirmation_satisfied_via',
                 'restore_verified_signal_run_id',
+                'restore_post_verification_result',
                 'last_known_good_at',
                 'started_at',
                 'finished_at',
@@ -62,6 +67,7 @@ final readonly class OperationalReportBuilder
                     'verification_state' => $run->verification_state,
                     'restore_target' => $run->restore_target,
                     'restore_audit' => $this->restoreAuditPayload($run),
+                    'post_restore_verification' => $this->postRestoreVerificationPayload($run),
                     'last_known_good_at' => $run->last_known_good_at?->format('Y-m-d H:i:s'),
                     'started_at' => $run->started_at?->format('Y-m-d H:i:s'),
                     'finished_at' => $run->finished_at?->format('Y-m-d H:i:s'),
@@ -87,7 +93,7 @@ final readonly class OperationalReportBuilder
     }
 
     /**
-     * @return array{recent_runs:list<array<string, mixed>>,summary:array<string, mixed>,health:array{ok:bool,checks:list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>}}
+     * @return array{recent_runs:list<array<string, mixed>>,summary:array<string, mixed>,breakdown:array<string,mixed>,verification:array<string,mixed>,health:array{ok:bool,checks:list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>}}
      */
     public function reportPayload(int $limit): array
     {
@@ -97,6 +103,8 @@ final readonly class OperationalReportBuilder
         return [
             'recent_runs' => $this->recentRuns($limit),
             'summary' => $this->summaryFromSnapshot($snapshot),
+            'breakdown' => $this->breakdown(),
+            'verification' => $this->verificationSummary(),
             'health' => [
                 'ok' => $this->healthOk($checks),
                 'checks' => $checks,
@@ -113,6 +121,7 @@ final readonly class OperationalReportBuilder
         $commandRunCounts = $snapshot['command_run_counts'];
         $drillWindowDays = $snapshot['drill_window_days'];
         $drillSummary = $snapshot['drill_summary'];
+        $drillTrend = $this->drillTrendPayload($drillWindowDays);
 
         $summary = [
             'pending_runs' => $commandRunCounts['pending_runs'],
@@ -123,6 +132,8 @@ final readonly class OperationalReportBuilder
             'latest_backup_drill' => $this->drillPayload($drillSummary['latest']),
             'latest_failed_backup_drill' => $this->drillPayload($drillSummary['latest_failed']),
             'backup_drill_pass_rate' => $this->drillPassRatePayload($drillSummary['total'], $drillSummary['passing'], $drillWindowDays),
+            'backup_drill_trend' => $drillTrend,
+            'backup_drill_remediation_playbook' => $this->backupDrillRemediationPlaybook($drillSummary, $drillWindowDays, $drillTrend),
             'latest_restore_run' => $this->restoreRunPayload($snapshot['latest_restore_run']),
             'latest_restore_failure' => $this->restoreFailurePayload($snapshot['latest_restore_failure']),
         ];
@@ -167,6 +178,35 @@ final readonly class OperationalReportBuilder
             'total' => (int) ($counts?->total ?? 0),
             'passing' => (int) ($counts?->passing ?? 0),
         ];
+    }
+
+    /**
+     * @param  array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int}  $summary
+     * @param  array<string,mixed>  $trend
+     * @return array{
+     *   signature:string,
+     *   severity:'info'|'warn'|'critical',
+     *   title:string,
+     *   summary:string,
+     *   recommended_commands:list<string>,
+     *   steps:list<string>,
+     *   evidence:array<string,mixed>
+     * }
+     */
+    private function backupDrillRemediationPlaybook(array $summary, int $windowDays, array $trend): array
+    {
+        $minPassRate = max(0.0, min(100.0, (float) $this->config->get('checkpoint.observability.backup_drill_min_pass_rate', 100.0)));
+        $maxAgeDays = max(1, (int) $this->config->get('checkpoint.observability.max_backup_drill_age_days', 30));
+
+        return $this->buildDrillRemediationPlaybook->execute(
+            latestRun: $summary['latest'],
+            windowDays: $windowDays,
+            total: $summary['total'],
+            passing: $summary['passing'],
+            minimumPassRatePercent: $minPassRate,
+            maxAgeDays: $maxAgeDays,
+            trend: $trend,
+        );
     }
 
     /**
@@ -218,6 +258,7 @@ final readonly class OperationalReportBuilder
             $this->configuredBinaryRow('gzip', 'gzip', false),
             $this->tableRow('command_runs', (new CommandRun)->getTable()),
             $this->tableRow('backup_drill_runs', (new BackupDrillRun)->getTable()),
+            $this->tableRow('verification_runs', (new VerificationRun)->getTable()),
             $this->checkRow(
                 'queue.worker_visibility',
                 'Queue: '.$this->config->get('checkpoint.queue.name', 'db-ops'),
@@ -242,11 +283,15 @@ final readonly class OperationalReportBuilder
         $rows[] = $this->restoreDatabasePostureCheck();
         $rows[] = $this->restoreCiBypassPostureCheck();
         $rows[] = $this->restoreVerifiedBackupPostureCheck();
+        $rows[] = $this->restorePostVerificationCheck($snapshot['latest_restore_run']);
         $rows[] = $this->lastKnownGoodCheck($snapshot['last_known_good']);
         $rows[] = $this->backupDurationAnomalyCheck();
         $backupDrillSummary = $snapshot['drill_summary'];
         $rows[] = $this->backupDrillFreshnessCheck($backupDrillSummary['latest']);
         $rows[] = $this->backupDrillPassRateCheck($backupDrillSummary);
+        $rows[] = $this->backupDrillTrendCheck($snapshot['drill_window_days']);
+        $rows[] = $this->backupDrillPlaybookCheck($backupDrillSummary, $snapshot['drill_window_days']);
+        $rows[] = $this->verificationHealthCheck();
 
         return $rows;
     }
@@ -375,7 +420,15 @@ final readonly class OperationalReportBuilder
     private function restoreRunPayload(?CommandRun $run): array
     {
         if (! $run instanceof CommandRun) {
-            return ['label' => '-', 'timestamp' => null, 'operation' => null, 'status' => null, 'target' => null, 'audit' => null];
+            return [
+                'label' => '-',
+                'timestamp' => null,
+                'operation' => null,
+                'status' => null,
+                'target' => null,
+                'audit' => null,
+                'post_restore_verification' => null,
+            ];
         }
 
         $target = $run->restore_target ?? $run->argument_text;
@@ -386,11 +439,14 @@ final readonly class OperationalReportBuilder
         }
 
         $audit = $this->restoreAuditPayload($run);
+        $postRestoreVerification = $this->postRestoreVerificationPayload($run);
         $summary = $run->restoreAuditSummary();
+        $postVerificationSummary = $run->restorePostVerificationSummary();
         $confirmation = $summary['confirmation_satisfied_via'];
         $verifiedRunId = $summary['verified_signal_run_id'];
+        $postVerificationResult = $postVerificationSummary['aggregate_result'];
 
-        if ($confirmation !== null || is_int($verifiedRunId)) {
+        if ($confirmation !== null || is_int($verifiedRunId) || is_string($postVerificationResult)) {
             $parts = [];
 
             if ($confirmation !== null) {
@@ -399,6 +455,10 @@ final readonly class OperationalReportBuilder
 
             if (is_int($verifiedRunId)) {
                 $parts[] = 'verified_run='.$verifiedRunId;
+            }
+
+            if (is_string($postVerificationResult) && $postVerificationResult !== '') {
+                $parts[] = 'post_verify='.$postVerificationResult;
             }
 
             $label .= ' {'.implode(', ', $parts).'}';
@@ -417,6 +477,8 @@ final readonly class OperationalReportBuilder
             'status' => (string) $run->status->value,
             'target' => $target,
             'audit' => $audit,
+            'blast_radius' => is_array($audit['blast_radius'] ?? null) ? $audit['blast_radius'] : null,
+            'post_restore_verification' => $postRestoreVerification,
         ];
     }
 
@@ -437,7 +499,36 @@ final readonly class OperationalReportBuilder
             $restoreAudit['verified_signal_run_id'] = $summary['verified_signal_run_id'];
         }
 
+        $postVerificationSummary = $run->restorePostVerificationSummary();
+
+        if ($postVerificationSummary['aggregate_result'] !== null) {
+            $postVerification = is_array($restoreAudit['post_restore_verification'] ?? null)
+                ? $restoreAudit['post_restore_verification']
+                : [];
+            $postVerification['aggregate_result'] = $postVerificationSummary['aggregate_result'];
+            $restoreAudit['post_restore_verification'] = $postVerification;
+        }
+
         return $restoreAudit !== [] ? $restoreAudit : null;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function postRestoreVerificationPayload(CommandRun $run): ?array
+    {
+        $metadata = is_array($run->metadata) ? $run->metadata : [];
+        $restoreAudit = is_array($metadata['restore_audit'] ?? null) ? $metadata['restore_audit'] : [];
+        $postVerification = is_array($restoreAudit['post_restore_verification'] ?? null)
+            ? $restoreAudit['post_restore_verification']
+            : [];
+        $summary = $run->restorePostVerificationSummary();
+
+        if ($summary['aggregate_result'] !== null) {
+            $postVerification['aggregate_result'] = $summary['aggregate_result'];
+        }
+
+        return $postVerification !== [] ? $postVerification : null;
     }
 
     /**
@@ -461,6 +552,7 @@ final readonly class OperationalReportBuilder
             'apply_requested' => $replication['apply_requested'] ?? null,
             'force_requested' => $replication['force_requested'] ?? null,
             'overwrite_destination' => $replication['overwrite_destination'] ?? null,
+            'governance_preflight' => is_array($replication['governance_preflight'] ?? null) ? $replication['governance_preflight'] : null,
             'result' => $replication['result'] ?? null,
             'sanity' => is_array($replication['sanity'] ?? null) ? $replication['sanity'] : null,
             'failure_analysis' => is_array($replication['failure_analysis'] ?? null) ? $replication['failure_analysis'] : null,
@@ -496,6 +588,7 @@ final readonly class OperationalReportBuilder
             'restore_target',
             'restore_confirmation_satisfied_via',
             'restore_verified_signal_run_id',
+            'restore_post_verification_result',
             'started_at',
             'finished_at',
             'metadata',
@@ -545,6 +638,308 @@ final readonly class OperationalReportBuilder
             'total' => $total,
             'passing' => $passing,
             'pass_rate_percent' => $percent,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function drillTrendPayload(int $windowDays): array
+    {
+        $windowStart = now()->subDays($windowDays);
+        $runs = BackupDrillRun::query()
+            ->where('executed_at', '>=', $windowStart)
+            ->orderByDesc('executed_at')
+            ->orderByDesc('id')
+            ->get(['id', 'run_uuid', 'overall_result', 'executed_at']);
+
+        $total = $runs->count();
+        $latestResult = null;
+        $latestRunUuid = null;
+        $latestExecutedAt = null;
+        $streakType = null;
+        $streakLength = 0;
+        $recentResults = [];
+        $recentOutcomes = [];
+
+        foreach ($runs as $index => $run) {
+            $result = strtolower((string) $run->overall_result) === 'pass' ? 'pass' : 'fail';
+
+            if ($index === 0) {
+                $latestResult = $result;
+                $latestRunUuid = $run->run_uuid;
+                $latestExecutedAt = $run->executed_at?->format('Y-m-d H:i:s');
+                $streakType = $result;
+            }
+
+            if ($streakType !== null && $result === $streakType) {
+                $streakLength++;
+            }
+
+            if (count($recentResults) < 5) {
+                $recentResults[] = $result;
+                $recentOutcomes[] = [
+                    'run_uuid' => $run->run_uuid,
+                    'result' => $result,
+                    'executed_at' => $run->executed_at?->format('Y-m-d H:i:s'),
+                ];
+            }
+        }
+
+        $passing = count(array_filter($recentResults, static fn (string $result): bool => $result === 'pass'));
+        $failing = count($recentResults) - $passing;
+        $trajectory = $this->drillTrajectory($recentResults);
+        $status = match (true) {
+            $total === 0 => 'insufficient_data',
+            $latestResult === 'fail' && $streakLength >= 2 => 'degrading',
+            $latestResult === 'pass' && $streakLength >= 2 => 'improving',
+            default => 'stable',
+        };
+
+        return [
+            'window_days' => $windowDays,
+            'sample_size' => $total,
+            'latest_result' => $latestResult,
+            'latest_run_uuid' => $latestRunUuid,
+            'latest_executed_at' => $latestExecutedAt,
+            'streak' => [
+                'type' => $streakType,
+                'length' => $streakLength,
+            ],
+            'recent' => [
+                'results' => $recentResults,
+                'passing' => $passing,
+                'failing' => $failing,
+                'outcomes' => $recentOutcomes,
+            ],
+            'trajectory' => $trajectory,
+            'status' => $status,
+            'label' => $this->drillTrendLabel($status, $streakType, $streakLength, $total),
+        ];
+    }
+
+    /**
+     * @param  list<string>  $recentResults
+     */
+    private function drillTrajectory(array $recentResults): string
+    {
+        if (count($recentResults) < 2) {
+            return 'insufficient_data';
+        }
+
+        $latestTwo = array_slice($recentResults, 0, 2);
+
+        if ($latestTwo === ['pass', 'pass']) {
+            return 'improving';
+        }
+
+        if ($latestTwo === ['fail', 'fail']) {
+            return 'degrading';
+        }
+
+        return 'stable';
+    }
+
+    private function drillTrendLabel(string $status, ?string $streakType, int $streakLength, int $sampleSize): string
+    {
+        if ($sampleSize === 0) {
+            return 'No drills in window';
+        }
+
+        if ($streakType === null) {
+            return sprintf('Trend %s (n=%d)', $status, $sampleSize);
+        }
+
+        return sprintf(
+            '%s (%s streak x%d, n=%d)',
+            ucfirst($status),
+            strtoupper($streakType),
+            $streakLength,
+            $sampleSize,
+        );
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function verificationSummary(): array
+    {
+        $total = VerificationRun::query()->count();
+        $verified = VerificationRun::query()->where('status', 'verified')->count();
+        $failed = VerificationRun::query()->where('status', 'failed')->count();
+        $latest = VerificationRun::query()->latest('verified_at')->latest('id')->first();
+
+        if (! $latest instanceof VerificationRun) {
+            return [
+                'total_runs' => 0,
+                'verified_runs' => 0,
+                'failed_runs' => 0,
+                'success_rate_percent' => null,
+                'health_status' => 'warn',
+                'latest' => [
+                    'id' => null,
+                    'command_run_id' => null,
+                    'verification_type' => null,
+                    'status' => null,
+                    'verified_at' => null,
+                ],
+            ];
+        }
+
+        return [
+            'total_runs' => $total,
+            'verified_runs' => $verified,
+            'failed_runs' => $failed,
+            'success_rate_percent' => $total > 0 ? round(($verified / $total) * 100, 1) : null,
+            'health_status' => $failed > 0 ? 'warn' : 'pass',
+            'latest' => [
+                'id' => (int) $latest->getKey(),
+                'command_run_id' => (int) $latest->command_run_id,
+                'verification_type' => $latest->verification_type,
+                'status' => $latest->status,
+                'verified_at' => $latest->verified_at?->format('Y-m-d H:i:s'),
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function breakdown(): array
+    {
+        $failedRunsWindowHours = 24;
+        $failedRunsWindowStart = now()->subHours($failedRunsWindowHours);
+        $groups = [];
+        $totalRuns = 0;
+        $totalFailedRuns24h = 0;
+
+        $runs = CommandRun::query()
+            ->select([
+                'driver_name',
+                'repository',
+                'stanza',
+                'status',
+                'started_at',
+                'finished_at',
+                'created_at',
+            ])
+            ->get();
+
+        foreach ($runs as $run) {
+            $driver = is_string($run->driver_name) && $run->driver_name !== '' ? $run->driver_name : 'unknown';
+            $repository = $run->repository;
+            $stanza = is_string($run->stanza) && $run->stanza !== '' ? $run->stanza : null;
+            $key = sprintf(
+                'driver:%s|repo:%s%s',
+                $driver,
+                $repository === null ? 'none' : (string) $repository,
+                $stanza !== null ? '|stanza:'.$stanza : '',
+            );
+
+            if (! array_key_exists($key, $groups)) {
+                $groups[$key] = [
+                    'driver' => $driver,
+                    'repository' => $repository,
+                    'stanza' => $stanza,
+                    'runs' => [
+                        'total' => 0,
+                        'succeeded' => 0,
+                        'failed' => 0,
+                        'cancelled' => 0,
+                        'running' => 0,
+                        'pending' => 0,
+                        'failed_24h' => 0,
+                    ],
+                    'failure_rate_percent' => 0.0,
+                    'health_status' => 'pass',
+                    'latest_activity_at' => null,
+                    'latest_failure_at' => null,
+                ];
+            }
+
+            $groups[$key]['runs']['total']++;
+            $totalRuns++;
+
+            $status = (string) $run->status->value;
+
+            if ($status === CommandRunStatus::Succeeded->value) {
+                $groups[$key]['runs']['succeeded']++;
+            } elseif ($status === CommandRunStatus::Failed->value) {
+                $groups[$key]['runs']['failed']++;
+
+                if ($run->created_at instanceof Carbon && $run->created_at->greaterThanOrEqualTo($failedRunsWindowStart)) {
+                    $groups[$key]['runs']['failed_24h']++;
+                    $totalFailedRuns24h++;
+                }
+            } elseif ($status === CommandRunStatus::Cancelled->value) {
+                $groups[$key]['runs']['cancelled']++;
+            } elseif ($status === CommandRunStatus::Running->value) {
+                $groups[$key]['runs']['running']++;
+            } elseif ($status === CommandRunStatus::Pending->value) {
+                $groups[$key]['runs']['pending']++;
+            }
+
+            $latestActivity = $run->finished_at ?? $run->started_at ?? $run->created_at;
+
+            if (
+                $latestActivity instanceof Carbon
+                && (
+                    ! $groups[$key]['latest_activity_at'] instanceof Carbon
+                    || $latestActivity->greaterThan($groups[$key]['latest_activity_at'])
+                )
+            ) {
+                $groups[$key]['latest_activity_at'] = $latestActivity;
+            }
+
+            if ($status === CommandRunStatus::Failed->value) {
+                $latestFailure = $run->finished_at ?? $run->started_at ?? $run->created_at;
+
+                if (
+                    $latestFailure instanceof Carbon
+                    && (
+                        ! $groups[$key]['latest_failure_at'] instanceof Carbon
+                        || $latestFailure->greaterThan($groups[$key]['latest_failure_at'])
+                    )
+                ) {
+                    $groups[$key]['latest_failure_at'] = $latestFailure;
+                }
+            }
+        }
+
+        foreach ($groups as &$group) {
+            $total = (int) $group['runs']['total'];
+            $failed = (int) $group['runs']['failed'];
+            $failed24h = (int) $group['runs']['failed_24h'];
+            $running = (int) $group['runs']['running'];
+            $pending = (int) $group['runs']['pending'];
+
+            $group['failure_rate_percent'] = $total > 0 ? round(($failed / $total) * 100, 1) : 0.0;
+            $group['health_status'] = match (true) {
+                $failed24h > 0 => 'fail',
+                $failed > 0 || $running > 0 || $pending > 0 => 'warn',
+                default => 'pass',
+            };
+            $group['latest_activity_at'] = $group['latest_activity_at'] instanceof Carbon
+                ? $group['latest_activity_at']->format('Y-m-d H:i:s')
+                : null;
+            $group['latest_failure_at'] = $group['latest_failure_at'] instanceof Carbon
+                ? $group['latest_failure_at']->format('Y-m-d H:i:s')
+                : null;
+        }
+        unset($group);
+
+        ksort($groups);
+
+        return [
+            'window' => [
+                'failed_runs_hours' => $failedRunsWindowHours,
+            ],
+            'totals' => [
+                'groups' => count($groups),
+                'runs' => $totalRuns,
+                'failed_runs_24h' => $totalFailedRuns24h,
+            ],
+            'by_target' => $groups,
         ];
     }
 
@@ -700,6 +1095,46 @@ final readonly class OperationalReportBuilder
                 'environment' => $environment,
                 'require_verified_backup' => $required,
                 'reason' => $required ? 'verified_backup_required' : 'verified_backup_not_required',
+            ],
+        );
+    }
+
+    /**
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
+     */
+    private function restorePostVerificationCheck(?CommandRun $latestRestoreRun): array
+    {
+        if (! $latestRestoreRun instanceof CommandRun) {
+            return $this->checkRow(
+                'restore.post_verification',
+                'Restore posture: post-restore verification',
+                'warn',
+                'No restore run available for post-restore verification evaluation',
+                [
+                    'latest_restore_run_id' => null,
+                    'aggregate_result' => null,
+                    'reason' => 'missing_restore_run',
+                ],
+            );
+        }
+
+        $summary = $latestRestoreRun->restorePostVerificationSummary();
+        $aggregateResult = $summary['aggregate_result'];
+        $status = $aggregateResult === 'pass' ? 'pass' : 'warn';
+
+        return $this->checkRow(
+            'restore.post_verification',
+            'Restore posture: post-restore verification',
+            $status,
+            is_string($aggregateResult)
+                ? sprintf('latest restore post-verification result: %s', $aggregateResult)
+                : 'latest restore run has no post-restore verification payload',
+            [
+                'latest_restore_run_id' => (int) $latestRestoreRun->getKey(),
+                'operation' => $latestRestoreRun->operation,
+                'aggregate_result' => $aggregateResult,
+                'post_restore_verification' => $this->postRestoreVerificationPayload($latestRestoreRun),
+                'reason' => $aggregateResult === null ? 'signal_missing' : ($aggregateResult === 'pass' ? 'healthy' : 'check_failed'),
             ],
         );
     }
@@ -961,6 +1396,49 @@ final readonly class OperationalReportBuilder
     }
 
     /**
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
+     */
+    private function backupDrillTrendCheck(int $windowDays): array
+    {
+        $trend = $this->drillTrendPayload($windowDays);
+        $status = match ((string) ($trend['status'] ?? 'insufficient_data')) {
+            'degrading', 'insufficient_data' => 'warn',
+            default => 'pass',
+        };
+
+        return $this->checkRow(
+            'backup_drill.trend',
+            'Backup drills: trend',
+            $status,
+            (string) ($trend['label'] ?? 'No trend available'),
+            $trend,
+        );
+    }
+
+    /**
+     * @param  array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int}  $summary
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
+     */
+    private function backupDrillPlaybookCheck(array $summary, int $windowDays): array
+    {
+        $trend = $this->drillTrendPayload($windowDays);
+        $playbook = $this->backupDrillRemediationPlaybook($summary, $windowDays, $trend);
+        $status = match ((string) ($playbook['severity'] ?? 'info')) {
+            'critical' => 'warn',
+            'warn' => 'warn',
+            default => 'pass',
+        };
+
+        return $this->checkRow(
+            'backup_drill.playbook',
+            'Backup drills: remediation playbook',
+            $status,
+            (string) ($playbook['title'] ?? 'No remediation playbook'),
+            $playbook,
+        );
+    }
+
+    /**
      * @return array<int|string, mixed>
      */
     private function pgBackRestRepositories(): array
@@ -1136,6 +1614,50 @@ final readonly class OperationalReportBuilder
             'notes' => $notes,
             'data' => $data,
         ];
+    }
+
+    /**
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
+     */
+    private function verificationHealthCheck(): array
+    {
+        $summary = $this->verificationSummary();
+        $total = (int) ($summary['total_runs'] ?? 0);
+        $failed = (int) ($summary['failed_runs'] ?? 0);
+
+        if ($total < 1) {
+            return $this->checkRow(
+                'verification.runs',
+                'Verification: runs',
+                'warn',
+                'No persisted verification runs yet',
+                [
+                    'total_runs' => 0,
+                    'verified_runs' => 0,
+                    'failed_runs' => 0,
+                    'health_status' => 'warn',
+                    'reason' => 'missing',
+                ],
+            );
+        }
+
+        $status = $failed > 0 ? 'warn' : 'pass';
+
+        return $this->checkRow(
+            'verification.runs',
+            'Verification: runs',
+            $status,
+            sprintf('%d total (%d verified, %d failed)', $total, (int) ($summary['verified_runs'] ?? 0), $failed),
+            [
+                'total_runs' => $total,
+                'verified_runs' => (int) ($summary['verified_runs'] ?? 0),
+                'failed_runs' => $failed,
+                'success_rate_percent' => $summary['success_rate_percent'] ?? null,
+                'health_status' => $summary['health_status'] ?? ($failed > 0 ? 'warn' : 'pass'),
+                'latest' => is_array($summary['latest'] ?? null) ? $summary['latest'] : null,
+                'reason' => $failed > 0 ? 'failed_runs_present' : 'healthy',
+            ],
+        );
     }
 
     private function dispatchWithCooldown(string $key, callable $dispatch): void

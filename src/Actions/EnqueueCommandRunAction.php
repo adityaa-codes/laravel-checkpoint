@@ -9,6 +9,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupQueued;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
+use AdityaaCodes\LaravelCheckpoint\Services\ReplicationGovernanceEvaluator;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationRequestFactory;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationSecretRedactor;
 use Illuminate\Contracts\Bus\Dispatcher;
@@ -25,6 +26,7 @@ class EnqueueCommandRunAction
         private readonly Dispatcher $dispatcher,
         private readonly EventDispatcher $events,
         private readonly Repository $config,
+        private readonly ReplicationGovernanceEvaluator $replicationGovernanceEvaluator,
         private readonly ReplicationRequestFactory $replicationRequestFactory,
         private readonly ReplicationSecretRedactor $replicationSecretRedactor,
     ) {}
@@ -82,6 +84,8 @@ class EnqueueCommandRunAction
         $criticalTables = is_array($payload['critical_tables'] ?? null)
             ? array_values(array_unique(array_filter($payload['critical_tables'], static fn (mixed $value): bool => is_string($value) && trim($value) !== '')))
             : [];
+        $governancePreflight = $this->replicationGovernanceEvaluator->evaluate($request, $applyRequested);
+        $this->replicationGovernanceEvaluator->assertAllowed($governancePreflight, $applyRequested);
 
         $serializedArgument = json_encode([
             'source' => $request->source->toRedactedString(),
@@ -89,6 +93,7 @@ class EnqueueCommandRunAction
             'dry_run' => $dryRunRequested,
             'apply' => $applyRequested,
             'force_overwrite' => $forceOverwriteRequested,
+            'governance_preflight' => $governancePreflight,
             'critical_tables' => $criticalTables,
         ], JSON_THROW_ON_ERROR);
 
@@ -115,6 +120,7 @@ class EnqueueCommandRunAction
                     'force_overwrite_requested' => $forceOverwriteRequested,
                     'overwrite_destination' => $overwriteDestination,
                     'critical_tables' => $criticalTables,
+                    'governance_preflight' => $governancePreflight,
                 ],
             ],
         ];

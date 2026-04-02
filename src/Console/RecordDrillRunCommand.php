@@ -13,6 +13,9 @@ use Illuminate\Support\DateFactory;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
+use function Laravel\Prompts\intro;
+use function Laravel\Prompts\outro;
+
 final class RecordDrillRunCommand extends Command
 {
     protected $signature = 'db-ops:record-drill
@@ -44,12 +47,22 @@ final class RecordDrillRunCommand extends Command
     public function handle(): int
     {
         try {
+            if ($this->enhancedInteractiveMode()) {
+                intro('Record Backup Drill Run');
+            }
+
             $attributes = $this->validatedAttributes();
             $run = BackupDrillRun::query()->create($attributes);
 
             $this->events->dispatch(new BackupDrillCompleted($run));
 
-            $this->info($this->recordedMessage($run));
+            $message = $this->recordedMessage($run);
+
+            if ($this->enhancedInteractiveMode()) {
+                outro($message);
+            } else {
+                $this->info($message);
+            }
 
             return self::SUCCESS;
         } catch (ValidationException $exception) {
@@ -122,5 +135,10 @@ final class RecordDrillRunCommand extends Command
         }
 
         return (string) $message;
+    }
+
+    private function enhancedInteractiveMode(): bool
+    {
+        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
     }
 }

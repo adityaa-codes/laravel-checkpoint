@@ -8,6 +8,9 @@ use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use Illuminate\Console\Command;
 use Throwable;
 
+use function Laravel\Prompts\intro;
+use function Laravel\Prompts\outro;
+
 final class EnqueueLogicalBackupCommand extends Command
 {
     protected $signature = 'db-ops:enqueue-backup';
@@ -17,9 +20,19 @@ final class EnqueueLogicalBackupCommand extends Command
     public function handle(EnqueueCommandRunAction $enqueueCommandRun): int
     {
         try {
+            if ($this->enhancedInteractiveMode()) {
+                intro('Queue Logical Backup');
+            }
+
             $run = $enqueueCommandRun->execute('logical_backup');
 
-            $this->info($this->queuedMessage((int) $run->getKey()));
+            $message = $this->queuedMessage((int) $run->getKey());
+
+            if ($this->enhancedInteractiveMode()) {
+                outro($message);
+            } else {
+                $this->info($message);
+            }
 
             return self::SUCCESS;
         } catch (Throwable $exception) {
@@ -47,5 +60,10 @@ final class EnqueueLogicalBackupCommand extends Command
         }
 
         return (string) $message;
+    }
+
+    private function enhancedInteractiveMode(): bool
+    {
+        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
     }
 }

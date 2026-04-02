@@ -7,6 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Tests\Support;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
 use Illuminate\Support\Facades\Date;
 
 final class OperatorCommandTestSupport
@@ -94,6 +95,52 @@ final class OperatorCommandTestSupport
                     'confirmation_satisfied_via' => 'token',
                     'verified_backup_required' => true,
                     'verified_signal_run_id' => 2,
+                    'post_restore_verification' => [
+                        'contract_version' => 1,
+                        'command_run_id' => 3,
+                        'operation' => 'logical_restore_file',
+                        'generated_at' => now()->subMinutes(18)->toIso8601String(),
+                        'aggregate_result' => 'fail',
+                        'checks_performed' => [
+                            'restore_audit_recorded',
+                            'restore_target_recorded',
+                            'command_exit_code_zero',
+                            'verified_backup_signal_linkage',
+                        ],
+                        'checks' => [
+                            [
+                                'name' => 'restore_audit_recorded',
+                                'passed' => true,
+                                'status' => 'pass',
+                                'description' => 'restore guard decision metadata was persisted',
+                                'observed' => 'recorded',
+                            ],
+                            [
+                                'name' => 'restore_target_recorded',
+                                'passed' => true,
+                                'status' => 'pass',
+                                'description' => 'restore target is present for post-restore verification linkage',
+                                'observed' => 'nightly.sql',
+                            ],
+                            [
+                                'name' => 'command_exit_code_zero',
+                                'passed' => false,
+                                'status' => 'fail',
+                                'description' => 'restore command finished with exit code 0',
+                                'observed' => 1,
+                            ],
+                            [
+                                'name' => 'verified_backup_signal_linkage',
+                                'passed' => true,
+                                'status' => 'pass',
+                                'description' => 'verified-backup requirement is satisfied when enabled',
+                                'observed' => [
+                                    'required' => true,
+                                    'verified_signal_run_id' => 2,
+                                ],
+                            ],
+                        ],
+                    ],
                 ],
             ],
             'verification_state' => 'failed',
@@ -105,11 +152,26 @@ final class OperatorCommandTestSupport
             'finished_at' => now()->subMinutes(18),
         ]);
 
-        BackupDrillRun::query()->create([
-            'run_uuid' => 'drill-pass-001',
-            'overall_result' => 'pass',
-            'executed_by' => 'ci-pipeline',
-            'executed_at' => now()->subHours(6),
+        VerificationRun::query()->create([
+            'command_run_id' => 2,
+            'verification_type' => 'pgbackrest_verify',
+            'status' => 'verified',
+            'verified_at' => now()->subMinutes(5),
+            'metadata' => [
+                'driver' => 'pgbackrest',
+                'summary' => ['ok' => true],
+            ],
+        ]);
+
+        VerificationRun::query()->create([
+            'command_run_id' => 3,
+            'verification_type' => 'pgbackrest_check',
+            'status' => 'failed',
+            'verified_at' => now()->subMinutes(3),
+            'metadata' => [
+                'driver' => 'pgbackrest',
+            ],
+            'error_detail' => 'Restore verification failed',
         ]);
 
         BackupDrillRun::query()->create([
@@ -117,6 +179,13 @@ final class OperatorCommandTestSupport
             'overall_result' => 'fail',
             'executed_by' => 'ops-user',
             'executed_at' => now()->subHours(3),
+        ]);
+
+        BackupDrillRun::query()->create([
+            'run_uuid' => 'drill-pass-001',
+            'overall_result' => 'pass',
+            'executed_by' => 'ci-pipeline',
+            'executed_at' => now()->subHours(6),
         ]);
     }
 }

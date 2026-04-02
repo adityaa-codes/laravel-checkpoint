@@ -1,18 +1,18 @@
 {
-  "checks": [
-    {
-      "check": "Config validation",
-      "code": "config.validation",
-      "data": {
-        "exception": "AdityaaCodes\\LaravelCheckpoint\\Exceptions\\ConfigurationException"
-      },
-      "notes": "checkpoint.queue.retry_after must be greater than checkpoint.queue.timeout to avoid duplicate job processing.",
-      "status": "fail"
-    }
-  ],
-  "driver": "shell",
-  "generated_at": "2026-03-11T12:00:00+00:00",
-  "ok": false,
-  "surface": "doctor",
-  "version": 3
+    "ok": false,
+    "driver": "shell",
+    "generated_at": "2026-03-11T12:00:00+00:00",
+    "checks": [
+        {
+            "code": "config.validation",
+            "check": "Config validation",
+            "status": "fail",
+            "notes": "checkpoint.queue.retry_after must be greater than checkpoint.queue.timeout to avoid duplicate job processing.",
+            "data": {
+                "exception": "AdityaaCodes\\LaravelCheckpoint\\Exceptions\\ConfigurationException"
+            }
+        }
+    ],
+    "version": 3,
+    "surface": "doctor"
 }

@@ -28,6 +28,10 @@ return new class extends Migration
             if (! Schema::hasColumn($table->getTable(), 'restore_verified_signal_run_id')) {
                 $table->unsignedBigInteger('restore_verified_signal_run_id')->nullable()->after('restore_confirmation_satisfied_via');
             }
+
+            if (! Schema::hasColumn($table->getTable(), 'restore_post_verification_result')) {
+                $table->string('restore_post_verification_result')->nullable()->after('restore_verified_signal_run_id');
+            }
         });
     }
 
@@ -40,6 +44,10 @@ return new class extends Migration
         }
 
         Schema::table($table, function (Blueprint $table): void {
+            if (Schema::hasColumn($table->getTable(), 'restore_post_verification_result')) {
+                $table->dropColumn('restore_post_verification_result');
+            }
+
             if (Schema::hasColumn($table->getTable(), 'restore_verified_signal_run_id')) {
                 $table->dropColumn('restore_verified_signal_run_id');
             }

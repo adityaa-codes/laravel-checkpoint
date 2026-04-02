@@ -1,0 +1,70 @@
+{
+    "generated_at": "2026-03-11T12:00:00+00:00",
+    "target": "2026-03-11 11:30:00",
+    "readiness": "ready",
+    "checks": [
+        {
+            "code": "baseline.last_known_good",
+            "status": "pass",
+            "message": "Found a last-known-good logical backup baseline.",
+            "data": {
+                "command_run_id": 1,
+                "artifact_path": "/tmp/checkpoint-pitr-fixture-baseline.sql",
+                "last_known_good_at": "2026-03-11 11:00:00"
+            }
+        },
+        {
+            "code": "baseline.artifact_exists",
+            "status": "pass",
+            "message": "Baseline backup artifact exists on disk.",
+            "data": {
+                "artifact_path": "/tmp/checkpoint-pitr-fixture-baseline.sql"
+            }
+        },
+        {
+            "code": "binlog.chain_configured",
+            "status": "pass",
+            "message": "MySQL binlog chain is configured.",
+            "data": {
+                "configured_count": 2,
+                "configured_files": [
+                    "/tmp/checkpoint-pitr-fixture-binlog-a.log",
+                    "/tmp/checkpoint-pitr-fixture-binlog-b.log"
+                ]
+            }
+        },
+        {
+            "code": "binlog.chain_files_exist",
+            "status": "pass",
+            "message": "Configured MySQL binlog files are present.",
+            "data": {
+                "missing_files": []
+            }
+        },
+        {
+            "code": "target.not_future",
+            "status": "pass",
+            "message": "Requested PITR target is not in the future.",
+            "data": {
+                "target": "2026-03-11 11:30:00",
+                "now": "2026-03-11 12:00:00"
+            }
+        },
+        {
+            "code": "target.after_baseline",
+            "status": "pass",
+            "message": "Requested PITR target is newer than or equal to baseline backup.",
+            "data": {
+                "target": "2026-03-11 11:30:00",
+                "baseline_last_known_good_at": "2026-03-11 11:00:00"
+            }
+        }
+    ],
+    "summary": {
+        "pass": 6,
+        "fail": 0
+    },
+    "driver": "shell",
+    "version": 1,
+    "surface": "pitr_readiness"
+}

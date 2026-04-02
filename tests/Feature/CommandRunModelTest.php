@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Foundation\Auth\User;
 use Illuminate\Support\Facades\Date;
@@ -94,6 +95,9 @@ it('denormalizes hot operator fields from metadata payloads', function (): void 
             'restore_audit' => [
                 'confirmation_satisfied_via' => 'token',
                 'verified_signal_run_id' => 42,
+                'post_restore_verification' => [
+                    'aggregate_result' => 'pass',
+                ],
                 'verified_signal_operation' => 'pgbackrest_info',
             ],
         ],
@@ -104,11 +108,37 @@ it('denormalizes hot operator fields from metadata payloads', function (): void 
     expect($run->driver_name)->toBe('pgbackrest')
         ->and($run->restore_confirmation_satisfied_via)->toBe('token')
         ->and($run->restore_verified_signal_run_id)->toBe(42)
+        ->and($run->restore_post_verification_result)->toBe('pass')
         ->and($run->resolvedDriverName('shell'))->toBe('pgbackrest')
         ->and($run->restoreAuditSummary())->toBe([
             'confirmation_satisfied_via' => 'token',
             'verified_signal_run_id' => 42,
+        ])
+        ->and($run->restorePostVerificationSummary())->toBe([
+            'aggregate_result' => 'pass',
         ]);
+});
+
+it('persists verification rows from verification metadata transitions', function (): void {
+    $run = CommandRun::factory()->pending()->create([
+        'operation' => 'pgbackrest_verify',
+    ]);
+
+    $run->recordMetadata([
+        'verification_state' => 'verified',
+        'verified_at' => Date::now(),
+        'metadata' => [
+            'driver' => 'pgbackrest',
+            'summary' => ['ok' => true],
+        ],
+    ]);
+
+    $verification = VerificationRun::query()->first();
+
+    expect($verification)->not->toBeNull()
+        ->and($verification?->verification_type)->toBe('pgbackrest_verify')
+        ->and($verification?->status)->toBe('verified')
+        ->and($run->fresh()?->verificationRuns()->count())->toBe(1);
 });
 
 it('clears denormalized operator fields when metadata no longer carries them', function (): void {
@@ -116,11 +146,15 @@ it('clears denormalized operator fields when metadata no longer carries them', f
         'driver_name' => 'pgbackrest',
         'restore_confirmation_satisfied_via' => 'token',
         'restore_verified_signal_run_id' => 42,
+        'restore_post_verification_result' => 'pass',
         'metadata' => [
             'driver' => 'pgbackrest',
             'restore_audit' => [
                 'confirmation_satisfied_via' => 'token',
                 'verified_signal_run_id' => 42,
+                'post_restore_verification' => [
+                    'aggregate_result' => 'pass',
+                ],
             ],
         ],
     ]);
@@ -138,9 +172,13 @@ it('clears denormalized operator fields when metadata no longer carries them', f
     expect($run->driver_name)->toBeNull()
         ->and($run->restore_confirmation_satisfied_via)->toBeNull()
         ->and($run->restore_verified_signal_run_id)->toBeNull()
+        ->and($run->restore_post_verification_result)->toBeNull()
         ->and($run->restoreAuditSummary())->toBe([
             'confirmation_satisfied_via' => null,
             'verified_signal_run_id' => null,
+        ])
+        ->and($run->restorePostVerificationSummary())->toBe([
+            'aggregate_result' => null,
         ]);
 });
 
@@ -243,8 +281,9 @@ it('records heartbeats only when due for running runs', function (): void {
 });
 
 it('selects prunable records using the configured retention windows', function (): void {
-    config()->set('checkpoint.schedule.prune_keep_days', 30);
-    config()->set('checkpoint.schedule.prune_keep_failed_days', 365);
+    config()->set('checkpoint.retention.default_days', 30);
+    config()->set('checkpoint.retention.failed_days', 365);
+    config()->set('checkpoint.retention.tiers', ['hot' => 14, 'warm' => 60, 'cold' => 180]);
 
     $prunableSucceeded = CommandRun::factory()->succeeded()->create([
         'created_at' => Date::now()->subDays(45),
@@ -285,8 +324,9 @@ it('prunes externalized command output artifacts with the command run rows', fun
     config()->set('checkpoint.output.storage', 'filesystem');
     config()->set('checkpoint.output.filesystem.disk', 'local');
     config()->set('checkpoint.output.filesystem.path_prefix', 'checkpoint/pruned-output');
-    config()->set('checkpoint.schedule.prune_keep_days', 30);
-    config()->set('checkpoint.schedule.prune_keep_failed_days', 365);
+    config()->set('checkpoint.retention.default_days', 30);
+    config()->set('checkpoint.retention.failed_days', 365);
+    config()->set('checkpoint.retention.tiers', ['hot' => 14, 'warm' => 60, 'cold' => 180]);
 
     $prunable = CommandRun::factory()->succeeded()->create([
         'created_at' => Date::now()->subDays(45),

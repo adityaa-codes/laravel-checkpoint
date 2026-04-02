@@ -97,6 +97,7 @@ it('normalizes replication enqueue payloads and stores redacted metadata only', 
 it('maps replication apply and force aliases into operation metadata', function (): void {
     Bus::fake();
     Event::fake([BackupQueued::class]);
+    config()->set('checkpoint.replication.allowlisted_destinations', ['profile:pg-destination']);
 
     config()->set('checkpoint.replication.profiles', [
         'pg-source' => ['engine' => 'pgsql'],
@@ -121,4 +122,46 @@ it('maps replication apply and force aliases into operation metadata', function 
         ->and($run->metadata['replication']['force_overwrite_requested'] ?? null)->toBeTrue()
         ->and($run->metadata['replication']['overwrite_destination'] ?? null)->toBeTrue()
         ->and($run->metadata['replication']['critical_tables'] ?? null)->toBe(['users', 'orders']);
+});
+
+it('blocks replication apply runs outside governance preflight', function (): void {
+    Bus::fake();
+    Event::fake([BackupQueued::class]);
+
+    config()->set('checkpoint.replication.allowlisted_destinations', ['staging-replica']);
+    config()->set('checkpoint.replication.profiles', [
+        'pg-source' => ['engine' => 'pgsql'],
+        'prod-destination' => ['engine' => 'pgsql'],
+    ]);
+
+    expect(fn () => resolve(EnqueueCommandRunAction::class)->execute(
+        'replication_sync',
+        '{"source":"profile:pg-source","destination":"profile:prod-destination","dry_run":false,"apply":true}',
+    ))->toThrow(InvalidArgumentException::class, 'Replication apply is blocked by governance preflight: destination_not_allowlisted.');
+
+    expect(CommandRun::query()->count())->toBe(0);
+    Bus::assertNothingDispatched();
+});
+
+it('persists replication governance preflight metadata when apply is allowed', function (): void {
+    Bus::fake();
+    Event::fake([BackupQueued::class]);
+
+    config()->set('checkpoint.replication.allowlisted_destinations', ['profile:prod-destination']);
+    config()->set('checkpoint.replication.profiles', [
+        'pg-source' => ['engine' => 'pgsql'],
+        'prod-destination' => ['engine' => 'pgsql'],
+    ]);
+
+    $run = resolve(EnqueueCommandRunAction::class)->execute(
+        'replication_sync',
+        '{"source":"profile:pg-source","destination":"profile:prod-destination","dry_run":false,"apply":true,"force":true}',
+    );
+
+    $payload = json_decode((string) $run->argument_text, true, 512, JSON_THROW_ON_ERROR);
+
+    expect($payload['governance_preflight'] ?? null)->toBeArray()
+        ->and($payload['governance_preflight']['allowed'] ?? null)->toBeTrue()
+        ->and($run->metadata['replication']['governance_preflight'] ?? null)->toBeArray()
+        ->and($run->metadata['replication']['governance_preflight']['allowed'] ?? null)->toBeTrue();
 });

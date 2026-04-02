@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
+use AdityaaCodes\LaravelCheckpoint\Console\CatalogExportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\EnqueueBackupDrillCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueLogicalBackupCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\HealthCheckCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\ReplicateCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\PitrReadinessCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecordDrillRunCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecoverOrphansCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\ReplicateCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\RetentionPolicyCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ReportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\StatusCommand;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
@@ -22,6 +26,7 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
+use AdityaaCodes\LaravelCheckpoint\Services\NotificationRouter;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationEndpointInputParser;
 use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 use Illuminate\Console\Scheduling\Schedule;
@@ -69,6 +74,7 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             ->hasMigration('add_operator_summary_columns_to_command_runs_table')
             ->hasMigration('create_checkpoint_restore_decision_events_table')
             ->hasMigration('create_checkpoint_backup_drill_runs_table')
+            ->hasMigration('create_checkpoint_verification_runs_table')
             ->hasMigration('add_reporting_indexes_to_checkpoint_tables')
             ->hasCommand(DoctorCommand::class)
             ->hasCommand(EnqueueCommand::class)
@@ -76,8 +82,12 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             ->hasCommand(PruneCommand::class)
             ->hasCommand(RecoverOrphansCommand::class)
             ->hasCommand(ReportCommand::class)
+            ->hasCommand(CatalogExportCommand::class)
+            ->hasCommand(PitrReadinessCommand::class)
+            ->hasCommand(RetentionPolicyCommand::class)
             ->hasCommand(StatusCommand::class)
             ->hasCommand(RecordDrillRunCommand::class)
+            ->hasCommand(EnqueueBackupDrillCommand::class)
             ->hasCommand(EnqueueLogicalBackupCommand::class)
             ->hasCommand(ReplicateCommand::class);
     }
@@ -88,6 +98,7 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
         Gate::policy(BackupDrillRun::class, BackupDrillRunPolicy::class);
 
         $this->registerSchedules();
+        $this->app->make(NotificationRouter::class)->register();
 
         $this->app->make(ConfigValidator::class)->validate();
     }
@@ -100,6 +111,13 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
                     ->command('db-ops:enqueue-backup')
                     ->dailyAt((string) config('checkpoint.schedule.logical_backup_daily_at', '16:00'))
                     ->timezone((string) config('checkpoint.schedule.logical_backup_timezone', 'UTC')));
+            }
+
+            if ((bool) config('checkpoint.schedule.backup_drill_enabled', false)) {
+                $this->configureScheduledCommand($schedule
+                    ->command('db-ops:enqueue-drill')
+                    ->dailyAt((string) config('checkpoint.schedule.backup_drill_daily_at', '03:00'))
+                    ->timezone((string) config('checkpoint.schedule.backup_drill_timezone', 'UTC')));
             }
 
             if ((bool) config('checkpoint.schedule.health_check_enabled', true)) {

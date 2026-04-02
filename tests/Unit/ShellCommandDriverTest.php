@@ -160,24 +160,43 @@ it('records restore audit metadata for shell restore runs', function (): void {
     $run->refresh();
 
     expect($run->status)->toBe(CommandRunStatus::Succeeded)
-        ->and($run->metadata)->toMatchArray([
-            'driver' => 'shell',
-            'restore_audit' => [
-                'environment' => (string) config('app.env'),
-                'database' => ':memory:',
-                'target' => 'archive.sql',
-                'confirmation_required' => true,
-                'confirmation_satisfied_via' => 'token',
-                'verified_backup_required' => false,
-                'verified_signal_run_id' => null,
-                'verified_signal_operation' => null,
-                'verified_signal_backup_label' => null,
-                'verified_signal_artifact_path' => null,
-                'verified_signal_last_known_good_at' => null,
-                'pitr_base_target' => null,
-                'pitr_binlog_files' => [],
+        ->and($run->metadata['driver'] ?? null)->toBe('shell');
+
+    expect($run->metadata['restore_audit'] ?? null)->toMatchArray([
+        'environment' => (string) config('app.env'),
+        'database' => ':memory:',
+        'target' => 'archive.sql',
+        'confirmation_required' => true,
+        'confirmation_satisfied_via' => 'token',
+        'verified_backup_required' => false,
+        'verified_signal_run_id' => null,
+        'verified_signal_operation' => null,
+        'verified_signal_backup_label' => null,
+        'verified_signal_artifact_path' => null,
+        'verified_signal_last_known_good_at' => null,
+        'pitr_base_target' => null,
+        'pitr_binlog_files' => [],
+    ]);
+
+    $postVerification = $run->metadata['restore_audit']['post_restore_verification'] ?? null;
+
+    expect($postVerification)->toBeArray()
+        ->and($postVerification)->toMatchArray([
+            'contract_version' => 1,
+            'command_run_id' => (int) $run->getKey(),
+            'operation' => 'logical_restore_file',
+            'aggregate_result' => 'pass',
+            'generated_at' => now()->toIso8601String(),
+            'checks_performed' => [
+                'restore_audit_recorded',
+                'restore_target_recorded',
+                'command_exit_code_zero',
+                'verified_backup_signal_linkage',
             ],
-        ]);
+        ])
+        ->and($postVerification['checks'])->toBeArray()
+        ->and($postVerification['checks'])->toHaveCount(4)
+        ->and($postVerification['checks'][0])->toHaveKeys(['name', 'passed', 'status', 'description', 'observed']);
 });
 
 it('redacts shell command lines before persisting and logging them', function (): void {

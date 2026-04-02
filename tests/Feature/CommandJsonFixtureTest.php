@@ -97,3 +97,31 @@ it('matches the failed operational report json fixture', function (): void {
 
     CommandJsonFixtureSupport::resetTime();
 });
+
+it('matches the catalog export json fixture', function (): void {
+    CommandJsonFixtureSupport::freezeTime();
+    CommandJsonFixtureSupport::seedCatalogExports();
+
+    Artisan::call('db-ops:catalog-export', ['--format' => 'json', '--limit' => 10]);
+
+    checkpoint_assert_matches_fixture(
+        json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR),
+        'command-json/catalog-export.json',
+    );
+
+    CommandJsonFixtureSupport::resetTime();
+});
+
+it('matches the pitr readiness json fixture', function (): void {
+    CommandJsonFixtureSupport::freezeTime();
+    CommandJsonFixtureSupport::seedPitrReadinessState();
+
+    Artisan::call('db-ops:pitr-readiness', ['target' => '2026-03-11 11:30:00', '--format' => 'json']);
+
+    checkpoint_assert_matches_fixture(
+        json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR),
+        'command-json/pitr-readiness.json',
+    );
+
+    CommandJsonFixtureSupport::resetTime();
+});
