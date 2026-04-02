@@ -34,7 +34,7 @@ Important config groups in `config/checkpoint.php`:
 
 - `user_model`, `user_name_column`, `table_prefix`
 - `queue.connection`, `queue.name`, `queue.max_attempts`, `queue.retry_after`, `queue.timeout`, `queue.unique_for`, `queue.lock_store`, `queue.orphan_threshold`, `queue.orphan_claim_timeout`, `queue.orphan_batch_size`, `queue.orphan_event_max_ids`, `queue.heartbeat_interval_seconds`, `queue.heartbeat_grace_seconds`
-- `schedule.logical_backup_*`, `schedule.health_check_enabled`, `schedule.recover_orphans_enabled`, `schedule.prune_enabled`, `schedule.without_overlapping`, `schedule.overlap_expires_at`, `schedule.on_one_server`, `schedule.prune_keep_*`
+- `schedule.logical_backup_*`, `schedule.backup_drill_*`, `schedule.health_check_enabled`, `schedule.recover_orphans_enabled`, `schedule.prune_enabled`, `schedule.without_overlapping`, `schedule.overlap_expires_at`, `schedule.on_one_server`, `schedule.prune_keep_*`
 - `driver`, `drivers.shell.*`, `drivers.pgbackrest.*`, `drivers.pgdump.*`, `drivers.mysql.*`
 - `reporting.max_recent_runs`, `output.max_persisted_bytes`
 - `log_channel`
@@ -58,8 +58,23 @@ DB_OPS_OUTPUT_MAX_PERSISTED_BYTES=65536
 DB_OPS_PRUNE_KEEP_DAYS=90
 DB_OPS_PRUNE_KEEP_FAILED_DAYS=365
 DB_OPS_PRUNE_KEEP_BACKUP_DRILL_DAYS=365
+DB_OPS_RETENTION_ENABLED=true
+DB_OPS_RETENTION_DEFAULT_DAYS=90
+DB_OPS_RETENTION_FAILED_DAYS=365
+DB_OPS_RETENTION_TIER_HOT_DAYS=14
+DB_OPS_RETENTION_TIER_WARM_DAYS=60
+DB_OPS_RETENTION_TIER_COLD_DAYS=180
 DB_OPS_LOG_CHANNEL=stack
 DB_OPS_ALERT_COOLDOWN_SECONDS=300
+DB_OPS_NOTIFICATIONS_ENABLED=false
+DB_OPS_NOTIFICATIONS_EVENTS=backup.failed,backup.freshness_alarm,queue.lag_detected
+DB_OPS_NOTIFICATIONS_ROUTE_INFO=log
+DB_OPS_NOTIFICATIONS_ROUTE_WARNING=log,mail
+DB_OPS_NOTIFICATIONS_ROUTE_CRITICAL=log,mail,webhook
+DB_OPS_NOTIFICATIONS_MAIL_TO=ops@example.com
+DB_OPS_NOTIFICATIONS_WEBHOOK_URL=
+DB_OPS_NOTIFICATIONS_WEBHOOK_PROVIDER=generic
+DB_OPS_NOTIFICATIONS_WEBHOOK_TIMEOUT_SECONDS=5
 
 DB_OPS_CMD_LOGICAL_BACKUP=
 DB_OPS_CMD_RESTORE_LATEST=
@@ -98,6 +113,13 @@ DB_OPS_RESTORE_CONFIRMATION_PHRASE=RESTORE
 DB_OPS_RESTORE_CONFIRMATION=
 DB_OPS_RESTORE_ALLOW_IN_CI=true
 DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=true
+DB_OPS_RESTORE_BLAST_RADIUS_ENABLED=true
+DB_OPS_RESTORE_BLAST_RADIUS_WARN_SCORE=50
+DB_OPS_RESTORE_BLAST_RADIUS_BLOCK_SCORE=80
+DB_OPS_RESTORE_BLAST_RADIUS_WEIGHT_ENVIRONMENT=30
+DB_OPS_RESTORE_BLAST_RADIUS_WEIGHT_DATABASE=25
+DB_OPS_RESTORE_BLAST_RADIUS_WEIGHT_TARGET=20
+DB_OPS_RESTORE_BLAST_RADIUS_WEIGHT_VERIFICATION=25
 ```
 
 Command templates are configured as space-delimited argv-style strings and are parsed into Symfony Process argument arrays. User input is validated before it reaches the driver.
@@ -175,6 +197,7 @@ Artisan commands:
 
 ```bash
 php artisan db-ops:enqueue-backup
+php artisan db-ops:enqueue-drill
 php artisan db-ops:enqueue logical_backup
 php artisan db-ops:status --limit=10
 php artisan db-ops:status --summary
@@ -192,6 +215,13 @@ php artisan db-ops:doctor --agent
 php artisan db-ops:report --limit=10
 php artisan db-ops:report --limit=10 --format=json
 php artisan db-ops:report --limit=10 --agent
+php artisan db-ops:catalog-export --format=json --limit=100
+php artisan db-ops:catalog-export --format=csv --driver=pgbackrest --repository=1 --stanza=main --window=24 --limit=50
+php artisan db-ops:pitr-readiness
+php artisan db-ops:pitr-readiness "2026-03-11 11:30:00" --format=json
+php artisan db-ops:pitr-readiness "2026-03-11 11:30:00" --agent
+php artisan db-ops:retention-policy --dry-run --format=json
+php artisan db-ops:retention-policy --apply --format=json
 php artisan db-ops:replicate profile:pg-source profile:pg-destination
 php artisan db-ops:replicate --source=pgsql://user:pass@source.internal/app --destination=pgsql://user:pass@dest.internal/app
 php artisan db-ops:replicate --source=profile:pg-source --destination=profile:pg-destination --apply --force-overwrite --critical-table=users --critical-table=orders
@@ -206,6 +236,18 @@ php artisan db-ops:replicate --source=profile:pg-source --destination=profile:pg
 - `--force-overwrite` is intended for controlled apply workflows
 - `--critical-table=*` can be repeated to enforce table-level overwrite guardrails
 - when `--critical-table` is omitted, fallback comes from `checkpoint.replication.critical_tables` / `DB_OPS_REPLICATION_CRITICAL_TABLES`
+- interactive runs now use Laravel Prompts for clearer wizard-style UX with apply warnings and a preflight summary
+
+### Interactive CLI UX
+
+When commands run interactively, Laravel Checkpoint now uses Laravel Prompts
+to improve operator UX while preserving script-safe behavior in non-interactive
+runs.
+
+- wizard-style intros/outros for queue and maintenance commands
+- clearer safety cues for destructive flows (for example, replication apply mode)
+- command summaries before queueing where relevant
+- JSON and agent output contracts remain unchanged for automation surfaces
 
 Replication policy controls:
 
@@ -213,9 +255,52 @@ Replication policy controls:
 DB_OPS_REPLICATION_REQUIRE_CONFIRMATION_TOKEN=true
 DB_OPS_REPLICATION_BLOCK_IN_CI=true
 DB_OPS_REPLICATION_REQUIRE_DRY_RUN_BEFORE_APPLY=true
+DB_OPS_REPLICATION_ENFORCE_CHANGE_WINDOW=false
+DB_OPS_REPLICATION_CHANGE_WINDOW_TIMEZONE=UTC
+DB_OPS_REPLICATION_CHANGE_WINDOW_DAYS=mon,tue,wed,thu,fri,sat,sun
+DB_OPS_REPLICATION_CHANGE_WINDOW_START=00:00
+DB_OPS_REPLICATION_CHANGE_WINDOW_END=23:59
 DB_OPS_REPLICATION_ALLOWLISTED_DESTINATIONS=staging-replica
 DB_OPS_REPLICATION_CRITICAL_TABLES=users,orders
 ```
+
+`replication_sync` now persists a governance preflight block (`governance_preflight`)
+in both queue payload and run metadata, and blocks apply mode when destination
+allowlist or change-window policy denies the request.
+
+### PITR Readiness
+
+`db-ops:pitr-readiness` evaluates whether point-in-time restore can be executed for
+an optional target timestamp (defaults to now) and checks:
+
+- last-known-good logical backup baseline exists
+- baseline artifact path exists
+- MySQL binlog chain is configured
+- configured binlog files are present
+- target timestamp is not in the future
+- target timestamp is at/after baseline timestamp
+
+Use `--format=json` for automation and `--agent` for compact machine-readable
+envelopes with remediation suggestions when readiness is `not_ready`.
+
+### Restore Blast Radius Policy
+
+Restore guardrails now include a blast-radius score in `restore_audit`:
+
+- status `pass`, `warn`, or `block` with a 0-100 score
+- scored factors for environment, database, target pattern, and verification signal
+- block decisions enforce `checkpoint.restore.blast_radius.block_score`
+- warn decisions remain allowed but are surfaced in report/metadata
+
+### Retention Policy Engine
+
+`db-ops:retention-policy` evaluates tiered retention and can apply deletions.
+
+- dry-run mode previews eligible command runs by policy bucket
+- apply mode executes prune and reports deleted row count
+- policy priority: failed retention window, then storage tier windows
+  (`metadata.storage.class`), then default window
+- `checkpoint.retention.enabled=false` disables policy evaluation and apply
 
 ## Driver Customization
 
@@ -355,6 +440,7 @@ Behavior notes:
 - restore commands fail early when the current environment or target database is not allowlisted
 - when verified-backup enforcement is enabled, `pgdump` restores require a matching `last_known_good_at` signal for the selected artifact, and pgBackRest restores require a successful verified `check` or `verify` run for the selected stanza/repository
 - restore runs persist `metadata.restore_audit` with the evaluated environment, database, target, confirmation path, and any matched verified-backup signal
+- restore runs also persist `metadata.restore_audit.post_restore_verification` with machine-friendly checks (`checks`, `checks_performed`, and `aggregate_result`)
 - `db-ops:status --format=json` mirrors both recent-run and summary views for automation use
 - `db-ops:status --format=json` includes top-level `version` and `surface=status` fields for contract-safe consumers
 
@@ -365,6 +451,7 @@ Operational surfaces now include:
 - `db-ops:report` for a combined operational snapshot (table by default)
 - `db-ops:report --format=json` for machine-readable report payloads
 - `db-ops:doctor --format=json` for machine-readable health checks
+- `db-ops:catalog-export --format=json|csv` for backup catalog snapshots (audit/compliance exports)
 - `--agent` mode on `db-ops:status`, `db-ops:doctor`, and `db-ops:report` for compact AI-agent friendly contracts
 - all machine-readable command payloads now expose a top-level `version` and `surface`
 - `db-ops:doctor` freshness warnings for stale last-known-good backups
@@ -376,22 +463,32 @@ Operational surfaces now include:
 
 `db-ops:status` now exposes restore-specific operator context:
 
-- recent-run JSON payloads include `restore_target` and `restore_audit` for restore operations
+- recent-run JSON payloads include `restore_target`, `restore_audit`, and `post_restore_verification` for restore operations
 - `db-ops:status --summary` includes `latest_restore_run` alongside the existing latest restore failure signal
 - `latest_restore_run.audit` gives automation consumers the persisted restore guard decision that was in effect when the run started
+- `latest_restore_run.post_restore_verification` mirrors the stored post-restore verification contract for the latest restore run
 
 `db-ops:status` also surfaces backup drill analytics:
 
 - `latest_backup_drill` and `latest_failed_backup_drill` identify the most recent drill outcomes
 - `backup_drill_pass_rate` summarizes recent drill reliability for automation consumers
 - `backup_drill_pass_rate_30d` remains available as a compatibility alias
+- `backup_drill_trend` summarizes streak and trajectory from recent drill outcomes
+- `backup_drill_remediation_playbook` provides a structured remediation plan keyed by drill-failure signatures (with `signature`, `severity`, `recommended_commands`, and evidence)
 - the table summary mirrors those signals for operators without requiring JSON parsing
+
+Automated drill scheduling is configurable:
+
+- `schedule.backup_drill_enabled` controls whether `db-ops:enqueue-drill` is scheduled automatically
+- `schedule.backup_drill_daily_at` sets the daily HH:MM schedule for automated drill enqueueing
+- `schedule.backup_drill_timezone` sets the timezone used for automated drill enqueueing
 
 `db-ops:report --format=json` is the preferred automation surface when you want one payload
 instead of stitching together multiple commands. It combines:
 
 - `recent_runs`
 - `summary`
+- `breakdown` (per-driver/per-repository and optional stanza health/failure rollups)
 - `health.ok` plus `health.checks`
 - a top-level `version`, `generated_at`, and active `driver`
 
@@ -402,8 +499,23 @@ Report notes:
 - `db-ops:doctor --format=json` uses the same health semantics as `db-ops:report`: `ok` is only `true` when every emitted health check is `pass`
 - `db-ops:status` emits JSON contract version `1`, `db-ops:doctor` emits `3`, and `db-ops:report` emits `2`
 - `--agent` outputs keep stable top-level fields: `result`, `code`, `summary`, `data`, and `suggestions`
+- `--agent` outputs include `data.slo` for machine-friendly SLO evaluation (`window`, `indicators`, `overall_status`) and now include `failed_runs_24h_by_target` derived from the report breakdown
 - `db-ops:report` includes both `limit_requested` and effective `limit` so automation can detect capped history responses
+- `db-ops:catalog-export` emits JSON contract version `1` with deterministic row ordering (`created_at` desc, `id` desc)
+- `db-ops:catalog-export --format=csv` uses stable column order with JSON-encoded metadata/verification linkage columns
+- report/agent payloads now include a top-level `verification` block with persisted verification run totals, success rate, health status, and latest verification run details
+- `db-ops:doctor` now includes `Verification: runs` and `DB: verification_runs table` checks for verification persistence and health
+- `db-ops:doctor` includes `restore.post_verification` to flag failed/missing post-restore verification on the latest restore run
+- `db-ops:doctor` includes `backup_drill.playbook` to expose remediation playbooks when drill posture is missing, stale, degrading, or below SLO
+- report/status payloads include post-restore verification labels (for example `post_verify=pass|fail`) to simplify machine parsing
 - future JSON contract changes should stay additive within a version; breaking shape changes should increment the top-level `version`
+
+`breakdown` contract notes:
+
+- `breakdown.window.failed_runs_hours` defines the rolling failure window used in grouped counters
+- `breakdown.totals` provides aggregate counts for `groups`, `runs`, and `failed_runs_24h`
+- `breakdown.by_target` is keyed as `driver:{driver}|repo:{id-or-none}` and appends `|stanza:{name}` when stanza is present
+- each target group includes `runs` status counters, `failure_rate_percent`, `health_status`, plus `latest_activity_at` / `latest_failure_at` timestamps
 
 Reporting limits are configurable:
 
@@ -457,6 +569,36 @@ branch safely if new fields are added later. Current payload version: `1`.
 
 Wire these events to your application listeners, metrics pipeline, or alerting
 provider to turn them into actual pages, notifications, or dashboards.
+
+Built-in notification routing is also available through config-only channels:
+
+- `notifications.enabled`: master toggle
+- `notifications.events`: optional allowlist of event keys (empty = route all supported)
+- `notifications.routing.info|warning|critical`: channels per severity (`log`, `mail`, `webhook`)
+- `notifications.mail.to`: email recipients for routed mail notifications
+- `notifications.webhook.url`: webhook target for routed webhook notifications
+- `notifications.webhook.provider`: webhook message shape (`generic`, `slack`, `telegram`)
+- `notifications.webhook.timeout_seconds`: outbound webhook timeout (1-60s)
+
+Supported event keys:
+
+- `backup.queued`, `backup.started`, `backup.completed`, `backup.failed`
+- `backup.freshness_alarm`
+- `backup_drill.completed`, `backup_drill.freshness_alarm`, `backup_drill.pass_rate_alarm`
+- `queue.lag_detected`, `queue.orphan_redispatched`
+
+Message formatting for chat consumers:
+
+- A canonical message envelope is generated for every routed event:
+  - `event_key`, `level`, `occurred_at`, `summary`, `context`, `actions`
+- Slack provider (`notifications.webhook.provider=slack`) sends:
+  - `text` (mrkdwn-friendly summary) + `event` (full structured payload)
+- Telegram provider (`notifications.webhook.provider=telegram`) sends:
+  - `text` (compact markdown summary), `parse_mode=Markdown`, and `event`
+- Generic provider (`generic`) sends the full structured payload as-is.
+- Drill alarm notifications now include a structured `payload.remediation` block:
+  - `signature`, `severity`, `title`, `summary`, `recommended_commands`, `evidence`
+- Slack/Telegram context also includes `playbook_signature` and `playbook_severity` for fast triage filtering.
 
 ### Operational Load Testing
 
