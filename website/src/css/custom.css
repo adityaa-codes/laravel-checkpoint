@@ -1,0 +1,66 @@
+:root {
+  --ifm-color-primary: #29513d;
+  --ifm-color-primary-dark: #244936;
+  --ifm-color-primary-darker: #214431;
+  --ifm-color-primary-darkest: #1b3828;
+  --ifm-color-primary-light: #2e5944;
+  --ifm-color-primary-lighter: #315f48;
+  --ifm-color-primary-lightest: #396f55;
+  --ifm-background-color: #fbfaf6;
+  --ifm-navbar-background-color: rgba(251, 250, 246, 0.88);
+  --ifm-font-family-base: "Source Sans 3", "Segoe UI", sans-serif;
+  --ifm-heading-font-family: "DM Serif Display", Georgia, serif;
+  --ifm-code-font-size: 95%;
+  --ifm-footer-background-color: #edf2e8;
+  --docusaurus-highlighted-code-line-bg: rgba(41, 81, 61, 0.12);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  color: #203328;
+}
+
+.navbar {
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(42, 78, 58, 0.08);
+}
+
+.navbar__title {
+  font-family: var(--ifm-heading-font-family);
+  font-size: 1.25rem;
+  letter-spacing: 0.01em;
+}
+
+.footer {
+  border-top: 1px solid rgba(42, 78, 58, 0.08);
+}
+
+.theme-doc-markdown h1,
+.theme-doc-markdown h2,
+.theme-doc-markdown h3,
+.theme-doc-markdown h4 {
+  letter-spacing: -0.02em;
+}
+
+.theme-doc-markdown li + li {
+  margin-top: 0.35rem;
+}
+
+.button.button--primary {
+  background: #29513d;
+  border-color: #29513d;
+}
+
+.button.button--primary:hover {
+  background: #214431;
+  border-color: #214431;
+}
+
+.button.button--secondary {
+  background: transparent;
+  border-color: rgba(41, 81, 61, 0.2);
+  color: #214431;
+}

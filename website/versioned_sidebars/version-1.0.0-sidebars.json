@@ -1,0 +1,68 @@
+{
+  "docsSidebar": [
+    "overview",
+    {
+      "type": "category",
+      "label": "Getting Started",
+      "items": [
+        "getting-started/installation",
+        "getting-started/quickstart"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Configuration",
+      "items": [
+        "configuration/overview",
+        "configuration/queue-and-workers"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Drivers",
+      "items": [
+        "drivers/overview",
+        "drivers/shell",
+        "drivers/pgbackrest",
+        "drivers/pgdump",
+        "drivers/mysql"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Operations",
+      "items": [
+        "operations/backup-and-restore",
+        "operations/pitr-and-drills"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Reference",
+      "items": [
+        "cli/command-reference"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Safety",
+      "items": [
+        "safety/restore-guardrails"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Troubleshooting",
+      "items": [
+        "troubleshooting/common-failures"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Contributing",
+      "items": [
+        "contributing/index"
+      ]
+    }
+  ]
+}
