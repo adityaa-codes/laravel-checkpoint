@@ -91,13 +91,16 @@ DB_OPS_PGBACKREST_REPO1_TYPE=posix
 DB_OPS_PGBACKREST_REPO1_PATH=/var/lib/pgbackrest/repo1
 DB_OPS_PGBACKREST_REPO1_TLS_VERIFY=true
 DB_OPS_PGBACKREST_REPO1_ENCRYPTION_ENABLED=false
+DB_OPS_PGBACKREST_TIMEOUT=3600
 DB_OPS_PGDUMP_BINARY=pg_dump
 DB_OPS_PGRESTORE_BINARY=pg_restore
 DB_OPS_PGDUMP_FORMAT=directory
 DB_OPS_PGDUMP_JOBS=4
 DB_OPS_PGDUMP_COMPRESS_LEVEL=6
 DB_OPS_PGDUMP_OUTPUT_DIR=/var/app/checkpoint/logical-exports
+DB_OPS_PGDUMP_TIMEOUT=3600
 DB_OPS_TEMP_DIR=/var/app/checkpoint/tmp
+DB_OPS_CMD_TIMEOUT=3600
 DB_OPS_MYSQL_DUMP_BINARY=mysqldump
 DB_OPS_MYSQL_BINARY=mysql
 DB_OPS_MYSQL_BINLOG_BINARY=mysqlbinlog
@@ -106,6 +109,7 @@ DB_OPS_MYSQL_OUTPUT_PREFIX=mysql-export
 DB_OPS_MYSQL_FILE_EXTENSION=sql
 DB_OPS_MYSQL_PITR_BINLOG_FILES=/var/lib/mysql/binlog.000123,/var/lib/mysql/binlog.000124
 DB_OPS_MYSQL_DRILL_COMMAND=
+DB_OPS_MYSQL_TIMEOUT=3600
 DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS=staging
 DB_OPS_RESTORE_ALLOWED_DATABASES=checkpoint_shadow
 DB_OPS_RESTORE_REQUIRE_CONFIRMATION=true
@@ -631,7 +635,7 @@ For existing deployments, stage hardening controls instead of enabling every str
 4. keep verified-backup enforcement temporarily disabled only until verified backup signals are stable, then enable it
 5. verify restore attempts are writing append-only `db_ops_restore_decision_events` and that status/report restore audit fields remain coherent
 
-See `UPGRADING.md` for the detailed staged-enforcement sequence and migration safety checks.
+See `UPGRADING.md` for the detailed staged-enforcement matrix, rollback strategy, and operator acceptance checklist.
 
 ### pgDump Large-Export Configuration
 

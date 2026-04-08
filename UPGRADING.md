@@ -70,3 +70,72 @@ Recommended migration safety checks after rollout:
 - confirm `db_ops_restore_decision_events` exists and is receiving `evaluate`, `block`, and `allow` events for restore attempts
 - confirm command-run reporting indexes exist, including `db_ops_command_runs_status_updated_at_index`, for high-volume doctor/recovery/status scans
 - verify restore runs persist `metadata.restore_audit` and that summary/report surfaces expose matching restore decision context
+
+## Enforcement Matrix (Recommended Order)
+
+Use this matrix to roll out strict controls without surprising operators:
+
+1. **Schema and baseline first**
+   - Run migrations.
+   - Capture baseline outputs:
+     - `php artisan db-ops:status --summary --format=json`
+     - `php artisan db-ops:doctor --format=json`
+     - `php artisan db-ops:report --limit=10 --format=json`
+
+2. **Restore posture controls**
+   - Enforce:
+     - `DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS`
+     - `DB_OPS_RESTORE_ALLOWED_DATABASES`
+     - `DB_OPS_RESTORE_REQUIRE_CONFIRMATION=true`
+   - Keep:
+     - `DB_OPS_RESTORE_ALLOW_IN_CI=false` (unless explicitly required)
+
+3. **Verification provenance enforcement**
+   - Temporarily keep `DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=false` only while building verified signal coverage.
+   - After verified runs are healthy, set `DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=true`.
+
+4. **Scheduler and lock-store safety**
+   - Keep `checkpoint.schedule.without_overlapping=true` and `checkpoint.schedule.on_one_server=true` in clustered environments.
+   - Ensure `cache.default` and `checkpoint.queue.lock_store` use a shared non-local driver (for example Redis).
+
+5. **Drill posture and remediation**
+   - Enable scheduled drills:
+     - `DB_OPS_BACKUP_DRILL_SCHEDULE_ENABLED=true`
+     - `DB_OPS_BACKUP_DRILL_DAILY_AT`
+     - `DB_OPS_BACKUP_DRILL_TIMEZONE`
+   - Monitor:
+     - `summary.backup_drill_trend`
+     - `summary.backup_drill_remediation_playbook`
+     - health checks `backup_drill.trend` and `backup_drill.playbook`
+
+6. **Notification routing and incident handoff**
+   - Enable routing:
+     - `DB_OPS_NOTIFICATIONS_ENABLED=true`
+     - `DB_OPS_NOTIFICATIONS_ROUTE_WARNING`
+     - `DB_OPS_NOTIFICATIONS_ROUTE_CRITICAL`
+   - For chat/webhooks, verify drill alarms include `payload.remediation` and playbook context fields in message payloads.
+
+## Rollback Strategy Per Stage
+
+If a stage creates operational friction, roll back only that stage and keep earlier safety wins:
+
+- restore posture stage:
+  - relax allowlists temporarily while preserving confirmation requirement
+- verification stage:
+  - set `DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=false` briefly, then re-enable after fixing verification pipeline
+- scheduler/lock-store stage:
+  - disable `on_one_server`/`without_overlapping` only as a last resort and only in non-clustered contexts
+- drill stage:
+  - keep drill recording manual (`db-ops:record-drill`) if schedule cadence needs adjustment
+- notification stage:
+  - reduce routing fan-out (for example, log-only) while preserving event emission
+
+## Operator Acceptance Checklist
+
+Before declaring upgrade completion:
+
+- `db-ops:doctor --format=json` has no unexpected `config.validation` failures
+- `db-ops:report --format=json` exposes expected `summary`, `breakdown`, `verification`, and `health` blocks
+- restore attempts record `metadata.restore_audit` and append restore decision events
+- drill outputs include trend and remediation playbook payloads
+- notification payloads include actionable commands for critical/warn drill alarms

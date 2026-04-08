@@ -16,6 +16,7 @@ All notable changes to `laravel-checkpoint` will be documented in this file.
 - Documented explicit Laravel `12.x` / `13.x` compatibility in README.
 - Expanded upgrade notes with Laravel 12 and 13 guide references and key Laravel 13 integration considerations.
 - Expanded operation catalog/config validation/reporting coverage for `replication_sync` and replication safety metadata.
+- Expanded `UPGRADING.md` staged enforcement guidance with rollout matrix, rollback strategy, and operator acceptance checklist.
 
 ## v1.0.0 - 2026-03-11
 
