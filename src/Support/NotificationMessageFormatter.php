@@ -83,6 +83,7 @@ final class NotificationMessageFormatter
     }
 
     /**
+     * @param  array<string,mixed>  $eventData
      * @return list<string>
      */
     private function actions(string $eventKey, string $level, array $eventData): array

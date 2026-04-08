@@ -211,14 +211,14 @@ final class CommandRunCatalog
                 'label' => 'messages.operations.replication_sync',
                 'argument_required' => true,
                 'argument_hint' => 'json payload with source, destination, optional dry_run/apply/force_overwrite booleans, and optional critical_tables array',
-                'argument_validator' => static fn (?string $value): bool => self::validReplicationArgument($value),
+                'argument_validator' => $this->validReplicationArgument(...),
                 'destructive' => true,
                 'exclusive' => true,
             ],
         ];
     }
 
-    private static function validReplicationArgument(?string $value): bool
+    private function validReplicationArgument(?string $value): bool
     {
         if ($value === null || $value === '') {
             return false;
@@ -234,11 +234,11 @@ final class CommandRunCatalog
             return false;
         }
 
-        if (! is_string($payload['source'] ?? null) || trim((string) $payload['source']) === '') {
+        if (! is_string($payload['source'] ?? null) || trim($payload['source']) === '') {
             return false;
         }
 
-        if (! is_string($payload['destination'] ?? null) || trim((string) $payload['destination']) === '') {
+        if (! is_string($payload['destination'] ?? null) || trim($payload['destination']) === '') {
             return false;
         }
 

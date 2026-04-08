@@ -16,6 +16,7 @@ final readonly class BuildReplicationCommandPayloadAction
     ) {}
 
     /**
+     * @param  array<int, string>  $criticalTables
      * @return array{source:string,destination:string,dry_run:bool,force_overwrite:bool,critical_tables:array<int,string>}
      */
     public function execute(

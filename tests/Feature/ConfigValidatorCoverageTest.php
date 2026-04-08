@@ -653,7 +653,7 @@ it('rejects local-only scheduler cache stores outside local and testing environm
     config()->set('app.env', 'production');
     config()->set('checkpoint.schedule.without_overlapping', true);
     config()->set('checkpoint.schedule.on_one_server', true);
-    config()->set('checkpoint.queue.lock_store', null);
+    config()->set('checkpoint.queue.lock_store');
     config()->set('cache.default', 'array');
 
     try {
@@ -672,7 +672,7 @@ it('rejects missing scheduler cache default store outside local and testing envi
     config()->set('app.env', 'production');
     config()->set('checkpoint.schedule.without_overlapping', true);
     config()->set('checkpoint.schedule.on_one_server', true);
-    config()->set('checkpoint.queue.lock_store', null);
+    config()->set('checkpoint.queue.lock_store');
     config()->set('cache.default', '');
 
     try {
@@ -726,4 +726,16 @@ it('rejects mysql command timeouts that exceed the queue timeout budget', functi
             ConfigurationException::class,
             'checkpoint.drivers.mysql.command_timeout_seconds [3601] must be less than or equal to checkpoint.queue.timeout [3600] so queued jobs are not terminated before the driver command finishes.',
         );
+});
+
+it('accepts the shipped timeout defaults', function (): void {
+    $packageConfig = require dirname(__DIR__, 2).'/config/checkpoint.php';
+
+    config()->set('checkpoint.queue.timeout', $packageConfig['queue']['timeout']);
+    config()->set('checkpoint.drivers.shell.command_timeout_seconds', $packageConfig['drivers']['shell']['command_timeout_seconds']);
+    config()->set('checkpoint.drivers.pgbackrest.command_timeout_seconds', $packageConfig['drivers']['pgbackrest']['command_timeout_seconds']);
+    config()->set('checkpoint.drivers.pgdump.command_timeout_seconds', $packageConfig['drivers']['pgdump']['command_timeout_seconds']);
+    config()->set('checkpoint.drivers.mysql.command_timeout_seconds', $packageConfig['drivers']['mysql']['command_timeout_seconds']);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())->not->toThrow(ConfigurationException::class);
 });

@@ -29,7 +29,7 @@ final class DoctorCommand extends Command
 
     public function handle(): int
     {
-        $format = (string) $this->option('format');
+        $format = $this->stringOption('format') ?? 'table';
         $agentMode = (bool) $this->option('agent');
         $outputMode = $agentMode ? 'agent' : (in_array($format, ['table', 'json'], true) ? $format : 'table');
 
@@ -64,7 +64,7 @@ final class DoctorCommand extends Command
             }
 
             $this->table(['Check', 'Status', 'Notes'], array_map(
-                fn (array $check): array => [$check['check'], $this->statusWord((string) $check['status']), $check['notes']],
+                fn (array $check): array => [$check['check'], $this->statusWord($check['status']), $check['notes']],
                 $checks,
             ));
 
@@ -84,7 +84,7 @@ final class DoctorCommand extends Command
         }
 
         $this->table(['Check', 'Status', 'Notes'], array_map(
-            fn (array $check): array => [$check['check'], $this->statusWord((string) $check['status']), $check['notes']],
+            fn (array $check): array => [$check['check'], $this->statusWord($check['status']), $check['notes']],
             $checks,
         ));
 
@@ -121,6 +121,13 @@ final class DoctorCommand extends Command
         $report = $this->jsonContract->envelope('doctor', $report);
 
         return json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+    }
+
+    private function stringOption(string $key): ?string
+    {
+        $value = $this->option($key);
+
+        return is_string($value) ? $value : null;
     }
 
     /**

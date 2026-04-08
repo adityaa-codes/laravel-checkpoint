@@ -34,7 +34,7 @@ final class CatalogExportCommand extends Command
 
     public function handle(): int
     {
-        $format = (string) $this->option('format');
+        $format = $this->stringOption('format') ?? 'json';
 
         if (! in_array($format, ['json', 'csv'], true)) {
             $this->error('The --format option must be json or csv.');
@@ -90,9 +90,9 @@ final class CatalogExportCommand extends Command
         ['requested' => $requestedLimit, 'effective' => $effectiveLimit] = $this->recentRunLimits();
 
         $export = $this->buildCatalogExport->execute(
-            driverFilter: $this->normalizedTextFilter((string) $this->option('driver')),
+            driverFilter: $this->normalizedTextFilter($this->stringOption('driver')),
             repositoryFilter: $repositoryFilter,
-            stanzaFilter: $this->normalizedTextFilter((string) $this->option('stanza')),
+            stanzaFilter: $this->normalizedTextFilter($this->stringOption('stanza')),
             windowHours: $windowHours,
             limit: $effectiveLimit,
         );
@@ -141,7 +141,7 @@ final class CatalogExportCommand extends Command
 
     private function normalizedRepositoryFilter(): int|string|null
     {
-        $repository = $this->option('repository');
+        $repository = $this->stringOption('repository');
 
         if ($repository === null) {
             return null;
@@ -151,7 +151,7 @@ final class CatalogExportCommand extends Command
             return 'none';
         }
 
-        if (! is_string($repository) || ! preg_match('/^\d+$/', $repository)) {
+        if (! preg_match('/^\d+$/', $repository)) {
             return null;
         }
 
@@ -160,13 +160,13 @@ final class CatalogExportCommand extends Command
 
     private function windowHours(): ?int
     {
-        $window = $this->option('window');
+        $window = $this->stringOption('window');
 
         if ($window === null || $window === '') {
             return null;
         }
 
-        if (! is_string($window) || ! preg_match('/^\d+$/', $window)) {
+        if (! preg_match('/^\d+$/', $window)) {
             return null;
         }
 
@@ -177,6 +177,13 @@ final class CatalogExportCommand extends Command
         }
 
         return $hours;
+    }
+
+    private function stringOption(string $key): ?string
+    {
+        $value = $this->option($key);
+
+        return is_string($value) ? $value : null;
     }
 
     private function normalizedTextFilter(?string $value): ?string

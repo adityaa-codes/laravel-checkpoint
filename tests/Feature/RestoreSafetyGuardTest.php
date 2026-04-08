@@ -11,7 +11,7 @@ use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 it('requires explicit confirmation outside ci contexts', function (): void {
     config()->set('checkpoint.restore.require_confirmation', true);
     config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
-    config()->set('checkpoint.restore.confirmation_token', null);
+    config()->set('checkpoint.restore.confirmation_token');
     config()->set('checkpoint.restore.ci', false);
 
     $run = CommandRun::factory()->make([
@@ -26,7 +26,7 @@ it('requires explicit confirmation outside ci contexts', function (): void {
 it('allows restore execution in ci when the ci bypass is enabled', function (): void {
     config()->set('checkpoint.restore.require_confirmation', true);
     config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
-    config()->set('checkpoint.restore.confirmation_token', null);
+    config()->set('checkpoint.restore.confirmation_token');
     config()->set('checkpoint.restore.allow_in_ci', true);
     config()->set('checkpoint.restore.ci', true);
 
@@ -42,7 +42,7 @@ it('allows restore execution in ci when the ci bypass is enabled', function (): 
 it('blocks restore execution in ci when ci bypass is disabled', function (): void {
     config()->set('checkpoint.restore.require_confirmation', true);
     config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
-    config()->set('checkpoint.restore.confirmation_token', null);
+    config()->set('checkpoint.restore.confirmation_token');
     config()->set('checkpoint.restore.allow_in_ci', false);
     config()->set('checkpoint.restore.ci', true);
 

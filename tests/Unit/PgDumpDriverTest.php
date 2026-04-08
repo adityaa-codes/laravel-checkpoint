@@ -579,7 +579,7 @@ SH
 });
 
 it('maps invalid dsn parse signatures in replication failure analysis', function (): void {
-    $analysis = app(ReplicationFailureSuggestionMapper::class)->map(
+    $analysis = resolve(ReplicationFailureSuggestionMapper::class)->map(
         'dry_run_export',
         'invalid DSN: failed to parse endpoint URL',
         ['source' => 'pgsql://user:secret@db.internal/source'],

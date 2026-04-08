@@ -283,6 +283,7 @@ final class ShellCommandDriver implements BackupDriver
 
     /**
      * @param  array<string, mixed>  $plannedMetadata
+     * @param  array<string, mixed>  $captureMetadata
      * @return array<string, mixed>
      */
     private function completedMetadata(CommandRun $run, array $plannedMetadata, int $exitCode, array $captureMetadata): array
@@ -304,21 +305,19 @@ final class ShellCommandDriver implements BackupDriver
             $completed['last_known_good_at'] = now();
         }
 
-        if (is_array($completed['metadata'] ?? null)) {
-            $postRestoreVerification = $this->postRestoreVerificationBuilder()->build(
-                run: $run,
-                exitCode: $exitCode,
-                metadata: $completed['metadata'],
-                restoreTarget: is_string($plannedMetadata['restore_target'] ?? null) ? $plannedMetadata['restore_target'] : null,
-            );
+        $postRestoreVerification = $this->postRestoreVerificationBuilder()->build(
+            run: $run,
+            exitCode: $exitCode,
+            metadata: $completed['metadata'],
+            restoreTarget: is_string($plannedMetadata['restore_target'] ?? null) ? $plannedMetadata['restore_target'] : null,
+        );
 
-            if (is_array($postRestoreVerification)) {
-                $restoreAudit = is_array($completed['metadata']['restore_audit'] ?? null)
-                    ? $completed['metadata']['restore_audit']
-                    : [];
-                $restoreAudit['post_restore_verification'] = $postRestoreVerification;
-                $completed['metadata']['restore_audit'] = $restoreAudit;
-            }
+        if (is_array($postRestoreVerification)) {
+            $restoreAudit = is_array($completed['metadata']['restore_audit'] ?? null)
+                ? $completed['metadata']['restore_audit']
+                : [];
+            $restoreAudit['post_restore_verification'] = $postRestoreVerification;
+            $completed['metadata']['restore_audit'] = $restoreAudit;
         }
 
         return $completed;
@@ -366,6 +365,9 @@ final class ShellCommandDriver implements BackupDriver
         return resolve(PostRestoreVerificationBuilder::class);
     }
 
+    /**
+     * @param  array{disk:string,path:string,temp_path:string}|null  $outputSession
+     */
     private function tapCapturedOutput(CommandRun $run, ?array $outputSession, string $chunk): void
     {
         $this->outputStore()->appendCaptureChunk($outputSession, $chunk);

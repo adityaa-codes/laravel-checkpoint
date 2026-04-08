@@ -60,11 +60,11 @@ final class ReplicateCommand extends Command
 
             if ($this->enhancedInteractiveMode()) {
                 $this->table(['Field', 'Value'], [
-                    ['Mode', ($payload['apply'] ?? false) ? 'apply' : 'dry-run'],
-                    ['Force overwrite', ($payload['force_overwrite'] ?? false) ? 'yes' : 'no'],
-                    ['Critical tables', implode(', ', $payload['critical_tables'] ?? []) ?: '-'],
-                    ['Source', $this->safeEndpointLabel((string) ($payload['source'] ?? ''))],
-                    ['Destination', $this->safeEndpointLabel((string) ($payload['destination'] ?? ''))],
+                    ['Mode', $payload['dry_run'] ? 'dry-run' : 'apply'],
+                    ['Force overwrite', $payload['force_overwrite'] ? 'yes' : 'no'],
+                    ['Critical tables', implode(', ', $payload['critical_tables']) ?: '-'],
+                    ['Source', $this->safeEndpointLabel($payload['source'])],
+                    ['Destination', $this->safeEndpointLabel($payload['destination'])],
                 ]);
             }
 

@@ -9,6 +9,7 @@ use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 final readonly class BuildBackupCatalogExportAction
 {
@@ -82,13 +83,24 @@ final readonly class BuildBackupCatalogExportAction
             $query->where('created_at', '>=', now()->subHours($windowHours));
         }
 
-        $runs = $query
-            ->orderByDesc('created_at')
+        $runs = $query->latest()
             ->orderByDesc('id')
             ->limit(max(1, $limit))
             ->get();
 
-        $latestVerifications = $this->latestVerifications($runs->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all());
+        /** @var list<int> $runIds */
+        $runIds = $runs->pluck('id')
+            ->map(static fn (mixed $id): int => (int) $id)
+            ->values()
+            ->all();
+
+        $latestVerifications = $this->latestVerifications($runIds);
+
+        /** @var list<array<string, mixed>> $rows */
+        $rows = $runs
+            ->map(fn (CommandRun $run): array => $this->rowPayload($run, $latestVerifications[(int) $run->getKey()] ?? null))
+            ->values()
+            ->all();
 
         return [
             'filters' => [
@@ -97,9 +109,7 @@ final readonly class BuildBackupCatalogExportAction
                 'stanza' => $stanzaFilter,
                 'window_hours' => $windowHours,
             ],
-            'rows' => $runs
-                ->map(fn (CommandRun $run): array => $this->rowPayload($run, $latestVerifications[(int) $run->getKey()] ?? null))
-                ->all(),
+            'rows' => $rows,
         ];
     }
 
@@ -113,9 +123,8 @@ final readonly class BuildBackupCatalogExportAction
             return [];
         }
 
-        $latestByCommandRun = [];
-
-        VerificationRun::query()
+        /** @var Collection<int, VerificationRun> $runs */
+        $runs = VerificationRun::query()
             ->select([
                 'id',
                 'command_run_id',
@@ -125,16 +134,15 @@ final readonly class BuildBackupCatalogExportAction
                 'error_detail',
             ])
             ->whereIn('command_run_id', $commandRunIds)
-            ->orderByDesc('verified_at')
+            ->latest('verified_at')
             ->orderByDesc('id')
-            ->get()
-            ->each(function (VerificationRun $run) use (&$latestByCommandRun): void {
-                $commandRunId = (int) $run->command_run_id;
+            ->get();
 
-                if (! array_key_exists($commandRunId, $latestByCommandRun)) {
-                    $latestByCommandRun[$commandRunId] = $run;
-                }
-            });
+        /** @var array<int, VerificationRun> $latestByCommandRun */
+        $latestByCommandRun = $runs
+            ->unique(static fn (VerificationRun $run): int => (int) $run->command_run_id)
+            ->keyBy(static fn (VerificationRun $run): int => (int) $run->command_run_id)
+            ->all();
 
         return $latestByCommandRun;
     }

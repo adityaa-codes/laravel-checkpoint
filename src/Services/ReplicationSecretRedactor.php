@@ -19,7 +19,7 @@ final class ReplicationSecretRedactor
             $parts = parse_url($trimmed);
 
             if (is_array($parts) && isset($parts['scheme']) && isset($parts['host'])) {
-                return sprintf('%s://[REDACTED]@%s', (string) $parts['scheme'], (string) $parts['host']);
+                return sprintf('%s://[REDACTED]@%s', $parts['scheme'], $parts['host']);
             }
         }
 

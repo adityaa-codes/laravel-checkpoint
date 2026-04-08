@@ -38,7 +38,7 @@ it('builds shared summary payloads with compatibility aliases', function (): voi
         'executed_at' => now()->subDays(2),
     ]);
 
-    $summary = app(OperationalReportBuilder::class)->summary();
+    $summary = resolve(OperationalReportBuilder::class)->summary();
 
     expect($summary)->toHaveKeys([
         'last_known_good_backup',
@@ -70,9 +70,9 @@ it('builds shared summary payloads with compatibility aliases', function (): voi
 });
 
 it('marks shared health output as not ok when warnings are present', function (): void {
-    $checks = app(OperationalReportBuilder::class)->healthChecks();
+    $checks = resolve(OperationalReportBuilder::class)->healthChecks();
 
-    expect(app(OperationalReportBuilder::class)->healthOk($checks))->toBeFalse();
+    expect(resolve(OperationalReportBuilder::class)->healthOk($checks))->toBeFalse();
 });
 
 it('deduplicates backup drill pass-rate alarm dispatches within cooldown windows', function (): void {
@@ -89,13 +89,13 @@ it('deduplicates backup drill pass-rate alarm dispatches within cooldown windows
         'executed_at' => now()->subDays(1),
     ]);
 
-    app(OperationalReportBuilder::class)->healthChecks();
-    app(OperationalReportBuilder::class)->healthChecks();
+    resolve(OperationalReportBuilder::class)->healthChecks();
+    resolve(OperationalReportBuilder::class)->healthChecks();
 
     Event::assertDispatchedTimes(BackupDrillPassRateAlarmTriggered::class, 1);
 
     Date::setTestNow('2026-03-11 12:06:00');
-    app(OperationalReportBuilder::class)->healthChecks();
+    resolve(OperationalReportBuilder::class)->healthChecks();
 
     Event::assertDispatchedTimes(BackupDrillPassRateAlarmTriggered::class, 2);
 
@@ -121,7 +121,7 @@ it('builds a combined report payload from a shared snapshot', function (): void 
         'metadata' => ['driver' => 'pgbackrest'],
     ]);
 
-    $payload = app(OperationalReportBuilder::class)->reportPayload(5);
+    $payload = resolve(OperationalReportBuilder::class)->reportPayload(5);
 
     expect($payload)->toHaveKeys(['recent_runs', 'summary', 'verification', 'health'])
         ->and($payload['recent_runs'])->toHaveCount(1)
@@ -170,7 +170,7 @@ it('includes post-restore verification contract in recent run payloads', functio
         ],
     ]);
 
-    $runs = app(OperationalReportBuilder::class)->recentRuns(1);
+    $runs = resolve(OperationalReportBuilder::class)->recentRuns(1);
 
     expect($runs)->toHaveCount(1)
         ->and($runs[0]['post_restore_verification'])->toMatchArray([
@@ -204,7 +204,7 @@ it('exposes verification health details in health checks', function (): void {
         'metadata' => ['driver' => 'pgbackrest'],
     ]);
 
-    $checks = app(OperationalReportBuilder::class)->healthChecks();
+    $checks = resolve(OperationalReportBuilder::class)->healthChecks();
 
     expect(collect($checks)->contains(
         fn (array $check): bool => $check['code'] === 'verification.runs'
@@ -229,7 +229,7 @@ it('emits drill trend health checks from drill history', function (): void {
         'executed_at' => now()->subDays(2),
     ]);
 
-    $checks = app(OperationalReportBuilder::class)->healthChecks();
+    $checks = resolve(OperationalReportBuilder::class)->healthChecks();
 
     expect(collect($checks)->contains(
         fn (array $check): bool => $check['code'] === 'backup_drill.trend'
@@ -298,7 +298,7 @@ it('includes replication metadata in recent run payloads when available', functi
         ],
     ]);
 
-    $runs = app(OperationalReportBuilder::class)->recentRuns(1);
+    $runs = resolve(OperationalReportBuilder::class)->recentRuns(1);
 
     expect($runs)->toHaveCount(1)
         ->and($runs[0]['operation'])->toBe('replication_sync')
@@ -362,7 +362,7 @@ it('prefers denormalized restore audit fields in restore summaries', function ()
         ],
     ]);
 
-    $summary = app(OperationalReportBuilder::class)->summary();
+    $summary = resolve(OperationalReportBuilder::class)->summary();
 
     expect($summary['latest_restore_run'])->toMatchArray([
         'operation' => 'logical_restore_latest',

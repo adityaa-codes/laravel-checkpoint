@@ -5,7 +5,7 @@ declare(strict_types=1);
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationFailureSuggestionMapper;
 
 it('maps known replication failure signatures to expected categories', function (): void {
-    $mapper = app(ReplicationFailureSuggestionMapper::class);
+    $mapper = resolve(ReplicationFailureSuggestionMapper::class);
 
     $cases = [
         ['output' => 'password authentication failed for user "replicator"', 'stage' => 'dry_run_export', 'category' => 'auth_credential_failure'],
@@ -25,9 +25,12 @@ it('maps known replication failure signatures to expected categories', function 
         ]);
 
         expect($analysis['category'])->toBe($case['category'])
-            ->and($analysis['immediate_fix'])->toBeString()->not->toBe('')
-            ->and($analysis['deeper_diagnostics'])->toBeArray()->not->toBeEmpty()
+            ->and($analysis['immediate_fix'])->toBeString()
+            ->and($analysis['deeper_diagnostics'])->toBeArray()
             ->and($analysis['diagnostics']['source'] ?? null)->toBe('pgsql://[REDACTED]@source.internal')
             ->and($analysis['diagnostics']['destination'] ?? null)->toBe('pgsql://[REDACTED]@dest.internal');
+
+        expect($analysis['immediate_fix'])->not->toBe('');
+        expect($analysis['deeper_diagnostics'])->not->toBeEmpty();
     }
 });

@@ -414,18 +414,16 @@ SH));
 
     $logger->shouldReceive('info')
         ->once()
-        ->with('Starting pgBackRest operation', Mockery::on(function (array $context): bool {
-            return str_contains((string) $context['command_line'], '--config=')
-                && $context['driver'] === 'pgbackrest'
-                && $context['repository'] === 1
-                && $context['stanza'] === 'main'
-                && ! str_contains((string) $context['command_line'], '--repo1-s3-key=')
-                && ! str_contains((string) $context['command_line'], '--repo1-s3-key-secret=')
-                && ! str_contains((string) $context['command_line'], '--repo1-cipher-pass=')
-                && ! str_contains((string) $context['command_line'], 'AKIA-SECRET-KEY')
-                && ! str_contains((string) $context['command_line'], 'super-secret-token')
-                && ! str_contains((string) $context['command_line'], 'repo-passphrase');
-        }));
+        ->with('Starting pgBackRest operation', Mockery::on(fn(array $context): bool => str_contains((string) $context['command_line'], '--config=')
+            && $context['driver'] === 'pgbackrest'
+            && $context['repository'] === 1
+            && $context['stanza'] === 'main'
+            && ! str_contains((string) $context['command_line'], '--repo1-s3-key=')
+            && ! str_contains((string) $context['command_line'], '--repo1-s3-key-secret=')
+            && ! str_contains((string) $context['command_line'], '--repo1-cipher-pass=')
+            && ! str_contains((string) $context['command_line'], 'AKIA-SECRET-KEY')
+            && ! str_contains((string) $context['command_line'], 'super-secret-token')
+            && ! str_contains((string) $context['command_line'], 'repo-passphrase')));
     $logger->shouldReceive('info')
         ->once()
         ->with('Completed pgBackRest operation', Mockery::on(
@@ -504,8 +502,8 @@ it('cleans up temporary pgbackrest secret config files after execution', functio
     preg_match('/--config=([^\s]+)/', (string) $run->fresh()?->command_line, $matches);
 
     expect($matches[1] ?? null)->toBeString()
-        ->and(str_starts_with((string) ($matches[1] ?? ''), rtrim($tempDir, '/').'/'))->toBeTrue()
-        ->and(is_file((string) $matches[1]))->toBeFalse();
+        ->and(str_starts_with($matches[1] ?? '', rtrim($tempDir, '/').'/'))->toBeTrue()
+        ->and(is_file($matches[1]))->toBeFalse();
 });
 
 it('stores a structured summary when pgbackrest check fails', function (): void {

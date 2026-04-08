@@ -32,7 +32,7 @@ final class RetentionPolicyCommand extends Command
 
     public function handle(): int
     {
-        $format = (string) $this->option('format');
+        $format = $this->stringOption('format') ?? 'table';
 
         if (! in_array($format, ['table', 'json'], true)) {
             $this->error('The --format option must be table or json.');
@@ -95,12 +95,12 @@ final class RetentionPolicyCommand extends Command
             'limit' => $limit,
             'retention_enabled' => $retentionEnabled,
             'totals' => [
-                'eligible' => (int) ($evaluation['totals']['eligible'] ?? 0),
+                'eligible' => $evaluation['totals']['eligible'],
                 'deleted' => $deleted,
-                'externalized_output' => (int) ($evaluation['totals']['externalized_output'] ?? 0),
+                'externalized_output' => $evaluation['totals']['externalized_output'],
             ],
-            'by_policy' => $evaluation['by_policy'] ?? [],
-            'sample' => $evaluation['sample'] ?? [],
+            'by_policy' => $evaluation['by_policy'],
+            'sample' => $evaluation['sample'],
         ]);
 
         if ($format === 'json') {
@@ -114,27 +114,26 @@ final class RetentionPolicyCommand extends Command
             ['Mode', (string) $payload['mode']],
             ['Retention enabled', ((bool) $payload['retention_enabled']) ? 'yes' : 'no'],
             ['Limit', (string) $payload['limit']],
-            ['Eligible', (string) ($payload['totals']['eligible'] ?? 0)],
-            ['Deleted', (string) ($payload['totals']['deleted'] ?? 0)],
-            ['Externalized output', (string) ($payload['totals']['externalized_output'] ?? 0)],
+            ['Eligible', (string) $payload['totals']['eligible']],
+            ['Deleted', (string) $payload['totals']['deleted']],
+            ['Externalized output', (string) $payload['totals']['externalized_output']],
         ]);
 
-        $byPolicy = is_array($payload['by_policy'] ?? null) ? $payload['by_policy'] : [];
-        $this->table(
-            ['Policy', 'Label', 'Keep days', 'Count'],
-            array_map(
-                static fn (string $policy, array $row): array => [
-                    $policy,
-                    (string) ($row['label'] ?? ''),
-                    (string) ($row['keep_days'] ?? ''),
-                    (string) ($row['count'] ?? 0),
-                ],
-                array_keys($byPolicy),
-                array_values($byPolicy),
-            ),
-        );
+        $byPolicy = $payload['by_policy'];
+        $policyRows = [];
 
-        $sample = is_array($payload['sample'] ?? null) ? $payload['sample'] : [];
+        foreach ($byPolicy as $policy => $row) {
+            $policyRows[] = [
+                $policy,
+                $row['label'],
+                (string) $row['keep_days'],
+                (string) $row['count'],
+            ];
+        }
+
+        $this->table(['Policy', 'Label', 'Keep days', 'Count'], $policyRows);
+
+        $sample = $payload['sample'];
         $this->table(
             ['ID', 'Operation', 'Status', 'Age (days)', 'Policy', 'Keep days', 'Reason'],
             array_map(
@@ -152,5 +151,12 @@ final class RetentionPolicyCommand extends Command
         );
 
         return self::SUCCESS;
+    }
+
+    private function stringOption(string $key): ?string
+    {
+        $value = $this->option($key);
+
+        return is_string($value) ? $value : null;
     }
 }

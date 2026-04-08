@@ -342,15 +342,13 @@ class CommandRun extends Model
     {
         $heartbeatAt ??= now();
 
-        $updated = static::withoutTimestamps(function () use ($heartbeatAt): int {
-            return static::query()
-                ->whereKey($this->getKey())
-                ->where('status', CommandRunStatus::Running)
-                ->update([
-                    'heartbeat_at' => $heartbeatAt,
-                    'updated_at' => $heartbeatAt,
-                ]);
-        });
+        $updated = static::withoutTimestamps(fn(): int => static::query()
+            ->whereKey($this->getKey())
+            ->where('status', CommandRunStatus::Running)
+            ->update([
+                'heartbeat_at' => $heartbeatAt,
+                'updated_at' => $heartbeatAt,
+            ]));
 
         if ($refresh) {
             $this->refresh();
@@ -365,20 +363,18 @@ class CommandRun extends Model
         $intervalSeconds = max(1, $intervalSeconds ?? (int) config('checkpoint.queue.heartbeat_interval_seconds', 30));
         $cutoff = $heartbeatAt->copy()->subSeconds($intervalSeconds);
 
-        $updated = static::withoutTimestamps(function () use ($cutoff, $heartbeatAt): int {
-            return static::query()
-                ->whereKey($this->getKey())
-                ->where('status', CommandRunStatus::Running)
-                ->where(function (Builder $query) use ($cutoff): void {
-                    $query
-                        ->whereNull('heartbeat_at')
-                        ->orWhere('heartbeat_at', '<=', $cutoff);
-                })
-                ->update([
-                    'heartbeat_at' => $heartbeatAt,
-                    'updated_at' => $heartbeatAt,
-                ]);
-        });
+        $updated = static::withoutTimestamps(fn(): int => static::query()
+            ->whereKey($this->getKey())
+            ->where('status', CommandRunStatus::Running)
+            ->where(function (Builder $query) use ($cutoff): void {
+                $query
+                    ->whereNull('heartbeat_at')
+                    ->orWhere('heartbeat_at', '<=', $cutoff);
+            })
+            ->update([
+                'heartbeat_at' => $heartbeatAt,
+                'updated_at' => $heartbeatAt,
+            ]));
 
         if ($refresh) {
             $this->refresh();
@@ -391,20 +387,18 @@ class CommandRun extends Model
     {
         $claimedAt ??= now();
 
-        $updated = static::withoutTimestamps(function () use ($claimExpiresBefore, $claimedAt, $threshold): int {
-            return static::query()
-                ->whereKey($this->getKey())
-                ->where('status', CommandRunStatus::Pending)
-                ->where('updated_at', '<', $threshold)
-                ->where(function (Builder $query) use ($claimExpiresBefore): void {
-                    $query
-                        ->whereNull('orphan_recovery_claimed_at')
-                        ->orWhere('orphan_recovery_claimed_at', '<', $claimExpiresBefore);
-                })
-                ->update([
-                    'orphan_recovery_claimed_at' => $claimedAt,
-                ]);
-        });
+        $updated = static::withoutTimestamps(fn(): int => static::query()
+            ->whereKey($this->getKey())
+            ->where('status', CommandRunStatus::Pending)
+            ->where('updated_at', '<', $threshold)
+            ->where(function (Builder $query) use ($claimExpiresBefore): void {
+                $query
+                    ->whereNull('orphan_recovery_claimed_at')
+                    ->orWhere('orphan_recovery_claimed_at', '<', $claimExpiresBefore);
+            })
+            ->update([
+                'orphan_recovery_claimed_at' => $claimedAt,
+            ]));
 
         if ($refresh) {
             $this->refresh();
@@ -415,15 +409,13 @@ class CommandRun extends Model
 
     public function releaseOrphanRecoveryClaim(Carbon $claimedAt, bool $refresh = true): bool
     {
-        $updated = static::withoutTimestamps(function () use ($claimedAt): int {
-            return static::query()
-                ->whereKey($this->getKey())
-                ->where('status', CommandRunStatus::Pending)
-                ->where('orphan_recovery_claimed_at', $claimedAt)
-                ->update([
-                    'orphan_recovery_claimed_at' => null,
-                ]);
-        });
+        $updated = static::withoutTimestamps(fn(): int => static::query()
+            ->whereKey($this->getKey())
+            ->where('status', CommandRunStatus::Pending)
+            ->where('orphan_recovery_claimed_at', $claimedAt)
+            ->update([
+                'orphan_recovery_claimed_at' => null,
+            ]));
 
         if ($refresh) {
             $this->refresh();
@@ -432,12 +424,15 @@ class CommandRun extends Model
         return $updated === 1;
     }
 
-    /** @return Builder<self> */
     /** @return Builder<static> */
     public function prunable(): Builder
     {
+        /** @var Builder<static> $query */
         $query = static::query();
-        resolve(EvaluateRetentionPolicyAction::class)->applyEligibleRetentionPredicate($query, now());
+        /** @var Builder<self> $retentionQuery */
+        $retentionQuery = $query;
+
+        resolve(EvaluateRetentionPolicyAction::class)->applyEligibleRetentionPredicate($retentionQuery, now());
 
         return $query;
     }
@@ -453,16 +448,12 @@ class CommandRun extends Model
                 $ids = [];
 
                 foreach ($runs as $run) {
-                    if (! $run instanceof self) {
-                        continue;
-                    }
-
                     $this->outputStore()->cleanup($run);
                     $ids[] = $run->getKey();
                 }
 
                 if ($ids !== []) {
-                    $deleted += static::query()->whereKey($ids)->delete();
+                    $deleted += (int) static::query()->whereKey($ids)->delete();
                 }
             });
 

@@ -493,10 +493,12 @@ final readonly class ConfigValidator
             'mysql' => 'checkpoint.drivers.mysql.command_timeout_seconds',
         ];
 
-        foreach ($timeoutPaths as $driver => $path) {
+        foreach ($timeoutPaths as $path) {
             $driverTimeout = $this->config->get($path);
-
-            if (! is_int($driverTimeout) || $driverTimeout < 1) {
+            if (! is_int($driverTimeout)) {
+                continue;
+            }
+            if ($driverTimeout < 1) {
                 continue;
             }
 
@@ -934,7 +936,7 @@ final readonly class ConfigValidator
             $normalizedTier = strtolower(trim($tier));
 
             if (preg_match('/^[a-z][a-z0-9_-]*$/', $normalizedTier) !== 1) {
-                throw new ConfigurationException(sprintf('checkpoint.retention.tiers.%s key must use lowercase alphanumeric, underscore, or hyphen characters.', (string) $tier));
+                throw new ConfigurationException(sprintf('checkpoint.retention.tiers.%s key must use lowercase alphanumeric, underscore, or hyphen characters.', $tier));
             }
 
             if (! is_int($days) || $days < 1) {
@@ -962,7 +964,7 @@ final readonly class ConfigValidator
                 throw new ConfigurationException(sprintf('%s must be an array.', $prefix));
             }
 
-            if (! is_string($operation['label'] ?? null) || trim((string) $operation['label']) === '') {
+            if (! is_string($operation['label'] ?? null) || trim($operation['label']) === '') {
                 throw new ConfigurationException(sprintf('%s.label must be a non-empty string.', $prefix));
             }
 

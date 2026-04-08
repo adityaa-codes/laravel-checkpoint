@@ -109,9 +109,7 @@ final class RecoverOrphansCommand extends Command
                                 $claimedRunIds = array_values($claimedRunIds);
                             }
 
-                            if ($runClaimedAt !== null) {
-                                $run->releaseOrphanRecoveryClaim($runClaimedAt, refresh: false);
-                            }
+                            $run->releaseOrphanRecoveryClaim($runClaimedAt, refresh: false);
 
                             throw $exception;
                         }

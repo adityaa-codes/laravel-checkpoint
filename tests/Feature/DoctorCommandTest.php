@@ -61,7 +61,7 @@ it('fails doctor when queue timeout settings are unsafe', function (): void {
 
 it('warns about unsafe restore posture in non-local environments', function (): void {
     config()->set('app.env', 'production');
-    config()->set('checkpoint.queue.lock_store', null);
+    config()->set('checkpoint.queue.lock_store');
     config()->set('checkpoint.schedule.without_overlapping', false);
     config()->set('checkpoint.schedule.on_one_server', false);
     config()->set('checkpoint.restore.allowed_environments', ['production']);
@@ -286,12 +286,12 @@ it('dispatches drill alarms when no backup drills exist', function (): void {
     checkpoint_artisan('db-ops:doctor')->assertSuccessful();
 
     Event::assertDispatched(fn (BackupDrillFreshnessAlarmTriggered $event): bool => $event->reason === 'missing'
-        && $event->run === null
+        && !$event->run instanceof \AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun
         && $event->ageDays === null
         && $event->thresholdDays === 30
         && $event->version === 1);
 
-    Event::assertDispatched(fn (BackupDrillPassRateAlarmTriggered $event): bool => $event->latestRun === null
+    Event::assertDispatched(fn (BackupDrillPassRateAlarmTriggered $event): bool => !$event->latestRun instanceof \AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun
         && $event->windowDays === 30
         && $event->passing === 0
         && $event->total === 0
@@ -403,7 +403,7 @@ it('dispatches a freshness alarm when no last-known-good backup exists', functio
         && $event->ageHours === null
         && $event->thresholdHours === 24
         && $event->version === 1
-        && $event->run === null);
+        && !$event->run instanceof \AdityaaCodes\LaravelCheckpoint\Models\CommandRun);
 });
 
 it('counts pending rows by their last worker heartbeat rather than claim timestamp', function (): void {

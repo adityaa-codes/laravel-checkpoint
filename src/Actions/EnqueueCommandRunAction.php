@@ -82,7 +82,7 @@ class EnqueueCommandRunAction
         $forceOverwriteRequested = (bool) ($payload['force_overwrite'] ?? $payload['force'] ?? false);
         $overwriteDestination = (bool) ($payload['overwrite_destination'] ?? $forceOverwriteRequested);
         $criticalTables = is_array($payload['critical_tables'] ?? null)
-            ? array_values(array_unique(array_filter($payload['critical_tables'], static fn (mixed $value): bool => is_string($value) && trim($value) !== '')))
+            ? array_values(array_unique(array_filter($payload['critical_tables'], static fn (mixed $value): bool => trim((string) $value) !== '')))
             : [];
         $governancePreflight = $this->replicationGovernanceEvaluator->evaluate($request, $applyRequested);
         $this->replicationGovernanceEvaluator->assertAllowed($governancePreflight, $applyRequested);

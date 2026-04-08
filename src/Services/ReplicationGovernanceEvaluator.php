@@ -131,7 +131,7 @@ final readonly class ReplicationGovernanceEvaluator
         $candidates = [];
 
         if ($endpoint->kind === ReplicationEndpointKind::ConfigProfile) {
-            $identifier = strtolower(trim((string) ($endpoint->identifier ?? '')));
+            $identifier = strtolower(trim($endpoint->identifier ?? ''));
 
             if ($identifier !== '') {
                 $candidates[] = sprintf('profile:%s', $identifier);
@@ -143,7 +143,7 @@ final readonly class ReplicationGovernanceEvaluator
             $parts = parse_url($endpoint->rawInput);
 
             if (is_array($parts) && is_string($parts['host'] ?? null)) {
-                $host = strtolower(trim((string) $parts['host']));
+                $host = strtolower(trim($parts['host']));
 
                 if ($host !== '') {
                     $candidates[] = $host;
@@ -167,10 +167,7 @@ final readonly class ReplicationGovernanceEvaluator
             }
         }
 
-        return array_values(array_unique(array_filter(
-            $candidates,
-            static fn (string $value): bool => $value !== ''
-        )));
+        return array_values(array_unique($candidates));
     }
 
     /**
@@ -183,7 +180,7 @@ final readonly class ReplicationGovernanceEvaluator
         $start = (string) $this->config->get('checkpoint.replication.change_window_start', '00:00');
         $end = (string) $this->config->get('checkpoint.replication.change_window_end', '23:59');
         $enforced = (bool) $this->config->get('checkpoint.replication.enforce_change_window', false);
-        $now = Carbon::now($timezone);
+        $now = \Illuminate\Support\Facades\Date::now($timezone);
         $currentDay = strtolower($now->format('D'));
         $currentTime = $now->format('H:i');
 

@@ -38,8 +38,8 @@ final readonly class BuildDrillRemediationPlaybookAction
             : null;
         $isStale = $latestRun instanceof BackupDrillRun
             && $latestRun->executed_at->lt(now()->subDays($maxAgeDays));
-        $trendStatus = is_string($trend['status'] ?? null) ? (string) $trend['status'] : 'insufficient_data';
-        $trendTrajectory = is_string($trend['trajectory'] ?? null) ? (string) $trend['trajectory'] : 'insufficient_data';
+        $trendStatus = is_string($trend['status'] ?? null) ? $trend['status'] : 'insufficient_data';
+        $trendTrajectory = is_string($trend['trajectory'] ?? null) ? $trend['trajectory'] : 'insufficient_data';
 
         $evidence = [
             'window_days' => $windowDays,
@@ -164,6 +164,7 @@ final readonly class BuildDrillRemediationPlaybookAction
     }
 
     /**
+     * @param  'info'|'warn'|'critical'  $severity
      * @param  list<string>  $recommendedCommands
      * @param  list<string>  $steps
      * @param  array<string,mixed>  $evidence

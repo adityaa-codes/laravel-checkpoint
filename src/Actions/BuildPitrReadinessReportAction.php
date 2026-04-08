@@ -37,8 +37,8 @@ final readonly class BuildPitrReadinessReportAction
         $checks = [
             [
                 'code' => 'baseline.last_known_good',
-                'status' => $baseline !== null ? 'pass' : 'fail',
-                'message' => $baseline !== null
+                'status' => $baseline instanceof \AdityaaCodes\LaravelCheckpoint\Models\CommandRun ? 'pass' : 'fail',
+                'message' => $baseline instanceof \AdityaaCodes\LaravelCheckpoint\Models\CommandRun
                     ? 'Found a last-known-good logical backup baseline.'
                     : 'Missing last-known-good logical backup baseline required for PITR.',
                 'data' => [
@@ -49,8 +49,8 @@ final readonly class BuildPitrReadinessReportAction
             ],
             [
                 'code' => 'baseline.artifact_exists',
-                'status' => $baseline !== null && is_string($baseline->artifact_path) && $baseline->artifact_path !== '' && is_file($baseline->artifact_path) ? 'pass' : 'fail',
-                'message' => $baseline !== null && is_string($baseline->artifact_path) && $baseline->artifact_path !== '' && is_file($baseline->artifact_path)
+                'status' => $baseline instanceof \AdityaaCodes\LaravelCheckpoint\Models\CommandRun && is_string($baseline->artifact_path) && $baseline->artifact_path !== '' && is_file($baseline->artifact_path) ? 'pass' : 'fail',
+                'message' => $baseline instanceof \AdityaaCodes\LaravelCheckpoint\Models\CommandRun && is_string($baseline->artifact_path) && $baseline->artifact_path !== '' && is_file($baseline->artifact_path)
                     ? 'Baseline backup artifact exists on disk.'
                     : 'Baseline backup artifact is missing on disk.',
                 'data' => [
@@ -132,7 +132,7 @@ final readonly class BuildPitrReadinessReportAction
         }
 
         try {
-            return Carbon::parse($value);
+            return \Illuminate\Support\Facades\Date::parse($value);
         } catch (\Throwable) {
             throw new InvalidArgumentException('PITR target must be a valid datetime string.');
         }

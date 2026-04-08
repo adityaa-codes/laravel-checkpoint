@@ -66,13 +66,13 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
             throw new InvalidArgumentException('Invalid DSN input for replication endpoint.');
         }
 
-        $scheme = isset($components['scheme']) && is_string($components['scheme'])
+        $scheme = is_string($components['scheme'] ?? null)
             ? $components['scheme']
             : '';
 
         $engine = ReplicationEngine::fromInput($scheme);
 
-        if ($engine === null) {
+        if (!$engine instanceof \AdityaaCodes\LaravelCheckpoint\Enums\ReplicationEngine) {
             throw new InvalidArgumentException(
                 'Unsupported DSN engine. Replication v1 supports only pgsql:// and mysql://.',
             );
@@ -87,7 +87,7 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
 
     private function parseKeyValue(string $rawInput, string $normalized): ReplicationEndpoint
     {
-        $pairs = array_values(array_filter(array_map('trim', explode(',', $normalized)), static fn (string $pair): bool => $pair !== ''));
+        $pairs = array_values(array_filter(array_map(trim(...), explode(',', $normalized)), static fn (string $pair): bool => $pair !== ''));
         $attributes = [];
 
         foreach ($pairs as $pair) {
@@ -97,7 +97,7 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
                 );
             }
 
-            [$key, $value] = array_map('trim', explode('=', $pair, 2));
+            [$key, $value] = array_map(trim(...), explode('=', $pair, 2));
 
             if ($key === '' || $value === '') {
                 throw new InvalidArgumentException(
@@ -111,7 +111,7 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
         $engineInput = $attributes['engine'] ?? null;
         $engine = is_string($engineInput) ? ReplicationEngine::fromInput($engineInput) : null;
 
-        if ($engineInput !== null && $engine === null) {
+        if ($engineInput !== null && !$engine instanceof \AdityaaCodes\LaravelCheckpoint\Enums\ReplicationEngine) {
             throw new InvalidArgumentException(
                 'Unsupported engine in key=value endpoint. Supported engines are pgsql and mysql.',
             );

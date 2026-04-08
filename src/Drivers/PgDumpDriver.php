@@ -153,7 +153,7 @@ final class PgDumpDriver implements BackupDriver
                 timeout: $this->commandTimeout(),
             ),
             'replication_sync' => new Process(
-                $this->replicationDryRunCommand($run, $plannedMetadata),
+                $this->replicationDryRunCommand($plannedMetadata),
                 timeout: $this->commandTimeout(),
             ),
             default => throw new ConfigurationException(
@@ -358,7 +358,7 @@ final class PgDumpDriver implements BackupDriver
                 ? $plannedMetadata['restore_target_snapshot']
                 : null;
 
-            return $this->validatedRestoreTarget((string) $plannedMetadata['restore_target'], $format, $snapshot);
+            return $this->validatedRestoreTarget($plannedMetadata['restore_target'], $format, $snapshot);
         }
 
         return match ($run->operation) {
@@ -405,10 +405,12 @@ final class PgDumpDriver implements BackupDriver
             ->get();
 
         foreach ($runs as $run) {
-            if (! $run instanceof CommandRun || ! is_string($run->artifact_path) || trim($run->artifact_path) === '') {
+            if (! is_string($run->artifact_path)) {
                 continue;
             }
-
+            if (trim((string) $run->artifact_path) === '') {
+                continue;
+            }
             try {
                 return $this->validatedRestoreTarget($run->artifact_path, $format);
             } catch (ConfigurationException) {
@@ -446,11 +448,11 @@ final class PgDumpDriver implements BackupDriver
         $realOutputDir = realpath($this->outputDir());
         $realTargetPath = realpath($resolvedPath);
 
-        if (! is_string($realOutputDir) || $realOutputDir === '') {
+        if ($realOutputDir === false) {
             throw new ConfigurationException('Unable to resolve the configured pg_dump output directory.');
         }
 
-        if (! is_string($realTargetPath) || $realTargetPath === '') {
+        if ($realTargetPath === false) {
             throw new ConfigurationException(
                 sprintf('Configured logical restore target [%s] does not exist.', $resolvedPath),
             );
@@ -514,10 +516,10 @@ final class PgDumpDriver implements BackupDriver
         return [
             'path' => $realTargetPath,
             'file_type' => $format,
-            'device' => isset($stats['dev']) ? (int) $stats['dev'] : null,
-            'inode' => isset($stats['ino']) ? (int) $stats['ino'] : null,
-            'mtime' => isset($stats['mtime']) ? (int) $stats['mtime'] : null,
-            'size' => $format === 'custom' && isset($stats['size']) ? (int) $stats['size'] : null,
+            'device' => (int) $stats['dev'],
+            'inode' => (int) $stats['ino'],
+            'mtime' => (int) $stats['mtime'],
+            'size' => $format === 'custom' ? (int) $stats['size'] : null,
             'content_signature' => $format === 'directory' ? $this->directoryContentSignature($realTargetPath) : null,
         ];
     }
@@ -546,7 +548,7 @@ final class PgDumpDriver implements BackupDriver
         );
 
         foreach ($iterator as $file) {
-            $relativePath = substr($file->getPathname(), $baseLength);
+            $relativePath = substr((string) $file->getPathname(), $baseLength);
             $entries[] = implode('|', [
                 $relativePath,
                 $file->isDir() ? 'dir' : 'file',
@@ -612,7 +614,7 @@ final class PgDumpDriver implements BackupDriver
     {
         return match ($run->operation) {
             'replication_sync' => implode(' ; ', array_filter([
-                (new Process($this->replicationDryRunCommand($run, $plannedMetadata), timeout: $this->commandTimeout()))->getCommandLine(),
+                (new Process($this->replicationDryRunCommand($plannedMetadata), timeout: $this->commandTimeout()))->getCommandLine(),
                 (bool) ($plannedMetadata['metadata']['replication']['apply_requested'] ?? false)
                     ? (new Process($this->replicationApplyCommand((string) (($plannedMetadata['metadata']['replication']['artifact_path'] ?? ''))), timeout: $this->commandTimeout()))->getCommandLine()
                     : null,
@@ -682,6 +684,7 @@ final class PgDumpDriver implements BackupDriver
 
     /**
      * @param  array<string, mixed>  $plannedMetadata
+     * @param  array<string, mixed>  $captureMetadata
      * @return array<string, mixed>
      */
     private function completedMetadata(CommandRun $run, array $plannedMetadata, int $exitCode, array $captureMetadata): array
@@ -728,21 +731,19 @@ final class PgDumpDriver implements BackupDriver
             ];
         }
 
-        if (is_array($completed['metadata'] ?? null)) {
-            $postRestoreVerification = $this->postRestoreVerificationBuilder()->build(
-                run: $run,
-                exitCode: $exitCode,
-                metadata: $completed['metadata'],
-                restoreTarget: is_string($plannedMetadata['restore_target'] ?? null) ? $plannedMetadata['restore_target'] : null,
-            );
+        $postRestoreVerification = $this->postRestoreVerificationBuilder()->build(
+            run: $run,
+            exitCode: $exitCode,
+            metadata: $completed['metadata'],
+            restoreTarget: is_string($plannedMetadata['restore_target'] ?? null) ? $plannedMetadata['restore_target'] : null,
+        );
 
-            if (is_array($postRestoreVerification)) {
-                $restoreAudit = is_array($completed['metadata']['restore_audit'] ?? null)
-                    ? $completed['metadata']['restore_audit']
-                    : [];
-                $restoreAudit['post_restore_verification'] = $postRestoreVerification;
-                $completed['metadata']['restore_audit'] = $restoreAudit;
-            }
+        if (is_array($postRestoreVerification)) {
+            $restoreAudit = is_array($completed['metadata']['restore_audit'] ?? null)
+                ? $completed['metadata']['restore_audit']
+                : [];
+            $restoreAudit['post_restore_verification'] = $postRestoreVerification;
+            $completed['metadata']['restore_audit'] = $restoreAudit;
         }
 
         return $completed;
@@ -848,6 +849,9 @@ final class PgDumpDriver implements BackupDriver
         return resolve(CommandOutputStore::class);
     }
 
+    /**
+     * @param  array{disk:string,path:string,temp_path:string}|null  $outputSession
+     */
     private function tapCapturedOutput(CommandRun $run, ?array $outputSession, string $chunk): void
     {
         $this->outputStore()->appendCaptureChunk($outputSession, $chunk);
@@ -971,7 +975,7 @@ final class PgDumpDriver implements BackupDriver
      * @param  array<string, mixed>  $plannedMetadata
      * @return list<string>
      */
-    private function replicationDryRunCommand(CommandRun $run, array $plannedMetadata): array
+    private function replicationDryRunCommand(array $plannedMetadata): array
     {
         $replication = is_array($plannedMetadata['metadata']['replication'] ?? null) ? $plannedMetadata['metadata']['replication'] : [];
         $artifactPath = (string) ($replication['artifact_path'] ?? '');
@@ -1017,7 +1021,7 @@ final class PgDumpDriver implements BackupDriver
         }
 
         $dryRunProcess = new Process(
-            $this->replicationDryRunCommand($run, $plannedMetadata),
+            $this->replicationDryRunCommand($plannedMetadata),
             timeout: $this->commandTimeout(),
         );
 
@@ -1236,7 +1240,7 @@ final class PgDumpDriver implements BackupDriver
         try {
             $payload = json_decode($argument, true, flags: JSON_THROW_ON_ERROR);
         } catch (\JsonException $exception) {
-            throw new ConfigurationException('replication_sync argument must be valid JSON.', previous: $exception);
+            throw new ConfigurationException('replication_sync argument must be valid JSON.', $exception->getCode(), previous: $exception);
         }
 
         if (! is_array($payload)) {
@@ -1269,7 +1273,7 @@ final class PgDumpDriver implements BackupDriver
 
         return [
             'path' => $path,
-            'size' => $size === false ? null : (int) $size,
+            'size' => $size === false ? null : $size,
             'sha1' => @sha1_file($path) ?: null,
         ];
     }

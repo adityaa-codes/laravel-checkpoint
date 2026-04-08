@@ -57,7 +57,7 @@ final class PostRestoreVerificationBuilder
         ];
 
         $aggregate = collect($checks)->every(
-            static fn (array $check): bool => (bool) ($check['passed'] ?? false),
+            static fn (array $check): bool => $check['passed'],
         ) ? 'pass' : 'fail';
 
         return [

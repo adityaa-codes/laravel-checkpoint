@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -120,97 +121,73 @@ it('adds operational summary columns and indexes on upgrade installs', function 
         ->and(verificationRunIndexNames())->toContain('db_ops_verification_runs_status_verified_at_index');
 });
 
-/**
- * @return object{up: callable():void}
- */
-function freshCommandRunMigration(): object
+function freshCommandRunMigration(): Migration
 {
-    /** @var object{up: callable():void} $migration */
+    /** @var Migration $migration */
     $migration = require __DIR__.'/../../database/migrations/create_checkpoint_command_runs_table.php.stub';
 
     return $migration;
 }
 
-/**
- * @return object{up: callable():void}
- */
-function metadataCommandRunMigration(): object
+function metadataCommandRunMigration(): Migration
 {
-    /** @var object{up: callable():void} $migration */
+    /** @var Migration $migration */
     $migration = require __DIR__.'/../../database/migrations/add_checkpoint_metadata_to_command_runs_table.php.stub';
 
     return $migration;
 }
 
-/**
- * @return object{up: callable():void}
- */
-function orphanClaimMigration(): object
+function orphanClaimMigration(): Migration
 {
-    /** @var object{up: callable():void} $migration */
+    /** @var Migration $migration */
     $migration = require __DIR__.'/../../database/migrations/add_orphan_recovery_claim_to_command_runs_table.php.stub';
 
     return $migration;
 }
 
-/**
- * @return object{up: callable():void}
- */
-function heartbeatMigration(): object
+function heartbeatMigration(): Migration
 {
-    /** @var object{up: callable():void} $migration */
+    /** @var Migration $migration */
     $migration = require __DIR__.'/../../database/migrations/add_heartbeat_to_command_runs_table.php.stub';
 
     return $migration;
 }
 
-/**
- * @return object{up: callable():void}
- */
-function reportingIndexesMigration(): object
+function reportingIndexesMigration(): Migration
 {
-    /** @var object{up: callable():void} $migration */
+    /** @var Migration $migration */
     $migration = require __DIR__.'/../../database/migrations/add_reporting_indexes_to_checkpoint_tables.php.stub';
 
     return $migration;
 }
 
-/**
- * @return object{up: callable():void}
- */
-function operatorSummaryColumnsMigration(): object
+function operatorSummaryColumnsMigration(): Migration
 {
-    /** @var object{up: callable():void} $migration */
+    /** @var Migration $migration */
     $migration = require __DIR__.'/../../database/migrations/add_operator_summary_columns_to_command_runs_table.php.stub';
 
     return $migration;
 }
 
-/**
- * @return object{up: callable():void}
- */
-function restoreDecisionEventsMigration(): object
+function restoreDecisionEventsMigration(): Migration
 {
-    /** @var object{up: callable():void} $migration */
+    /** @var Migration $migration */
     $migration = require __DIR__.'/../../database/migrations/create_checkpoint_restore_decision_events_table.php.stub';
 
     return $migration;
 }
 
-function backupDrillRunMigration(): object
+function backupDrillRunMigration(): Migration
 {
-    /** @var object{up: callable():void} $migration */
+    /** @var Migration $migration */
     $migration = require __DIR__.'/../../database/migrations/create_checkpoint_backup_drill_runs_table.php.stub';
 
     return $migration;
 }
 
-/**
- * @return object{up: callable():void}
- */
-function verificationRunMigration(): object
+function verificationRunMigration(): Migration
 {
-    /** @var object{up: callable():void} $migration */
+    /** @var Migration $migration */
     $migration = require __DIR__.'/../../database/migrations/create_checkpoint_verification_runs_table.php.stub';
 
     return $migration;
@@ -257,21 +234,21 @@ function indexNamesForTable(string $table): array
     $driver = $connection->getDriverName();
 
     return match ($driver) {
-        'sqlite' => array_map(
+        'sqlite' => array_values(array_map(
             static fn (object $index): string => (string) ($index->name ?? ''),
             $connection->select(sprintf("PRAGMA index_list('%s')", $table)),
-        ),
+        )),
         'mysql' => array_values(array_unique(array_map(
             static fn (object $index): string => (string) ($index->Key_name ?? ''),
             $connection->select(sprintf('SHOW INDEX FROM `%s`', $table)),
         ))),
-        'pgsql' => array_map(
+        'pgsql' => array_values(array_map(
             static fn (object $index): string => (string) ($index->indexname ?? ''),
             $connection->select(
                 'SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND tablename = ?',
                 [$table],
             ),
-        ),
+        )),
         default => [],
     };
 }

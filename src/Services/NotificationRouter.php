@@ -66,11 +66,6 @@ final readonly class NotificationRouter
         }
     }
 
-    private function enabled(): bool
-    {
-        return (bool) $this->config->get('checkpoint.notifications.enabled', false);
-    }
-
     private function eventEnabled(string $eventKey): bool
     {
         $enabledEvents = $this->config->get('checkpoint.notifications.events', []);
@@ -134,10 +129,12 @@ final readonly class NotificationRouter
         }
 
         foreach ($to as $address) {
-            if (! is_string($address) || trim($address) === '') {
+            if (! is_string($address)) {
                 continue;
             }
-
+            if (trim($address) === '') {
+                continue;
+            }
             Notification::route('mail', $address)
                 ->notify(new CheckpointEventNotification($eventKey, $level, $payload));
         }

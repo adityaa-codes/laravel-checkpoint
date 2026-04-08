@@ -128,7 +128,7 @@ final class MysqlDriver implements BackupDriver
             'logical_backup' => $this->executeSingleProcess($this->buildProcess($run, $plannedMetadata)),
             'logical_restore_file', 'logical_restore_latest' => $this->executeLogicalRestore($run, $plannedMetadata),
             'pitr_restore' => $this->executePitrRestore($run, $plannedMetadata),
-            'replication_sync' => $this->executeReplicationSync($run, $plannedMetadata),
+            'replication_sync' => $this->executeReplicationSync($plannedMetadata),
             'backup_drill' => $this->executeSingleProcess($this->buildProcess($run, $plannedMetadata)),
             default => throw new ConfigurationException(
                 sprintf('Unsupported mysql operation [%s].', $run->operation),
@@ -274,7 +274,7 @@ final class MysqlDriver implements BackupDriver
 
         $captured = $this->outputCapture()->captureProcess(
             $process,
-            fn (string $chunk, string $type): null => $this->tapCapturedOutput($chunk),
+            fn (string $chunk, string $type): null => $this->tapCapturedOutput(),
         );
 
         return [
@@ -293,7 +293,7 @@ final class MysqlDriver implements BackupDriver
             'logical_backup' => $this->mysqlBackupProcess($run),
             'logical_restore_file', 'logical_restore_latest' => $this->mysqlRestoreProcessAfterValidatingTarget($run, $plannedMetadata),
             'pitr_restore' => $this->mysqlBinlogProcess((string) ($plannedMetadata['restore_target'] ?? $run->argument_text ?? '')),
-            'replication_sync' => $this->mysqlReplicationDryRunProcess($run, $plannedMetadata),
+            'replication_sync' => $this->mysqlReplicationDryRunProcess($plannedMetadata),
             'backup_drill' => $this->mysqlDrillProcess($run),
             default => throw new ConfigurationException(
                 sprintf('Unsupported mysql operation [%s].', $run->operation),
@@ -423,7 +423,7 @@ final class MysqlDriver implements BackupDriver
 
         $argv = preg_split('/\s+/', $template);
 
-        if ($argv === false || $argv === []) {
+        if ($argv === false) {
             throw new ConfigurationException('checkpoint.drivers.mysql.drill_command must contain a valid executable token.');
         }
 
@@ -596,10 +596,12 @@ final class MysqlDriver implements BackupDriver
             ->get();
 
         foreach ($runs as $run) {
-            if (! $run instanceof CommandRun || ! is_string($run->artifact_path) || trim($run->artifact_path) === '') {
+            if (! is_string($run->artifact_path)) {
                 continue;
             }
-
+            if (trim((string) $run->artifact_path) === '') {
+                continue;
+            }
             try {
                 return $this->validatedRestoreTarget($run->artifact_path, 'logical_restore_latest');
             } catch (ConfigurationException) {
@@ -608,7 +610,7 @@ final class MysqlDriver implements BackupDriver
         }
 
         $candidates = glob($this->outputDir().'/'.$this->outputPrefix().'-*.'.$this->fileExtension(), GLOB_NOSORT) ?: [];
-        $candidates = array_values(array_filter($candidates, static fn (string $path): bool => is_file($path)));
+        $candidates = array_values(array_filter($candidates, is_file(...)));
 
         if ($candidates === []) {
             throw new ConfigurationException('No mysql logical backup exports were found for logical_restore_latest.');
@@ -619,6 +621,9 @@ final class MysqlDriver implements BackupDriver
         return $this->validatedRestoreTarget($candidates[0], 'logical_restore_latest');
     }
 
+    /**
+     * @return list<string>
+     */
     private function pitrBinlogFiles(): array
     {
         $files = config('checkpoint.drivers.mysql.pitr.binlog_files', []);
@@ -681,7 +686,7 @@ final class MysqlDriver implements BackupDriver
                 $this->mysqlPitrReplayProcess()->getCommandLine(),
             ]),
             'replication_sync' => implode(' ; ', array_filter([
-                $this->mysqlReplicationDryRunProcess($run, $plannedMetadata)->getCommandLine(),
+                $this->mysqlReplicationDryRunProcess($plannedMetadata)->getCommandLine(),
                 (bool) ($plannedMetadata['metadata']['replication']['apply_requested'] ?? false)
                     ? $this->mysqlReplicationApplyProcess()->getCommandLine()
                     : null,
@@ -772,6 +777,7 @@ final class MysqlDriver implements BackupDriver
 
     /**
      * @param  array<string, mixed>  $plannedMetadata
+     * @param  array<string, mixed>  $captureMetadata
      * @return array<string, mixed>
      */
     private function completedMetadata(CommandRun $run, array $plannedMetadata, int $exitCode, array $captureMetadata): array
@@ -825,21 +831,19 @@ final class MysqlDriver implements BackupDriver
             ];
         }
 
-        if (is_array($completed['metadata'] ?? null)) {
-            $postRestoreVerification = $this->postRestoreVerificationBuilder()->build(
-                run: $run,
-                exitCode: $exitCode,
-                metadata: $completed['metadata'],
-                restoreTarget: is_string($plannedMetadata['restore_target'] ?? null) ? $plannedMetadata['restore_target'] : null,
-            );
+        $postRestoreVerification = $this->postRestoreVerificationBuilder()->build(
+            run: $run,
+            exitCode: $exitCode,
+            metadata: $completed['metadata'],
+            restoreTarget: is_string($plannedMetadata['restore_target'] ?? null) ? $plannedMetadata['restore_target'] : null,
+        );
 
-            if (is_array($postRestoreVerification)) {
-                $restoreAudit = is_array($completed['metadata']['restore_audit'] ?? null)
-                    ? $completed['metadata']['restore_audit']
-                    : [];
-                $restoreAudit['post_restore_verification'] = $postRestoreVerification;
-                $completed['metadata']['restore_audit'] = $restoreAudit;
-            }
+        if (is_array($postRestoreVerification)) {
+            $restoreAudit = is_array($completed['metadata']['restore_audit'] ?? null)
+                ? $completed['metadata']['restore_audit']
+                : [];
+            $restoreAudit['post_restore_verification'] = $postRestoreVerification;
+            $completed['metadata']['restore_audit'] = $restoreAudit;
         }
 
         return $completed;
@@ -849,7 +853,7 @@ final class MysqlDriver implements BackupDriver
      * @param  array<string, mixed>  $plannedMetadata
      * @return array{output:string,exit_code:int,metadata:array<string,mixed>}
      */
-    private function executeReplicationSync(CommandRun $run, array $plannedMetadata): array
+    private function executeReplicationSync(array $plannedMetadata): array
     {
         $replication = is_array($plannedMetadata['metadata']['replication'] ?? null) ? $plannedMetadata['metadata']['replication'] : [];
         $artifactPath = (string) ($replication['artifact_path'] ?? '');
@@ -858,7 +862,7 @@ final class MysqlDriver implements BackupDriver
             throw new ConfigurationException('mysql replication requires a writable staging artifact path.');
         }
 
-        $dryRun = $this->executeSingleProcess($this->mysqlReplicationDryRunProcess($run, $plannedMetadata));
+        $dryRun = $this->executeSingleProcess($this->mysqlReplicationDryRunProcess($plannedMetadata));
 
         if ($dryRun['exit_code'] !== 0) {
             $analysis = $this->failureAnalysis(
@@ -1022,7 +1026,7 @@ final class MysqlDriver implements BackupDriver
     /**
      * @param  array<string, mixed>  $plannedMetadata
      */
-    private function mysqlReplicationDryRunProcess(CommandRun $run, array $plannedMetadata): Process
+    private function mysqlReplicationDryRunProcess(array $plannedMetadata): Process
     {
         $replication = is_array($plannedMetadata['metadata']['replication'] ?? null) ? $plannedMetadata['metadata']['replication'] : [];
         $artifactPath = (string) ($replication['artifact_path'] ?? '');
@@ -1115,7 +1119,7 @@ final class MysqlDriver implements BackupDriver
         try {
             $payload = json_decode($argument, true, flags: JSON_THROW_ON_ERROR);
         } catch (\JsonException $exception) {
-            throw new ConfigurationException('replication_sync argument must be valid JSON.', previous: $exception);
+            throw new ConfigurationException('replication_sync argument must be valid JSON.', $exception->getCode(), previous: $exception);
         }
 
         if (! is_array($payload)) {
@@ -1149,7 +1153,7 @@ final class MysqlDriver implements BackupDriver
 
         return [
             'path' => $path,
-            'size' => $size === false ? null : (int) $size,
+            'size' => $size === false ? null : $size,
             'sha1' => @sha1_file($path) ?: null,
             'line_count' => is_string($contents) ? substr_count($contents, "\n") + 1 : null,
             'statement_count' => is_string($contents) ? substr_count(strtoupper($contents), ';') : null,
@@ -1164,11 +1168,11 @@ final class MysqlDriver implements BackupDriver
         $realOutputDir = realpath($this->outputDir());
         $realTargetPath = realpath($resolvedPath);
 
-        if (! is_string($realOutputDir) || $realOutputDir === '') {
+        if ($realOutputDir === false) {
             throw new ConfigurationException('Unable to resolve the configured mysql output directory.');
         }
 
-        if (! is_string($realTargetPath) || $realTargetPath === '') {
+        if ($realTargetPath === false) {
             throw new ConfigurationException(
                 sprintf('Configured mysql restore target [%s] does not exist.', $resolvedPath),
             );
@@ -1226,10 +1230,10 @@ final class MysqlDriver implements BackupDriver
         return [
             'path' => $realTargetPath,
             'file_type' => 'file',
-            'device' => isset($stats['dev']) ? (int) $stats['dev'] : null,
-            'inode' => isset($stats['ino']) ? (int) $stats['ino'] : null,
-            'mtime' => isset($stats['mtime']) ? (int) $stats['mtime'] : null,
-            'size' => isset($stats['size']) ? (int) $stats['size'] : null,
+            'device' => (int) $stats['dev'],
+            'inode' => (int) $stats['ino'],
+            'mtime' => (int) $stats['mtime'],
+            'size' => (int) $stats['size'],
             'content_signature' => @sha1_file($realTargetPath) ?: null,
         ];
     }
@@ -1297,7 +1301,7 @@ final class MysqlDriver implements BackupDriver
         return resolve(CommandOutputStore::class);
     }
 
-    private function tapCapturedOutput(string $chunk): void
+    private function tapCapturedOutput(): void
     {
         // MySQL multi-stage operations do not use stream sessions; only heartbeat is needed.
         $this->activeRun?->recordHeartbeatIfDue();

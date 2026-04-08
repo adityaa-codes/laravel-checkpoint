@@ -15,6 +15,7 @@ use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Symfony\Component\Process\ExecutableFinder;
@@ -33,7 +34,8 @@ final readonly class OperationalReportBuilder
      */
     public function recentRuns(int $limit): array
     {
-        return CommandRun::query()
+        /** @var list<array<string, mixed>> $runs */
+        $runs = CommandRun::query()
             ->select([
                 'id',
                 'operation',
@@ -81,7 +83,10 @@ final readonly class OperationalReportBuilder
 
                 return $payload;
             })
+            ->values()
             ->all();
+
+        return $runs;
     }
 
     /**
@@ -165,6 +170,7 @@ final readonly class OperationalReportBuilder
         $latestFailed = BackupDrillRun::query()->where('overall_result', 'fail')->recent()->first();
         $counts = BackupDrillRun::query()
             ->where('executed_at', '>=', $windowStart)
+            ->toBase()
             ->selectRaw(
                 'COUNT(*) as total,
                  SUM(CASE WHEN overall_result = ? THEN 1 ELSE 0 END) as passing',
@@ -175,8 +181,8 @@ final readonly class OperationalReportBuilder
         return [
             'latest' => $latest instanceof BackupDrillRun ? $latest : null,
             'latest_failed' => $latestFailed instanceof BackupDrillRun ? $latestFailed : null,
-            'total' => (int) ($counts?->total ?? 0),
-            'passing' => (int) ($counts?->passing ?? 0),
+            'total' => $counts === null ? 0 : (int) $counts->total,
+            'passing' => $counts === null ? 0 : (int) $counts->passing,
         ];
     }
 
@@ -649,7 +655,7 @@ final readonly class OperationalReportBuilder
         $windowStart = now()->subDays($windowDays);
         $runs = BackupDrillRun::query()
             ->where('executed_at', '>=', $windowStart)
-            ->orderByDesc('executed_at')
+            ->latest('executed_at')
             ->orderByDesc('id')
             ->get(['id', 'run_uuid', 'overall_result', 'executed_at']);
 
@@ -668,7 +674,7 @@ final readonly class OperationalReportBuilder
             if ($index === 0) {
                 $latestResult = $result;
                 $latestRunUuid = $run->run_uuid;
-                $latestExecutedAt = $run->executed_at?->format('Y-m-d H:i:s');
+                $latestExecutedAt = $run->executed_at->format('Y-m-d H:i:s');
                 $streakType = $result;
             }
 
@@ -681,7 +687,7 @@ final readonly class OperationalReportBuilder
                 $recentOutcomes[] = [
                     'run_uuid' => $run->run_uuid,
                     'result' => $result,
-                    'executed_at' => $run->executed_at?->format('Y-m-d H:i:s'),
+                        'executed_at' => $run->executed_at->format('Y-m-d H:i:s'),
                 ];
             }
         }
@@ -907,13 +913,13 @@ final readonly class OperationalReportBuilder
         }
 
         foreach ($groups as &$group) {
-            $total = (int) $group['runs']['total'];
-            $failed = (int) $group['runs']['failed'];
-            $failed24h = (int) $group['runs']['failed_24h'];
-            $running = (int) $group['runs']['running'];
-            $pending = (int) $group['runs']['pending'];
+            $total = $group['runs']['total'];
+            $failed = $group['runs']['failed'];
+            $failed24h = $group['runs']['failed_24h'];
+            $running = $group['runs']['running'];
+            $pending = $group['runs']['pending'];
 
-            $group['failure_rate_percent'] = $total > 0 ? round(($failed / $total) * 100, 1) : 0.0;
+            $group['failure_rate_percent'] = round(($failed / $total) * 100, 1);
             $group['health_status'] = match (true) {
                 $failed24h > 0 => 'fail',
                 $failed > 0 || $running > 0 || $pending > 0 => 'warn',
@@ -1338,6 +1344,10 @@ final readonly class OperationalReportBuilder
     /**
      * @param  array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int}  $summary
      */
+    /**
+     * @param  array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int}  $summary
+     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
+     */
     private function backupDrillPassRateCheck(array $summary): array
     {
         $windowDays = $this->backupDrillWindowDays();
@@ -1401,7 +1411,7 @@ final readonly class OperationalReportBuilder
     private function backupDrillTrendCheck(int $windowDays): array
     {
         $trend = $this->drillTrendPayload($windowDays);
-        $status = match ((string) ($trend['status'] ?? 'insufficient_data')) {
+        $status = match ((string) Arr::get($trend, 'status', 'insufficient_data')) {
             'degrading', 'insufficient_data' => 'warn',
             default => 'pass',
         };
@@ -1410,7 +1420,7 @@ final readonly class OperationalReportBuilder
             'backup_drill.trend',
             'Backup drills: trend',
             $status,
-            (string) ($trend['label'] ?? 'No trend available'),
+            (string) Arr::get($trend, 'label', 'No trend available'),
             $trend,
         );
     }
@@ -1423,7 +1433,7 @@ final readonly class OperationalReportBuilder
     {
         $trend = $this->drillTrendPayload($windowDays);
         $playbook = $this->backupDrillRemediationPlaybook($summary, $windowDays, $trend);
-        $status = match ((string) ($playbook['severity'] ?? 'info')) {
+        $status = match ($playbook['severity']) {
             'critical' => 'warn',
             'warn' => 'warn',
             default => 'pass',
@@ -1433,7 +1443,7 @@ final readonly class OperationalReportBuilder
             'backup_drill.playbook',
             'Backup drills: remediation playbook',
             $status,
-            (string) ($playbook['title'] ?? 'No remediation playbook'),
+            $playbook['title'],
             $playbook,
         );
     }

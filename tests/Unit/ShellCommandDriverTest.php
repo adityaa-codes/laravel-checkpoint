@@ -126,7 +126,7 @@ it('aborts restore operations when the pre-restore snapshot fails', function ():
 it('blocks restore execution when confirmation is missing', function (): void {
     config()->set('checkpoint.restore.require_confirmation', true);
     config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
-    config()->set('checkpoint.restore.confirmation_token', null);
+    config()->set('checkpoint.restore.confirmation_token');
     config()->set('checkpoint.drivers.shell.pre_restore_snapshot', false);
     config()->set('checkpoint.drivers.shell.commands.logical_restore_file', 'printf restore');
 
@@ -295,5 +295,5 @@ it('externalizes shell command output to filesystem storage with an inline previ
         ->and($run->resolvedCommandOutput())->toBe(str_repeat('A', 120));
 
     Storage::disk('local')->assertExists('checkpoint/test-output/command-run-'.$run->getKey().'.log');
-    Event::assertDispatched(BackupCompleted::class, fn (BackupCompleted $event): bool => $event->output === (string) $run->command_output);
+    Event::assertDispatched(fn (\AdityaaCodes\LaravelCheckpoint\Events\BackupCompleted $event): bool => $event->output === (string) $run->command_output);
 });

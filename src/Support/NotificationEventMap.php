@@ -18,7 +18,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\QueueLagDetected;
 final class NotificationEventMap
 {
     /** @var array<class-string, string> */
-    private const CLASS_TO_KEY = [
+    private const array CLASS_TO_KEY = [
         BackupQueued::class => 'backup.queued',
         BackupStarted::class => 'backup.started',
         BackupCompleted::class => 'backup.completed',

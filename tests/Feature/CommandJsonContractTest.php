@@ -5,7 +5,7 @@ declare(strict_types=1);
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 
 it('keeps surface metadata authoritative over payload keys', function (): void {
-    $envelope = app(CommandJsonContract::class)->envelope('status', [
+    $envelope = resolve(CommandJsonContract::class)->envelope('status', [
         'version' => 99,
         'surface' => 'overridden',
         'mode' => 'summary',
@@ -19,7 +19,7 @@ it('keeps surface metadata authoritative over payload keys', function (): void {
 });
 
 it('tracks versions independently per command surface', function (): void {
-    $contract = app(CommandJsonContract::class);
+    $contract = resolve(CommandJsonContract::class);
 
     expect($contract->envelope('status', []))->toMatchArray([
         'version' => 1,

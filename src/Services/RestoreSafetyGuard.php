@@ -192,7 +192,7 @@ final readonly class RestoreSafetyGuard
         }
 
         try {
-            Carbon::parse($target);
+            \Illuminate\Support\Facades\Date::parse($target);
         } catch (\Throwable) {
             throw new ConfigurationException(
                 sprintf('pitr_restore target [%s] must be a valid datetime string.', $target),
@@ -203,6 +203,7 @@ final readonly class RestoreSafetyGuard
     }
 
     /**
+     * @param  array<string, mixed>  $context
      * @return array{
      *     required: bool,
      *     run_id: int|null,
@@ -294,6 +295,7 @@ final readonly class RestoreSafetyGuard
 
     /**
      * @param  \Illuminate\Database\Eloquent\Builder<CommandRun>  $query
+     * @param  array<string, mixed>  $context
      */
     private function matchingLogicalRestoreVerification(
         \Illuminate\Database\Eloquent\Builder $query,
@@ -323,6 +325,7 @@ final readonly class RestoreSafetyGuard
 
     /**
      * @param  \Illuminate\Database\Eloquent\Builder<CommandRun>  $query
+     * @param  array<string, mixed>  $context
      */
     private function matchingPgBackRestRestoreVerification(
         \Illuminate\Database\Eloquent\Builder $query,
@@ -341,8 +344,8 @@ final readonly class RestoreSafetyGuard
             $query->where('repository', (int) $context['repository']);
         }
 
-        if (is_string($context['stanza'] ?? null) && trim((string) $context['stanza']) !== '') {
-            $query->where('stanza', trim((string) $context['stanza']));
+        if (is_string($context['stanza'] ?? null) && trim($context['stanza']) !== '') {
+            $query->where('stanza', trim($context['stanza']));
         }
 
         /** @var \Illuminate\Support\Collection<int, CommandRun> $candidates */
@@ -355,6 +358,7 @@ final readonly class RestoreSafetyGuard
 
     /**
      * @param  \Illuminate\Database\Eloquent\Builder<CommandRun>  $query
+     * @param  array<string, mixed>  $context
      */
     private function matchingPitrRestoreVerification(
         \Illuminate\Database\Eloquent\Builder $query,
@@ -416,8 +420,8 @@ final readonly class RestoreSafetyGuard
     private function provenanceMatches(CommandRun $candidate, array $context): bool
     {
         $contextMetadata = is_array($context['metadata'] ?? null) ? $context['metadata'] : [];
-        $expectedDriver = is_string($contextMetadata['driver'] ?? null) ? trim((string) $contextMetadata['driver']) : '';
-        $expectedDatabase = is_string($contextMetadata['database'] ?? null) ? trim((string) $contextMetadata['database']) : '';
+        $expectedDriver = is_string($contextMetadata['driver'] ?? null) ? trim($contextMetadata['driver']) : '';
+        $expectedDatabase = is_string($contextMetadata['database'] ?? null) ? trim($contextMetadata['database']) : '';
 
         if ($expectedDriver !== '' && $candidate->resolvedDriverName() !== $expectedDriver) {
             return false;
@@ -426,7 +430,7 @@ final readonly class RestoreSafetyGuard
         if ($expectedDatabase !== '') {
             $candidateMetadata = is_array($candidate->metadata) ? $candidate->metadata : [];
             $candidateDatabase = is_string($candidateMetadata['database'] ?? null)
-                ? trim((string) $candidateMetadata['database'])
+                ? trim($candidateMetadata['database'])
                 : '';
 
             if ($candidateDatabase !== $expectedDatabase) {
@@ -542,7 +546,7 @@ final readonly class RestoreSafetyGuard
         $score = 0;
 
         foreach ($factors as $factor) {
-            if ($factor['contributes'] === true) {
+            if ($factor['contributes']) {
                 $score += $factor['weight'];
             }
         }
@@ -572,18 +576,18 @@ final readonly class RestoreSafetyGuard
      */
     private function assertBlastRadiusPolicy(array $blastRadius): void
     {
-        if (($blastRadius['enabled'] ?? false) !== true) {
+        if ($blastRadius['enabled'] !== true) {
             return;
         }
 
-        if (($blastRadius['status'] ?? 'pass') !== 'block') {
+        if ($blastRadius['status'] !== 'block') {
             return;
         }
 
         throw new ConfigurationException(sprintf(
             'Restore blast radius score [%d] exceeds block threshold [%d].',
-            (int) ($blastRadius['score'] ?? 0),
-            (int) ($blastRadius['block_score'] ?? 0),
+            $blastRadius['score'],
+            $blastRadius['block_score'],
         ));
     }
 

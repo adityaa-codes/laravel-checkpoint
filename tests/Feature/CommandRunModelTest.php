@@ -192,6 +192,7 @@ it('claims pending runs atomically and does not reopen terminal runs', function 
 
     expect($run->status)->toBe(CommandRunStatus::Running);
 
+    /** @var CommandRun $staleCopy */
     $staleCopy = CommandRun::query()->findOrFail($run->getKey());
 
     $run->markAsFailed(1, 'timed out');
@@ -246,6 +247,7 @@ it('allows only one pending execution claimant across stale copies', function ()
     $run = CommandRun::factory()->pending()->create([
         'orphan_recovery_claimed_at' => Date::now()->subMinute(),
     ]);
+    /** @var CommandRun $staleCopy */
     $staleCopy = CommandRun::query()->findOrFail($run->getKey());
 
     expect($run->claimPendingExecution())->toBeTrue()

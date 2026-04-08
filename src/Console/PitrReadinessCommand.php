@@ -27,8 +27,10 @@ final class PitrReadinessCommand extends Command
 
     public function handle(): int
     {
-        $format = (string) $this->option('format');
+        $format = $this->stringOption('format') ?? 'table';
         $agentMode = (bool) $this->option('agent');
+        $target = $this->argument('target');
+        $targetInput = is_string($target) ? $target : null;
 
         if (! $agentMode && ! in_array($format, ['table', 'json'], true)) {
             $this->error('The --format option must be table or json.');
@@ -38,10 +40,8 @@ final class PitrReadinessCommand extends Command
 
         try {
             $this->validator->validate();
-            $payload = $this->buildPitrReadinessReport->execute(
-                is_string($this->argument('target')) ? $this->argument('target') : null,
-            );
-            $exitCode = ($payload['readiness'] ?? 'not_ready') === 'ready' ? self::SUCCESS : self::FAILURE;
+            $payload = $this->buildPitrReadinessReport->execute($targetInput);
+            $exitCode = $payload['readiness'] === 'ready' ? self::SUCCESS : self::FAILURE;
         } catch (\Throwable $exception) {
             $payload = [
                 'generated_at' => now()->toIso8601String(),
@@ -65,15 +65,15 @@ final class PitrReadinessCommand extends Command
 
         if ($agentMode) {
             $this->line(json_encode($this->jsonContract->envelope('pitr_readiness', [
-                'result' => ($payload['readiness'] ?? 'not_ready') === 'ready' ? 'passed' : 'failed',
-                'code' => ($payload['readiness'] ?? 'not_ready') === 'ready'
+                'result' => $payload['readiness'] === 'ready' ? 'passed' : 'failed',
+                'code' => $payload['readiness'] === 'ready'
                     ? 'pitr.readiness.ready'
                     : 'pitr.readiness.not_ready',
                 'summary' => sprintf(
                     'PITR readiness: %s (%d pass, %d fail).',
-                    (string) ($payload['readiness'] ?? 'not_ready'),
-                    (int) ($payload['summary']['pass'] ?? 0),
-                    (int) ($payload['summary']['fail'] ?? 0),
+                    $payload['readiness'],
+                    $payload['summary']['pass'],
+                    $payload['summary']['fail'],
                 ),
                 'data' => [
                     ...$payload,
@@ -96,20 +96,20 @@ final class PitrReadinessCommand extends Command
 
         $this->table(['Field', 'Value'], [
             ['Driver', (string) $this->config->get('checkpoint.driver')],
-            ['Target', (string) ($payload['target'] ?? '-')],
-            ['Readiness', (string) ($payload['readiness'] ?? 'not_ready')],
-            ['Pass checks', (string) ($payload['summary']['pass'] ?? 0)],
-            ['Fail checks', (string) ($payload['summary']['fail'] ?? 0)],
+            ['Target', $payload['target'] ?? '-'],
+            ['Readiness', $payload['readiness']],
+            ['Pass checks', (string) $payload['summary']['pass']],
+            ['Fail checks', (string) $payload['summary']['fail']],
         ]);
 
-        $checks = is_array($payload['checks'] ?? null) ? $payload['checks'] : [];
+        $checks = $payload['checks'];
         $this->table(
             ['Check', 'Status', 'Message'],
             array_map(
                 static fn (array $check): array => [
-                    (string) ($check['code'] ?? ''),
-                    (string) ($check['status'] ?? ''),
-                    (string) ($check['message'] ?? ''),
+                    $check['code'],
+                    $check['status'],
+                    $check['message'],
                 ],
                 $checks,
             ),
@@ -154,5 +154,12 @@ final class PitrReadinessCommand extends Command
         }
 
         return array_values(array_unique($suggestions));
+    }
+
+    private function stringOption(string $key): ?string
+    {
+        $value = $this->option($key);
+
+        return is_string($value) ? $value : null;
     }
 }

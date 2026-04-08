@@ -28,7 +28,7 @@ final class StatusCommand extends Command
 
     public function handle(): int
     {
-        $format = (string) $this->option('format');
+        $format = $this->stringOption('format') ?? 'table';
         $agentMode = (bool) $this->option('agent');
         $summaryMode = (bool) $this->option('summary');
 
@@ -97,6 +97,13 @@ final class StatusCommand extends Command
         ], $runs));
 
         return self::SUCCESS;
+    }
+
+    private function stringOption(string $key): ?string
+    {
+        $value = $this->option($key);
+
+        return is_string($value) ? $value : null;
     }
 
     private function renderSummary(string $format, bool $agentMode): void
@@ -216,10 +223,12 @@ final class StatusCommand extends Command
                 }
 
                 foreach ($candidate as $suggestion) {
-                    if (! is_string($suggestion) || trim($suggestion) === '') {
+                    if (! is_string($suggestion)) {
                         continue;
                     }
-
+                    if (trim($suggestion) === '') {
+                        continue;
+                    }
                     $suggestions[] = trim($suggestion);
                 }
             }

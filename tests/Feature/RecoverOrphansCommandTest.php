@@ -178,7 +178,7 @@ it('releases orphan claims when redispatch throws so the run stays recoverable',
 
     app()->instance(Dispatcher::class, $dispatcher);
 
-    expect(fn () => app(RecoverOrphansCommand::class)->handle())
+    expect(fn () => resolve(RecoverOrphansCommand::class)->handle())
         ->toThrow(\RuntimeException::class, 'queue offline');
 
     $run->refresh();
@@ -244,7 +244,7 @@ it('suppresses duplicate redispatch when a nested recover command sees the same 
         ->andReturnUsing(function (ProcessCommandRunJob $job) use (&$redispatched): ProcessCommandRunJob {
             if (! $redispatched) {
                 $redispatched = true;
-                app(RecoverOrphansCommand::class)->handle();
+                resolve(RecoverOrphansCommand::class)->handle();
             }
 
             return $job;

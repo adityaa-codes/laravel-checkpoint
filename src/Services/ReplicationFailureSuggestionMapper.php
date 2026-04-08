@@ -210,7 +210,7 @@ final readonly class ReplicationFailureSuggestionMapper
         ];
 
         foreach ($context as $key => $value) {
-            if (! is_string($key) || $key === '') {
+            if ($key === '') {
                 continue;
             }
 
@@ -227,7 +227,7 @@ final readonly class ReplicationFailureSuggestionMapper
 
     private function redactedExcerpt(string $output): string
     {
-        $lines = array_values(array_filter(array_map('trim', preg_split('/\R/', $output) ?: []), static fn (string $line): bool => $line !== ''));
+        $lines = array_values(array_filter(array_map(trim(...), preg_split('/\R/', $output) ?: []), static fn (string $line): bool => $line !== ''));
         $excerpt = implode(' | ', array_slice($lines, max(0, count($lines) - 3)));
 
         return $this->secretRedactor->redact($excerpt);

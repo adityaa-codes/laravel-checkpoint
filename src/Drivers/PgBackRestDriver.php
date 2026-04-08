@@ -220,7 +220,7 @@ final class PgBackRestDriver implements BackupDriver
             $options[] = '--stanza='.$stanza;
         }
 
-        if ((is_int($repo) || (is_string($repo) && $repo !== '')) && $operation !== 'pgbackrest_check') {
+        if ($operation !== 'pgbackrest_check') {
             $options[] = '--repo='.$repo;
         }
 
@@ -277,8 +277,8 @@ final class PgBackRestDriver implements BackupDriver
             $tls = is_array($repository['tls'] ?? null) ? $repository['tls'] : [];
             $options[] = sprintf('--repo%d-storage-verify-tls=%s', $repoId, ($tls['verify'] ?? true) ? 'y' : 'n');
 
-            if (is_string($tls['ca_file'] ?? null) && trim((string) $tls['ca_file']) !== '') {
-                $options[] = sprintf('--repo%d-storage-ca-file=%s', $repoId, (string) $tls['ca_file']);
+            if (is_string($tls['ca_file'] ?? null) && trim($tls['ca_file']) !== '') {
+                $options[] = sprintf('--repo%d-storage-ca-file=%s', $repoId, $tls['ca_file']);
             }
         }
 
@@ -518,6 +518,7 @@ final class PgBackRestDriver implements BackupDriver
     /**
      * @param  array<string, mixed>  $plannedMetadata
      * @param  array<string, mixed>|null  $summary
+     * @param  array<string, mixed>  $captureMetadata
      * @return array<string, mixed>
      */
     private function completedMetadata(
@@ -573,21 +574,19 @@ final class PgBackRestDriver implements BackupDriver
             $completed['last_known_good_at'] = now();
         }
 
-        if (is_array($completed['metadata'] ?? null)) {
-            $postRestoreVerification = $this->postRestoreVerificationBuilder()->build(
-                run: $run,
-                exitCode: $exitCode,
-                metadata: $completed['metadata'],
-                restoreTarget: is_string($plannedMetadata['restore_target'] ?? null) ? $plannedMetadata['restore_target'] : null,
-            );
+        $postRestoreVerification = $this->postRestoreVerificationBuilder()->build(
+            run: $run,
+            exitCode: $exitCode,
+            metadata: $completed['metadata'],
+            restoreTarget: is_string($plannedMetadata['restore_target'] ?? null) ? $plannedMetadata['restore_target'] : null,
+        );
 
-            if (is_array($postRestoreVerification)) {
-                $restoreAudit = is_array($completed['metadata']['restore_audit'] ?? null)
-                    ? $completed['metadata']['restore_audit']
-                    : [];
-                $restoreAudit['post_restore_verification'] = $postRestoreVerification;
-                $completed['metadata']['restore_audit'] = $restoreAudit;
-            }
+        if (is_array($postRestoreVerification)) {
+            $restoreAudit = is_array($completed['metadata']['restore_audit'] ?? null)
+                ? $completed['metadata']['restore_audit']
+                : [];
+            $restoreAudit['post_restore_verification'] = $postRestoreVerification;
+            $completed['metadata']['restore_audit'] = $restoreAudit;
         }
 
         return $completed;
@@ -655,19 +654,19 @@ final class PgBackRestDriver implements BackupDriver
         if ($repository['type'] === 's3') {
             $s3 = is_array($repository['s3'] ?? null) ? $repository['s3'] : [];
 
-            if (is_string($s3['key'] ?? null) && trim((string) $s3['key']) !== '') {
-                $lines[] = sprintf('repo%d-s3-key=%s', $repoId, (string) $s3['key']);
+            if (is_string($s3['key'] ?? null) && trim($s3['key']) !== '') {
+                $lines[] = sprintf('repo%d-s3-key=%s', $repoId, $s3['key']);
             }
 
-            if (is_string($s3['secret'] ?? null) && trim((string) $s3['secret']) !== '') {
-                $lines[] = sprintf('repo%d-s3-key-secret=%s', $repoId, (string) $s3['secret']);
+            if (is_string($s3['secret'] ?? null) && trim($s3['secret']) !== '') {
+                $lines[] = sprintf('repo%d-s3-key-secret=%s', $repoId, $s3['secret']);
             }
         }
 
         $encryption = is_array($repository['encryption'] ?? null) ? $repository['encryption'] : [];
 
-        if (($encryption['enabled'] ?? false) === true && is_string($encryption['passphrase'] ?? null) && trim((string) $encryption['passphrase']) !== '') {
-            $lines[] = sprintf('repo%d-cipher-pass=%s', $repoId, (string) $encryption['passphrase']);
+        if (($encryption['enabled'] ?? false) === true && is_string($encryption['passphrase'] ?? null) && trim($encryption['passphrase']) !== '') {
+            $lines[] = sprintf('repo%d-cipher-pass=%s', $repoId, $encryption['passphrase']);
         }
 
         if ($lines === []) {
@@ -791,6 +790,9 @@ final class PgBackRestDriver implements BackupDriver
         return resolve(PostRestoreVerificationBuilder::class);
     }
 
+    /**
+     * @param  array{disk:string,path:string,temp_path:string}|null  $outputSession
+     */
     private function tapCapturedOutput(CommandRun $run, ?array $outputSession, string $chunk): void
     {
         $this->outputStore()->appendCaptureChunk($outputSession, $chunk);

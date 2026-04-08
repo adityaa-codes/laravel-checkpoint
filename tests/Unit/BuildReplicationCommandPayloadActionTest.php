@@ -8,7 +8,7 @@ use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
 it('builds dry-run payloads with configured critical table fallback', function (): void {
     config()->set('checkpoint.replication.critical_tables', ['accounts', 'invoices', 'accounts']);
 
-    $payload = app(BuildReplicationCommandPayloadAction::class)->execute(
+    $payload = resolve(BuildReplicationCommandPayloadAction::class)->execute(
         source: 'profile:pg-source',
         destination: 'profile:pg-destination',
         apply: false,
@@ -25,7 +25,7 @@ it('builds dry-run payloads with configured critical table fallback', function (
 });
 
 it('normalizes explicit critical table options and apply mode flags', function (): void {
-    $payload = app(BuildReplicationCommandPayloadAction::class)->execute(
+    $payload = resolve(BuildReplicationCommandPayloadAction::class)->execute(
         source: ' profile:pg-source ',
         destination: ' profile:pg-destination ',
         apply: true,
@@ -43,14 +43,14 @@ it('normalizes explicit critical table options and apply mode flags', function (
 });
 
 it('requires non-empty source and destination endpoints', function (): void {
-    expect(fn (): array => app(BuildReplicationCommandPayloadAction::class)->execute(
+    expect(fn (): array => resolve(BuildReplicationCommandPayloadAction::class)->execute(
         source: '   ',
         destination: 'profile:pg-destination',
         apply: false,
         forceOverwrite: false,
     ))->toThrow(InvalidArgumentException::class, 'Replication source endpoint is required.');
 
-    expect(fn (): array => app(BuildReplicationCommandPayloadAction::class)->execute(
+    expect(fn (): array => resolve(BuildReplicationCommandPayloadAction::class)->execute(
         source: 'profile:pg-source',
         destination: '   ',
         apply: false,
@@ -61,7 +61,7 @@ it('requires non-empty source and destination endpoints', function (): void {
 it('rejects invalid critical table configuration types', function (): void {
     config()->set('checkpoint.replication.critical_tables', 'users');
 
-    expect(fn (): array => app(BuildReplicationCommandPayloadAction::class)->execute(
+    expect(fn (): array => resolve(BuildReplicationCommandPayloadAction::class)->execute(
         source: 'profile:pg-source',
         destination: 'profile:pg-destination',
         apply: false,

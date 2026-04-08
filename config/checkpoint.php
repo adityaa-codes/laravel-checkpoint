@@ -12,6 +12,7 @@ use Illuminate\Foundation\Auth\User;
 $env = static fn (string $key, mixed $default = null): mixed => env($key, $default);
 $appEnv = (string) (getenv('APP_ENV') ?: $env('APP_ENV', 'production'));
 $nonLocalPosture = ! in_array($appEnv, ['local', 'testing'], true);
+$queueTimeoutDefault = (int) $env('DB_OPS_QUEUE_TIMEOUT', 3600);
 
 return [
     'user_model' => $env('DB_OPS_USER_MODEL', User::class),
@@ -23,7 +24,7 @@ return [
         'name' => $env('DB_OPS_QUEUE_NAME', 'db-ops'),
         'max_attempts' => (int) $env('DB_OPS_QUEUE_MAX_ATTEMPTS', 1),
         'retry_after' => (int) $env('DB_OPS_QUEUE_RETRY_AFTER', 3660),
-        'timeout' => (int) $env('DB_OPS_QUEUE_TIMEOUT', 3600),
+        'timeout' => $queueTimeoutDefault,
         'orphan_threshold' => (int) $env('DB_OPS_QUEUE_ORPHAN_THRESHOLD', 10),
         'orphan_claim_timeout' => (int) $env('DB_OPS_QUEUE_ORPHAN_CLAIM_TIMEOUT', (int) ceil(((int) $env('DB_OPS_QUEUE_RETRY_AFTER', 3660)) / 60)),
         'orphan_batch_size' => (int) $env('DB_OPS_QUEUE_ORPHAN_BATCH_SIZE', 100),
@@ -36,11 +37,11 @@ return [
 
     'restore' => [
         'allowed_environments' => array_values(array_filter(array_map(
-            static fn (string $value): string => trim($value),
+            trim(...),
             explode(',', (string) $env('DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS', 'local,testing,staging')),
         ), static fn (string $value): bool => $value !== '')),
         'allowed_databases' => array_values(array_filter(array_map(
-            static fn (string $value): string => trim($value),
+            trim(...),
             explode(',', (string) $env('DB_OPS_RESTORE_ALLOWED_DATABASES', '')),
         ), static fn (string $value): bool => $value !== '')),
         'require_confirmation' => (bool) $env('DB_OPS_RESTORE_REQUIRE_CONFIRMATION', true),
@@ -69,17 +70,17 @@ return [
         'enforce_change_window' => (bool) $env('DB_OPS_REPLICATION_ENFORCE_CHANGE_WINDOW', false),
         'change_window_timezone' => (string) $env('DB_OPS_REPLICATION_CHANGE_WINDOW_TIMEZONE', 'UTC'),
         'change_window_days' => array_values(array_filter(array_map(
-            static fn (string $value): string => trim($value),
+            trim(...),
             explode(',', (string) $env('DB_OPS_REPLICATION_CHANGE_WINDOW_DAYS', 'mon,tue,wed,thu,fri,sat,sun')),
         ), static fn (string $value): bool => $value !== '')),
         'change_window_start' => (string) $env('DB_OPS_REPLICATION_CHANGE_WINDOW_START', '00:00'),
         'change_window_end' => (string) $env('DB_OPS_REPLICATION_CHANGE_WINDOW_END', '23:59'),
         'allowlisted_destinations' => array_values(array_filter(array_map(
-            static fn (string $value): string => trim($value),
+            trim(...),
             explode(',', (string) $env('DB_OPS_REPLICATION_ALLOWLISTED_DESTINATIONS', '')),
         ), static fn (string $value): bool => $value !== '')),
         'critical_tables' => array_values(array_filter(array_map(
-            static fn (string $value): string => trim($value),
+            trim(...),
             explode(',', (string) $env('DB_OPS_REPLICATION_CRITICAL_TABLES', '')),
         ), static fn (string $value): bool => $value !== '')),
         'profiles' => [],
@@ -129,26 +130,26 @@ return [
     'notifications' => [
         'enabled' => (bool) $env('DB_OPS_NOTIFICATIONS_ENABLED', false),
         'events' => array_values(array_filter(array_map(
-            static fn (string $value): string => trim($value),
+            trim(...),
             explode(',', (string) $env('DB_OPS_NOTIFICATIONS_EVENTS', '')),
         ), static fn (string $value): bool => $value !== '')),
         'routing' => [
             'info' => array_values(array_filter(array_map(
-                static fn (string $value): string => trim($value),
+                trim(...),
                 explode(',', (string) $env('DB_OPS_NOTIFICATIONS_ROUTE_INFO', 'log')),
             ), static fn (string $value): bool => $value !== '')),
             'warning' => array_values(array_filter(array_map(
-                static fn (string $value): string => trim($value),
+                trim(...),
                 explode(',', (string) $env('DB_OPS_NOTIFICATIONS_ROUTE_WARNING', 'log,mail')),
             ), static fn (string $value): bool => $value !== '')),
             'critical' => array_values(array_filter(array_map(
-                static fn (string $value): string => trim($value),
+                trim(...),
                 explode(',', (string) $env('DB_OPS_NOTIFICATIONS_ROUTE_CRITICAL', 'log,mail,webhook')),
             ), static fn (string $value): bool => $value !== '')),
         ],
         'mail' => [
             'to' => array_values(array_filter(array_map(
-                static fn (string $value): string => trim($value),
+                trim(...),
                 explode(',', (string) $env('DB_OPS_NOTIFICATIONS_MAIL_TO', '')),
             ), static fn (string $value): bool => $value !== '')),
         ],
@@ -184,7 +185,7 @@ return [
             'backup_dir' => $env('DB_OPS_BACKUP_DIR', storage_path('db-backups')),
             'backup_prefix' => $env('DB_OPS_BACKUP_PREFIX', 'backup'),
             'pre_restore_snapshot' => (bool) $env('DB_OPS_PRE_RESTORE_SNAPSHOT', true),
-            'command_timeout_seconds' => (int) $env('DB_OPS_CMD_TIMEOUT', 7200),
+            'command_timeout_seconds' => (int) $env('DB_OPS_CMD_TIMEOUT', $queueTimeoutDefault),
         ],
         'pgbackrest' => [
             'class' => PgBackRestDriver::class,
@@ -220,7 +221,7 @@ return [
             'backup_standby' => (bool) $env('DB_OPS_PGBACKREST_BACKUP_STANDBY', false),
             'checksum_page' => (bool) $env('DB_OPS_PGBACKREST_CHECKSUM_PAGE', false),
             'delta' => (bool) $env('DB_OPS_PGBACKREST_DELTA', false),
-            'command_timeout_seconds' => (int) $env('DB_OPS_PGBACKREST_TIMEOUT', 7200),
+            'command_timeout_seconds' => (int) $env('DB_OPS_PGBACKREST_TIMEOUT', $queueTimeoutDefault),
             'extra_args' => [
                 'backup' => [],
                 'restore' => [],
@@ -241,7 +242,7 @@ return [
             'file_extension' => $env('DB_OPS_PGDUMP_FILE_EXTENSION', 'dump'),
             'clean' => (bool) $env('DB_OPS_PGDUMP_RESTORE_CLEAN', true),
             'create' => (bool) $env('DB_OPS_PGDUMP_RESTORE_CREATE', false),
-            'command_timeout_seconds' => (int) $env('DB_OPS_PGDUMP_TIMEOUT', 7200),
+            'command_timeout_seconds' => (int) $env('DB_OPS_PGDUMP_TIMEOUT', $queueTimeoutDefault),
             'extra_args' => [
                 'backup' => [],
                 'restore' => [],
@@ -259,10 +260,10 @@ return [
             'output_prefix' => $env('DB_OPS_MYSQL_OUTPUT_PREFIX', 'mysql-export'),
             'file_extension' => $env('DB_OPS_MYSQL_FILE_EXTENSION', 'sql'),
             'drill_command' => $env('DB_OPS_MYSQL_DRILL_COMMAND', ''),
-            'command_timeout_seconds' => (int) $env('DB_OPS_MYSQL_TIMEOUT', 7200),
+            'command_timeout_seconds' => (int) $env('DB_OPS_MYSQL_TIMEOUT', $queueTimeoutDefault),
             'pitr' => [
                 'binlog_files' => array_values(array_filter(array_map(
-                    static fn (string $value): string => trim($value),
+                    trim(...),
                     explode(',', (string) $env('DB_OPS_MYSQL_PITR_BINLOG_FILES', '')),
                 ), static fn (string $value): bool => $value !== '')),
             ],

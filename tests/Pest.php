@@ -21,9 +21,6 @@ function checkpoint_fixture_path(string $fixture): string
     return __DIR__.'/Fixtures/'.$fixture;
 }
 
-/**
- * @return mixed
- */
 function checkpoint_normalize_fixture_value(mixed $value): mixed
 {
     if (! is_array($value)) {
@@ -43,6 +40,9 @@ function checkpoint_normalize_fixture_value(mixed $value): mixed
     return $value;
 }
 
+/**
+ * @param  array<string, mixed>  $payload
+ */
 function checkpoint_assert_matches_fixture(array $payload, string $fixture): void
 {
     $expected = json_decode((string) file_get_contents(checkpoint_fixture_path($fixture)), true, 512, JSON_THROW_ON_ERROR);

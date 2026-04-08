@@ -7,6 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Actions;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 
 final readonly class EvaluateRetentionPolicyAction
@@ -40,10 +41,9 @@ final readonly class EvaluateRetentionPolicyAction
         $runs = CommandRun::query()
             ->select(['id', 'operation', 'status', 'created_at', 'metadata'])
             ->whereNotNull('created_at')
-            ->where(function ($query) use ($now): void {
+            ->where(function (\Illuminate\Contracts\Database\Query\Builder $query) use ($now): void {
                 $this->applyEligibleRetentionPredicate($query, $now);
-            })
-            ->orderBy('created_at')
+            })->oldest()
             ->orderBy('id')
             ->limit(max(1, $limit * 3))
             ->get();
@@ -53,7 +53,7 @@ final readonly class EvaluateRetentionPolicyAction
         $byPolicy = [];
 
         foreach ($runs as $run) {
-            if (! $run instanceof CommandRun || ! $run->created_at instanceof Carbon) {
+            if (! $run->created_at instanceof Carbon) {
                 continue;
             }
 
@@ -69,9 +69,9 @@ final readonly class EvaluateRetentionPolicyAction
             $sample[] = [
                 'id' => (int) $run->getKey(),
                 'operation' => (string) $run->operation,
-                'status' => (string) $run->status->value,
+                'status' => $run->status->value,
                 'created_at' => $run->created_at->format('Y-m-d H:i:s'),
-                'age_days' => $ageDays,
+                'age_days' => (int) $ageDays,
                 'policy' => $decision['policy'],
                 'keep_days' => $decision['keep_days'],
                 'reason' => $decision['reason'],
@@ -119,10 +119,13 @@ final readonly class EvaluateRetentionPolicyAction
         return $decision['keep_days'];
     }
 
-    public function applyEligibleRetentionPredicate(\Illuminate\Database\Eloquent\Builder $query, Carbon $now): void
+    /**
+     * @param  Builder<CommandRun>  $query
+     */
+    public function applyEligibleRetentionPredicate(Builder $query, Carbon $now): void
     {
-        $query->where(function (\Illuminate\Database\Eloquent\Builder $where) use ($now): void {
-            $where->where(function (\Illuminate\Database\Eloquent\Builder $failed) use ($now): void {
+        $query->where(function (Builder $where) use ($now): void {
+            $where->where(function (Builder $failed) use ($now): void {
                 $failed
                     ->where('status', CommandRunStatus::Failed)
                     ->where('created_at', '<=', $now->copy()->subDays($this->failedDays()));
@@ -131,7 +134,7 @@ final readonly class EvaluateRetentionPolicyAction
             $candidateNonFailedDays = $this->candidateNonFailedDays();
             $defaultCutoff = $now->copy()->subDays($candidateNonFailedDays);
 
-            $where->orWhere(function (\Illuminate\Database\Eloquent\Builder $others) use ($defaultCutoff): void {
+            $where->orWhere(function (Builder $others) use ($defaultCutoff): void {
                 $others
                     ->whereIn('status', [
                         CommandRunStatus::Succeeded,
@@ -209,12 +212,16 @@ final readonly class EvaluateRetentionPolicyAction
             }
 
             $normalizedTier = strtolower(trim($tier));
-
-            if ($normalizedTier === '' || ! preg_match('/^[a-z][a-z0-9_-]*$/', $normalizedTier)) {
+            if ($normalizedTier === '') {
                 continue;
             }
-
-            if (! is_int($days) || $days < 1) {
+            if (! preg_match('/^[a-z][a-z0-9_-]*$/', $normalizedTier)) {
+                continue;
+            }
+            if (! is_int($days)) {
+                continue;
+            }
+            if ($days < 1) {
                 continue;
             }
 

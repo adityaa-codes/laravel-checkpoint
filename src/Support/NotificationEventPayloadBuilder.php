@@ -124,7 +124,7 @@ final class NotificationEventPayloadBuilder
             'id' => $run->id,
             'run_uuid' => $run->run_uuid,
             'overall_result' => $run->overall_result,
-            'executed_at' => $run->executed_at?->toIso8601String(),
+            'executed_at' => $run->executed_at->toIso8601String(),
             'marker_result' => $run->marker_result,
             'rto_result' => $run->rto_result,
             'rpo_result' => $run->rpo_result,

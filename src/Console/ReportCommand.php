@@ -30,7 +30,7 @@ final class ReportCommand extends Command
     public function handle(): int
     {
         $agentMode = (bool) $this->option('agent');
-        $format = (string) $this->option('format');
+        $format = $this->stringOption('format') ?? 'table';
         $outputMode = $agentMode ? 'agent' : $this->normalizedOutputMode($format);
 
         if ($this->enhancedInteractiveMode() && $outputMode === 'table') {
@@ -415,7 +415,7 @@ final class ReportCommand extends Command
             ['Drill remediation playbook', (string) ($reportPayload['summary']['backup_drill_remediation_playbook']['title'] ?? '-')],
             ['Latest restore run', (string) ($reportPayload['summary']['latest_restore_run']['label'] ?? '-')],
             ['Latest restore failure', (string) ($reportPayload['summary']['latest_restore_failure']['label'] ?? '-')],
-            ['Latest restore post-verification', (string) (($reportPayload['summary']['latest_restore_run']['post_restore_verification']['aggregate_result'] ?? '-') ?? '-')],
+            ['Latest restore post-verification', (string) ($reportPayload['summary']['latest_restore_run']['post_restore_verification']['aggregate_result'] ?? '-')],
             ['Verification runs', (string) ($reportPayload['verification']['total_runs'] ?? 0)],
             ['Verification failed', (string) ($reportPayload['verification']['failed_runs'] ?? 0)],
             ['Verification health', (string) ($reportPayload['verification']['health_status'] ?? 'warn')],
@@ -429,7 +429,7 @@ final class ReportCommand extends Command
                     (string) ($run['id'] ?? '-'),
                     (string) ($run['operation'] ?? '-'),
                     (string) ($run['status'] ?? '-'),
-                    isset($run['exit_code']) && $run['exit_code'] !== null ? (string) $run['exit_code'] : '-',
+                    $run['exit_code'] !== null ? (string) $run['exit_code'] : '-',
                     (string) ($run['backup'] ?? '-'),
                     (string) ($run['verification_state'] ?? '-'),
                     (string) ($run['started_at'] ?? '-'),
@@ -441,12 +441,19 @@ final class ReportCommand extends Command
 
         $this->table(['Check', 'Status', 'Notes'], array_map(
             static fn (array $check): array => [
-                (string) ($check['check'] ?? ''),
-                (string) ($check['status'] ?? ''),
-                (string) ($check['notes'] ?? ''),
+                $check['check'],
+                $check['status'],
+                $check['notes'],
             ],
             $reportPayload['health']['checks'],
         ));
+    }
+
+    private function stringOption(string $key): ?string
+    {
+        $value = $this->option($key);
+
+        return is_string($value) ? $value : null;
     }
 
     private function enhancedInteractiveMode(): bool

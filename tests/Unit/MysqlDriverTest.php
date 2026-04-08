@@ -560,7 +560,7 @@ SH
 });
 
 it('maps checksum mismatch signatures in replication failure analysis', function (): void {
-    $analysis = app(ReplicationFailureSuggestionMapper::class)->map(
+    $analysis = resolve(ReplicationFailureSuggestionMapper::class)->map(
         'apply_import',
         'replication sanity check failed: checksum mismatch for staged artifact',
         ['destination' => 'mysql://root:secret@db.internal'],
@@ -570,6 +570,9 @@ it('maps checksum mismatch signatures in replication failure analysis', function
         ->and($analysis['diagnostics']['destination'] ?? null)->toBe('mysql://[REDACTED]@db.internal');
 });
 
+/**
+ * @param  array<string, mixed>  $plannedMetadata
+ */
 function buildMysqlProcess(MysqlDriver $driver, CommandRun $run, array $plannedMetadata = []): Process
 {
     $method = new ReflectionMethod($driver, 'buildProcess');
