@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
+use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillCompleted;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use Illuminate\Console\Command;
@@ -14,10 +15,13 @@ use Illuminate\Validation\ValidationException;
 use Throwable;
 
 use function Laravel\Prompts\intro;
+use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 
 final class RecordDrillRunCommand extends Command
 {
+    use UsesLaravelPrompts;
+
     protected $signature = 'db-ops:record-drill
         {--run-uuid= : Unique drill run UUID}
         {--marker-uuid= : Marker UUID}
@@ -36,6 +40,8 @@ final class RecordDrillRunCommand extends Command
 
     protected $description = 'Record a backup drill result.';
 
+    protected $aliases = ['db-ops:admin:record-drill'];
+
     public function __construct(
         private readonly Factory $validator,
         private readonly DateFactory $date,
@@ -49,6 +55,9 @@ final class RecordDrillRunCommand extends Command
         try {
             if ($this->enhancedInteractiveMode()) {
                 intro('Record Backup Drill Run');
+                note('What: persist externally executed drill outcomes into checkpoint history.');
+                note('When: drills are executed outside queue automation.');
+                note('Next: run db-ops:check:report to verify drill evidence is reflected.');
             }
 
             $attributes = $this->validatedAttributes();
@@ -61,16 +70,16 @@ final class RecordDrillRunCommand extends Command
             if ($this->enhancedInteractiveMode()) {
                 outro($message);
             } else {
-                $this->info($message);
+                $this->promptInfo($message);
             }
 
             return self::SUCCESS;
         } catch (ValidationException $exception) {
-            $this->error($exception->validator->errors()->first());
+            $this->promptError($exception->validator->errors()->first());
 
             return self::FAILURE;
         } catch (Throwable $exception) {
-            $this->error($exception->getMessage());
+            $this->promptError($exception->getMessage());
 
             return self::FAILURE;
         }
@@ -137,8 +146,4 @@ final class RecordDrillRunCommand extends Command
         return (string) $message;
     }
 
-    private function enhancedInteractiveMode(): bool
-    {
-        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
-    }
 }

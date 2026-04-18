@@ -255,13 +255,37 @@ final readonly class OperationalReportBuilder
             $this->selectedPgBackRestTargetRow(),
             $this->selectedPgBackRestTlsRow(),
             $this->selectedPgBackRestEncryptionRow(),
-            $this->configuredBinaryRow('pg_dump', 'pg_dump', false),
             $this->configuredBinaryRow(
-                'pgBackRest',
-                (string) $this->config->get('checkpoint.drivers.pgbackrest.binary', 'pgbackrest'),
-                (string) $this->config->get('checkpoint.driver', '') === 'pgbackrest',
+                code: 'binary.pg_dump',
+                label: 'Binary: pg_dump',
+                binary: 'pg_dump',
+                configPath: 'system.path',
+                envKey: 'PATH',
+                driver: (string) $this->config->get('checkpoint.driver', 'shell'),
+                required: false,
+                includeRemediation: false,
             ),
-            $this->configuredBinaryRow('gzip', 'gzip', false),
+            $this->configuredBinaryRow(
+                code: 'binary.pgbackrest',
+                label: 'Binary: pgBackRest',
+                binary: (string) $this->config->get('checkpoint.drivers.pgbackrest.binary', 'pgbackrest'),
+                configPath: 'checkpoint.drivers.pgbackrest.binary',
+                envKey: 'DB_OPS_PGBACKREST_BINARY',
+                driver: (string) $this->config->get('checkpoint.driver', 'shell'),
+                required: (string) $this->config->get('checkpoint.driver', '') === 'pgbackrest',
+                includeRemediation: false,
+            ),
+            $this->configuredBinaryRow(
+                code: 'binary.gzip',
+                label: 'Binary: gzip',
+                binary: 'gzip',
+                configPath: 'system.path',
+                envKey: 'PATH',
+                driver: (string) $this->config->get('checkpoint.driver', 'shell'),
+                required: false,
+                includeRemediation: false,
+            ),
+            ...$this->activeDriverBinaryChecks(),
             $this->tableRow('command_runs', (new CommandRun)->getTable()),
             $this->tableRow('backup_drill_runs', (new BackupDrillRun)->getTable()),
             $this->tableRow('verification_runs', (new VerificationRun)->getTable()),
@@ -1546,41 +1570,163 @@ final readonly class OperationalReportBuilder
     }
 
     /**
+     * @return list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>
+     */
+    private function activeDriverBinaryChecks(): array
+    {
+        $driver = (string) $this->config->get('checkpoint.driver', 'shell');
+
+        return match ($driver) {
+            'postgres' => [
+                $this->configuredBinaryRow(
+                    code: 'driver.binary.postgres.pgbackrest',
+                    label: 'Driver binary: pgbackrest',
+                    binary: (string) $this->config->get('checkpoint.drivers.pgbackrest.binary', 'pgbackrest'),
+                    configPath: 'checkpoint.drivers.pgbackrest.binary',
+                    envKey: 'DB_OPS_PGBACKREST_BINARY',
+                    driver: $driver,
+                ),
+                $this->configuredBinaryRow(
+                    code: 'driver.binary.postgres.pgdump',
+                    label: 'Driver binary: pg_dump',
+                    binary: (string) $this->config->get('checkpoint.drivers.pgdump.dump_binary', 'pg_dump'),
+                    configPath: 'checkpoint.drivers.pgdump.dump_binary',
+                    envKey: 'DB_OPS_PGDUMP_BINARY',
+                    driver: $driver,
+                ),
+                $this->configuredBinaryRow(
+                    code: 'driver.binary.postgres.pgrestore',
+                    label: 'Driver binary: pg_restore',
+                    binary: (string) $this->config->get('checkpoint.drivers.pgdump.restore_binary', 'pg_restore'),
+                    configPath: 'checkpoint.drivers.pgdump.restore_binary',
+                    envKey: 'DB_OPS_PGRESTORE_BINARY',
+                    driver: $driver,
+                ),
+            ],
+            'pgbackrest' => [
+                $this->configuredBinaryRow(
+                    code: 'driver.binary.pgbackrest',
+                    label: 'Driver binary: pgbackrest',
+                    binary: (string) $this->config->get('checkpoint.drivers.pgbackrest.binary', 'pgbackrest'),
+                    configPath: 'checkpoint.drivers.pgbackrest.binary',
+                    envKey: 'DB_OPS_PGBACKREST_BINARY',
+                    driver: $driver,
+                ),
+            ],
+            'pgdump' => [
+                $this->configuredBinaryRow(
+                    code: 'driver.binary.pgdump.dump',
+                    label: 'Driver binary: pg_dump',
+                    binary: (string) $this->config->get('checkpoint.drivers.pgdump.dump_binary', 'pg_dump'),
+                    configPath: 'checkpoint.drivers.pgdump.dump_binary',
+                    envKey: 'DB_OPS_PGDUMP_BINARY',
+                    driver: $driver,
+                ),
+                $this->configuredBinaryRow(
+                    code: 'driver.binary.pgdump.restore',
+                    label: 'Driver binary: pg_restore',
+                    binary: (string) $this->config->get('checkpoint.drivers.pgdump.restore_binary', 'pg_restore'),
+                    configPath: 'checkpoint.drivers.pgdump.restore_binary',
+                    envKey: 'DB_OPS_PGRESTORE_BINARY',
+                    driver: $driver,
+                ),
+            ],
+            'mysql' => [
+                $this->configuredBinaryRow(
+                    code: 'driver.binary.mysql.dump',
+                    label: 'Driver binary: mysqldump',
+                    binary: (string) $this->config->get('checkpoint.drivers.mysql.dump_binary', 'mysqldump'),
+                    configPath: 'checkpoint.drivers.mysql.dump_binary',
+                    envKey: 'DB_OPS_MYSQL_DUMP_BINARY',
+                    driver: $driver,
+                ),
+                $this->configuredBinaryRow(
+                    code: 'driver.binary.mysql.mysql',
+                    label: 'Driver binary: mysql',
+                    binary: (string) $this->config->get('checkpoint.drivers.mysql.mysql_binary', 'mysql'),
+                    configPath: 'checkpoint.drivers.mysql.mysql_binary',
+                    envKey: 'DB_OPS_MYSQL_BINARY',
+                    driver: $driver,
+                ),
+                $this->configuredBinaryRow(
+                    code: 'driver.binary.mysql.binlog',
+                    label: 'Driver binary: mysqlbinlog',
+                    binary: (string) $this->config->get('checkpoint.drivers.mysql.mysqlbinlog_binary', 'mysqlbinlog'),
+                    configPath: 'checkpoint.drivers.mysql.mysqlbinlog_binary',
+                    envKey: 'DB_OPS_MYSQL_BINLOG_BINARY',
+                    driver: $driver,
+                ),
+            ],
+            default => [],
+        };
+    }
+
+    /**
      * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
      */
-    private function configuredBinaryRow(string $label, string $binary, bool $required): array
-    {
+    private function configuredBinaryRow(
+        string $code,
+        string $label,
+        string $binary,
+        string $configPath,
+        string $envKey,
+        string $driver,
+        bool $required = true,
+        bool $includeRemediation = true,
+    ): array {
         $trimmedBinary = trim($binary);
+        $remediationCommands = $includeRemediation
+            ? [
+                sprintf('command -v %s', $trimmedBinary !== '' ? $trimmedBinary : '<binary>'),
+                sprintf('export %s=/absolute/path/to/%s', $envKey, $trimmedBinary !== '' ? basename($trimmedBinary) : '<binary>'),
+                'php artisan db-ops:doctor --format=json',
+            ]
+            : [];
 
-        if ($trimmedBinary === '') {
-            return $this->checkRow('binary.'.strtolower($label), 'Binary: '.$label, $required ? 'fail' : 'warn', 'Binary is empty', [
-                'binary' => $trimmedBinary,
-                'required' => $required,
-                'found' => false,
-                'path' => null,
-                'reason' => 'empty',
-            ]);
-        }
-
-        $path = (new ExecutableFinder)->find($trimmedBinary);
-
-        if ($path === null) {
-            return $this->checkRow('binary.'.strtolower($label), 'Binary: '.$label, $required ? 'fail' : 'warn', sprintf('%s not found on PATH', $trimmedBinary), [
-                'binary' => $trimmedBinary,
-                'required' => $required,
-                'found' => false,
-                'path' => null,
-                'reason' => 'not_found',
-            ]);
-        }
-
-        return $this->checkRow('binary.'.strtolower($label), 'Binary: '.$label, 'pass', $path, [
+        $data = [
             'binary' => $trimmedBinary,
             'required' => $required,
-            'found' => true,
-            'path' => $path,
-            'reason' => 'found',
-        ]);
+            'found' => false,
+            'path' => null,
+        ];
+
+        if ($includeRemediation) {
+            $data['driver'] = $driver;
+            $data['config_path'] = $configPath;
+            $data['env_key'] = $envKey;
+        }
+
+        if ($trimmedBinary === '') {
+            $data['reason'] = 'empty';
+            if ($includeRemediation) {
+                $data['remediation_commands'] = $remediationCommands;
+            }
+
+            return $this->checkRow($code, $label, $required ? 'fail' : 'warn', 'Binary is empty', $data);
+        }
+
+        $path = is_executable($trimmedBinary)
+            ? $trimmedBinary
+            : (new ExecutableFinder)->find($trimmedBinary);
+
+        if ($path === null) {
+            $data['reason'] = 'not_found';
+            if ($includeRemediation) {
+                $data['remediation_commands'] = $remediationCommands;
+            }
+
+            return $this->checkRow($code, $label, $required ? 'fail' : 'warn', sprintf('%s not found on PATH', $trimmedBinary), $data);
+        }
+
+        $data['found'] = true;
+        $data['path'] = $path;
+        $data['reason'] = null;
+
+        if ($includeRemediation) {
+            $data['remediation_commands'] = $remediationCommands;
+        }
+
+        return $this->checkRow($code, $label, 'pass', $path, $data);
     }
 
     /**

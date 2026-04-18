@@ -5,16 +5,22 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\BuildPitrReadinessReportAction;
+use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
+use function Laravel\Prompts\note;
 
 final class PitrReadinessCommand extends Command
 {
+    use UsesLaravelPrompts;
+
     protected $signature = 'db-ops:pitr-readiness {target? : PITR target datetime (defaults to now).} {--format=table : Output format: table or json.} {--agent : Emit compact AI-agent friendly JSON output.}';
 
     protected $description = 'Evaluate PITR readiness for a target timestamp.';
+
+    protected $aliases = ['db-ops:check:pitr'];
 
     public function __construct(
         private readonly ConfigValidator $validator,
@@ -27,13 +33,19 @@ final class PitrReadinessCommand extends Command
 
     public function handle(): int
     {
+        if ($this->enhancedInteractiveMode() && ! (bool) $this->option('agent')) {
+            note('What: evaluate whether PITR prerequisites are currently satisfied.');
+            note('When: before relying on point-in-time recovery in real incidents.');
+            note('Next: remediate failing checks, then rerun db-ops:check:pitr.');
+        }
+
         $format = $this->stringOption('format') ?? 'table';
         $agentMode = (bool) $this->option('agent');
         $target = $this->argument('target');
         $targetInput = is_string($target) ? $target : null;
 
         if (! $agentMode && ! in_array($format, ['table', 'json'], true)) {
-            $this->error('The --format option must be table or json.');
+            $this->promptError('The --format option must be table or json.');
 
             return self::FAILURE;
         }
@@ -94,7 +106,7 @@ final class PitrReadinessCommand extends Command
             return $exitCode;
         }
 
-        $this->table(['Field', 'Value'], [
+        $this->promptTable(['Field', 'Value'], [
             ['Driver', (string) $this->config->get('checkpoint.driver')],
             ['Target', $payload['target'] ?? '-'],
             ['Readiness', $payload['readiness']],
@@ -103,7 +115,7 @@ final class PitrReadinessCommand extends Command
         ]);
 
         $checks = $payload['checks'];
-        $this->table(
+        $this->promptTable(
             ['Check', 'Status', 'Message'],
             array_map(
                 static fn (array $check): array => [

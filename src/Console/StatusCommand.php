@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
+use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
@@ -11,12 +12,17 @@ use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
 
 use function Laravel\Prompts\intro;
+use function Laravel\Prompts\note;
 
 final class StatusCommand extends Command
 {
+    use UsesLaravelPrompts;
+
     protected $signature = 'db-ops:status {--limit=10} {--summary : Show an operator-facing summary instead of recent runs.} {--format=table : Output format: table or json.} {--agent : Emit compact AI-agent friendly JSON output.}';
 
     protected $description = 'Show recent checkpoint command runs.';
+
+    protected $aliases = ['db-ops:do:status'];
 
     public function __construct(
         private readonly OperationalReportBuilder $reportBuilder,
@@ -34,10 +40,13 @@ final class StatusCommand extends Command
 
         if ($this->enhancedInteractiveMode() && ! $agentMode && $format === 'table') {
             intro($summaryMode ? 'Checkpoint Status Summary' : 'Checkpoint Status: Recent Runs');
+            note('What: operational view of recent runs and summary signals.');
+            note('When: immediately after queueing, or during incident triage.');
+            note('Next: run db-ops:check:doctor for deeper health diagnostics.');
         }
 
         if (! $agentMode && ! in_array($format, ['table', 'json'], true)) {
-            $this->error('The --format option must be table or json.');
+            $this->promptError('The --format option must be table or json.');
 
             return self::FAILURE;
         }
@@ -82,7 +91,7 @@ final class StatusCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->table([
+        $this->promptTable([
             'ID', 'Operation', 'Status', 'Exit', 'Backup', 'Verify', 'Last Good', 'Started', 'Finished',
         ], array_map(fn (array $run): array => [
             (string) $run['id'],
@@ -143,7 +152,7 @@ final class StatusCommand extends Command
 
         $windowDays = (int) ($summary['backup_drill_pass_rate']['window_days'] ?? 30);
 
-        $this->table(['Signal', 'Value'], [
+        $this->promptTable(['Signal', 'Value'], [
             ['Pending runs', (string) $summary['pending_runs']],
             ['Running runs', (string) $summary['running_runs']],
             ['Failed runs (24h)', (string) $summary['failed_runs_24h']],
@@ -276,11 +285,6 @@ final class StatusCommand extends Command
         $suggestions = array_values(array_unique($suggestions));
 
         return array_slice($suggestions, 0, 5);
-    }
-
-    private function enhancedInteractiveMode(): bool
-    {
-        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
     }
 
     /**

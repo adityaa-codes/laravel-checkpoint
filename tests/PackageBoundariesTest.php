@@ -8,6 +8,7 @@ use AdityaaCodes\LaravelCheckpoint\Console\EnqueueBackupDrillCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueLogicalBackupCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\HealthCheckCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecordDrillRunCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecoverOrphansCommand;
@@ -51,6 +52,7 @@ it('keeps package internals final by default with explicit seams', function (): 
         EnqueueCommand::class,
         EnqueueLogicalBackupCommand::class,
         HealthCheckCommand::class,
+        InstallCommand::class,
         PruneCommand::class,
         RecordDrillRunCommand::class,
         RecoverOrphansCommand::class,

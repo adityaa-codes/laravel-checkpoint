@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
+use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
@@ -11,12 +12,17 @@ use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
 
 use function Laravel\Prompts\intro;
+use function Laravel\Prompts\note;
 
 final class ReportCommand extends Command
 {
+    use UsesLaravelPrompts;
+
     protected $signature = 'db-ops:report {--limit=10 : Number of recent runs to include.} {--format=table : Output format: table or json.} {--agent : Emit compact AI-agent friendly JSON output.}';
 
     protected $description = 'Show checkpoint operational report (table by default, json/agent supported).';
+
+    protected $aliases = ['db-ops:check:report'];
 
     public function __construct(
         private readonly ConfigValidator $validator,
@@ -35,10 +41,13 @@ final class ReportCommand extends Command
 
         if ($this->enhancedInteractiveMode() && $outputMode === 'table') {
             intro('Checkpoint Operational Report');
+            note('What: consolidated operational report across runs, health, and verification.');
+            note('When: handoff reporting, audits, and broader operational review.');
+            note('Next: use db-ops:check:doctor to troubleshoot failing checks from this report.');
         }
 
         if ($outputMode === '') {
-            $this->error('The --format option must be table or json.');
+            $this->promptError('The --format option must be table or json.');
 
             return self::FAILURE;
         }
@@ -399,7 +408,7 @@ final class ReportCommand extends Command
      */
     private function renderTableReport(array $reportPayload, int $requestedLimit, int $effectiveLimit): void
     {
-        $this->table(['Field', 'Value'], [
+        $this->promptTable(['Field', 'Value'], [
             ['Driver', (string) $this->config->get('checkpoint.driver')],
             ['Limit requested', (string) $requestedLimit],
             ['Limit applied', (string) $effectiveLimit],
@@ -424,7 +433,7 @@ final class ReportCommand extends Command
         $recentRuns = $reportPayload['recent_runs'];
 
         if ($recentRuns !== []) {
-            $this->table(['ID', 'Operation', 'Status', 'Exit', 'Backup', 'Verify', 'Started', 'Finished'], array_map(
+            $this->promptTable(['ID', 'Operation', 'Status', 'Exit', 'Backup', 'Verify', 'Started', 'Finished'], array_map(
                 static fn (array $run): array => [
                     (string) ($run['id'] ?? '-'),
                     (string) ($run['operation'] ?? '-'),
@@ -439,7 +448,7 @@ final class ReportCommand extends Command
             ));
         }
 
-        $this->table(['Check', 'Status', 'Notes'], array_map(
+        $this->promptTable(['Check', 'Status', 'Notes'], array_map(
             static fn (array $check): array => [
                 $check['check'],
                 $check['status'],
@@ -454,11 +463,6 @@ final class ReportCommand extends Command
         $value = $this->option($key);
 
         return is_string($value) ? $value : null;
-    }
-
-    private function enhancedInteractiveMode(): bool
-    {
-        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
     }
 
     /**

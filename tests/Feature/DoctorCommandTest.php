@@ -43,6 +43,12 @@ it('renders the doctor health table', function (): void {
         ->assertSuccessful();
 });
 
+it('supports the check doctor command alias', function (): void {
+    checkpoint_artisan('db-ops:check:doctor')
+        ->expectsOutputToContain('Config: driver')
+        ->assertSuccessful();
+});
+
 it('throws a configuration exception for invalid config in non-production', function (): void {
     config()->set('checkpoint.table_prefix', '');
 
@@ -139,13 +145,22 @@ it('surfaces post-restore verification health posture in machine-readable doctor
         ))->toBeTrue();
 });
 
-it('shows the configured pgbackrest binary when it is missing from path', function (): void {
+it('fails when active driver binary is missing and includes remediation commands', function (): void {
     config()->set('checkpoint.driver', 'pgbackrest');
     config()->set('checkpoint.drivers.pgbackrest.binary', 'missing-pgbackrest-binary');
 
-    checkpoint_artisan('db-ops:doctor')
-        ->expectsOutputToContain('Binary: pgBackRest')
-        ->assertSuccessful();
+    $exitCode = Artisan::call('db-ops:doctor', ['--format' => 'json']);
+    $report = json_decode(Artisan::output(), true);
+
+    expect($exitCode)->toBe(1)
+        ->and($report)->toBeArray()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['code'] === 'driver.binary.pgbackrest'
+                && $check['status'] === 'fail'
+                && ($check['data']['binary'] ?? null) === 'missing-pgbackrest-binary'
+                && is_array($check['data']['remediation_commands'] ?? null)
+                && in_array('command -v missing-pgbackrest-binary', $check['data']['remediation_commands'], true),
+        ))->toBeTrue();
 });
 
 it('shows selected remote repo hardening details without secrets', function (): void {

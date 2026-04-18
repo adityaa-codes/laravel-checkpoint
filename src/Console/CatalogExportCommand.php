@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\BuildBackupCatalogExportAction;
+use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
+use function Laravel\Prompts\note;
 
 final class CatalogExportCommand extends Command
 {
+    use UsesLaravelPrompts;
+
     protected $signature = 'db-ops:catalog-export
         {--format=json : Output format: json or csv.}
         {--driver= : Filter by driver name. Use "none" for null values.}
@@ -22,6 +26,8 @@ final class CatalogExportCommand extends Command
         {--limit=100 : Number of catalog rows to export.}';
 
     protected $description = 'Export backup catalog snapshots in machine-friendly JSON or CSV formats.';
+
+    protected $aliases = ['db-ops:admin:catalog-export'];
 
     public function __construct(
         private readonly ConfigValidator $validator,
@@ -34,10 +40,16 @@ final class CatalogExportCommand extends Command
 
     public function handle(): int
     {
+        if ($this->enhancedInteractiveMode()) {
+            note('What: export catalog rows for audits, tooling, and external analysis.');
+            note('When: compliance reporting and integration pipelines.');
+            note('Next: feed exported data into your downstream governance/reporting systems.');
+        }
+
         $format = $this->stringOption('format') ?? 'json';
 
         if (! in_array($format, ['json', 'csv'], true)) {
-            $this->error('The --format option must be json or csv.');
+            $this->promptError('The --format option must be json or csv.');
 
             return self::FAILURE;
         }
@@ -66,7 +78,7 @@ final class CatalogExportCommand extends Command
                     ],
                 ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
             } else {
-                $this->error($exception->getMessage());
+                $this->promptError($exception->getMessage());
             }
 
             return self::FAILURE;
@@ -76,13 +88,13 @@ final class CatalogExportCommand extends Command
         $windowHours = $this->windowHours();
 
         if ($repositoryFilter === null && $this->option('repository') !== null) {
-            $this->error('The --repository option must be an integer or "none".');
+            $this->promptError('The --repository option must be an integer or "none".');
 
             return self::FAILURE;
         }
 
         if ($windowHours === null && $this->option('window') !== null) {
-            $this->error('The --window option must be a positive integer.');
+            $this->promptError('The --window option must be a positive integer.');
 
             return self::FAILURE;
         }

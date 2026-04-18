@@ -5,12 +5,33 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
+use AdityaaCodes\LaravelCheckpoint\Console\AdminCatalogExportCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\AdminPruneCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\AdminRecoverOrphansCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\CatalogExportCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\CheckHealthCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\CheckDoctorCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\CheckPitrCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\CheckReportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoBackupCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoBackupDiffCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoBackupFullCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoBackupIncrCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoBackupLogicalCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoDrillCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoInstallCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoReplicateCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoRestoreFileCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoRestoreLatestCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoRestorePitrCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoStatusCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueBackupDrillCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueLogicalBackupCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\HealthCheckCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\AdminRetentionCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PitrReadinessCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecordDrillRunCommand;
@@ -21,6 +42,12 @@ use AdityaaCodes\LaravelCheckpoint\Console\ReportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\StatusCommand;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Contracts\ReplicationEndpointParser;
+use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
@@ -44,9 +71,22 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
 
         $this->app->bind(function ($app): BackupDriver {
             $driver = (string) $app['config']->get('checkpoint.driver', 'shell');
-            $class = $app['config']->get("checkpoint.drivers.{$driver}.class");
+            $class = $app['config']->get("checkpoint.drivers.{$driver}.class")
+                ?? $this->defaultDriverClass($driver);
 
-            return $app->make((string) $class);
+            if (! is_string($class) || $class === '') {
+                throw new ConfigurationException(sprintf('Driver [%s] is not configured.', $driver));
+            }
+
+            $resolved = $app->make($class);
+
+            if (! $resolved instanceof BackupDriver) {
+                throw new ConfigurationException(
+                    sprintf('Configured driver [%s] must implement [%s].', $class, BackupDriver::class),
+                );
+            }
+
+            return $resolved;
         });
 
         $this->app->bind(
@@ -77,15 +117,36 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             ->hasMigration('create_checkpoint_verification_runs_table')
             ->hasMigration('add_reporting_indexes_to_checkpoint_tables')
             ->hasCommand(DoctorCommand::class)
+            ->hasCommand(CheckDoctorCommand::class)
+            ->hasCommand(CheckReportCommand::class)
             ->hasCommand(EnqueueCommand::class)
             ->hasCommand(HealthCheckCommand::class)
+            ->hasCommand(InstallCommand::class)
+            ->hasCommand(DoInstallCommand::class)
+            ->hasCommand(DoBackupCommand::class)
+            ->hasCommand(DoStatusCommand::class)
+            ->hasCommand(DoBackupLogicalCommand::class)
+            ->hasCommand(DoBackupFullCommand::class)
+            ->hasCommand(DoBackupDiffCommand::class)
+            ->hasCommand(DoBackupIncrCommand::class)
+            ->hasCommand(DoRestoreLatestCommand::class)
+            ->hasCommand(DoRestoreFileCommand::class)
+            ->hasCommand(DoRestorePitrCommand::class)
+            ->hasCommand(DoReplicateCommand::class)
+            ->hasCommand(DoDrillCommand::class)
             ->hasCommand(PruneCommand::class)
+            ->hasCommand(AdminPruneCommand::class)
             ->hasCommand(RecoverOrphansCommand::class)
+            ->hasCommand(AdminRecoverOrphansCommand::class)
             ->hasCommand(ReportCommand::class)
             ->hasCommand(CatalogExportCommand::class)
+            ->hasCommand(AdminCatalogExportCommand::class)
             ->hasCommand(PitrReadinessCommand::class)
+            ->hasCommand(CheckPitrCommand::class)
             ->hasCommand(RetentionPolicyCommand::class)
+            ->hasCommand(AdminRetentionCommand::class)
             ->hasCommand(StatusCommand::class)
+            ->hasCommand(CheckHealthCommand::class)
             ->hasCommand(RecordDrillRunCommand::class)
             ->hasCommand(EnqueueBackupDrillCommand::class)
             ->hasCommand(EnqueueLogicalBackupCommand::class)
@@ -149,5 +210,17 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
         if ((bool) config('checkpoint.schedule.on_one_server', true)) {
             $event->onOneServer();
         }
+    }
+
+    private function defaultDriverClass(string $driver): ?string
+    {
+        return match ($driver) {
+            'shell' => ShellCommandDriver::class,
+            'postgres' => PostgresDriver::class,
+            'pgbackrest' => PgBackRestDriver::class,
+            'pgdump' => PgDumpDriver::class,
+            'mysql' => MysqlDriver::class,
+            default => null,
+        };
     }
 }

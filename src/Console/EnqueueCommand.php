@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
+use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
 use Illuminate\Console\Command;
 use Throwable;
@@ -12,12 +13,18 @@ use Throwable;
 use function Laravel\Prompts\intro;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
+use function Laravel\Prompts\select;
+use function Laravel\Prompts\text;
 
 final class EnqueueCommand extends Command
 {
+    use UsesLaravelPrompts;
+
     protected $signature = 'db-ops:enqueue {operation?} {--argument=}';
 
     protected $description = 'Queue a checkpoint command run for any supported operation.';
+
+    protected $aliases = ['db-ops:do:enqueue'];
 
     public function handle(
         EnqueueCommandRunAction $enqueueCommandRun,
@@ -27,6 +34,9 @@ final class EnqueueCommand extends Command
             if ($this->enhancedInteractiveMode()) {
                 intro('Checkpoint Operation Queue');
                 note('Choose an operation, then optionally provide its argument.');
+                note('What: enqueue any supported operation (backup/restore/PITR/replication).');
+                note('When: advanced or recovery workflows beyond standard backup.');
+                note('Next: run db-ops:do:status to monitor progress and result.');
             }
 
             $operation = $this->resolveOperation($catalog);
@@ -39,12 +49,12 @@ final class EnqueueCommand extends Command
             if ($this->enhancedInteractiveMode()) {
                 outro($message);
             } else {
-                $this->info($message);
+                $this->promptInfo($message);
             }
 
             return self::SUCCESS;
         } catch (Throwable $exception) {
-            $this->error($exception->getMessage());
+            $this->promptError($exception->getMessage());
 
             return self::FAILURE;
         }
@@ -60,11 +70,22 @@ final class EnqueueCommand extends Command
 
         $choices = array_keys($catalog->all());
 
+        if (app()->runningUnitTests()) {
+            /** @var string $selected */
+            $selected = $this->choice(
+                'Which operation would you like to queue?',
+                $choices,
+                default: 0,
+            );
+
+            return $selected;
+        }
+
         /** @var string $selected */
-        $selected = $this->choice(
-            'Which operation would you like to queue?',
-            $choices,
-            default: 0,
+        $selected = (string) select(
+            label: 'Which operation would you like to queue?',
+            options: $choices,
+            default: $choices[0] ?? '',
         );
 
         return $selected;
@@ -85,7 +106,9 @@ final class EnqueueCommand extends Command
         }
 
         /** @var string $value */
-        $value = $this->ask('Enter the argument for the selected operation');
+        $value = app()->runningUnitTests()
+            ? (string) $this->ask('Enter the argument for the selected operation')
+            : (string) text(label: 'Enter the argument for the selected operation', required: true);
 
         return $value;
     }
@@ -129,8 +152,4 @@ final class EnqueueCommand extends Command
         };
     }
 
-    private function enhancedInteractiveMode(): bool
-    {
-        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
-    }
 }

@@ -4,23 +4,32 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
+use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Console\Command;
 
 use function Laravel\Prompts\intro;
+use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 
 final class PruneCommand extends Command
 {
+    use UsesLaravelPrompts;
+
     protected $signature = 'db-ops:prune';
 
     protected $description = 'Prune old checkpoint runs and backup drill records.';
+
+    protected $aliases = ['db-ops:admin:prune'];
 
     public function handle(): int
     {
         if ($this->enhancedInteractiveMode()) {
             intro('Prune Checkpoint Records');
+            note('What: remove aged operational rows according to prune model rules.');
+            note('When: periodic maintenance to keep operational tables lean.');
+            note('Next: run db-ops:check:report to confirm retained history looks healthy.');
         }
 
         $commandRunCount = (new CommandRun)->pruneAll();
@@ -31,7 +40,7 @@ final class PruneCommand extends Command
         if ($this->enhancedInteractiveMode()) {
             outro($message);
         } else {
-            $this->info($message);
+            $this->promptInfo($message);
         }
 
         return self::SUCCESS;
@@ -55,8 +64,4 @@ final class PruneCommand extends Command
         return (string) $message;
     }
 
-    private function enhancedInteractiveMode(): bool
-    {
-        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
-    }
 }

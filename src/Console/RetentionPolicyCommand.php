@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EvaluateRetentionPolicyAction;
+use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
+use function Laravel\Prompts\note;
 
 final class RetentionPolicyCommand extends Command
 {
+    use UsesLaravelPrompts;
+
     protected $signature = 'db-ops:retention-policy
         {--format=table : Output format: table or json.}
         {--limit=100 : Maximum number of candidate rows to evaluate.}
@@ -20,6 +24,8 @@ final class RetentionPolicyCommand extends Command
         {--apply : Apply retention decisions immediately.}';
 
     protected $description = 'Evaluate and optionally apply policy-based retention for checkpoint command runs.';
+
+    protected $aliases = ['db-ops:admin:retention'];
 
     public function __construct(
         private readonly ConfigValidator $validator,
@@ -32,10 +38,16 @@ final class RetentionPolicyCommand extends Command
 
     public function handle(): int
     {
+        if ($this->enhancedInteractiveMode()) {
+            note('What: preview/apply policy-based retention windows per run category.');
+            note('When: controlled cleanup with visibility before deletion.');
+            note('Next: run db-ops:check:report to review post-retention health.');
+        }
+
         $format = $this->stringOption('format') ?? 'table';
 
         if (! in_array($format, ['table', 'json'], true)) {
-            $this->error('The --format option must be table or json.');
+            $this->promptError('The --format option must be table or json.');
 
             return self::FAILURE;
         }
@@ -44,7 +56,7 @@ final class RetentionPolicyCommand extends Command
         $apply = (bool) $this->option('apply');
 
         if ($dryRun && $apply) {
-            $this->error('Use either --dry-run or --apply, not both.');
+            $this->promptError('Use either --dry-run or --apply, not both.');
 
             return self::FAILURE;
         }
@@ -74,7 +86,7 @@ final class RetentionPolicyCommand extends Command
                     ],
                 ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
             } else {
-                $this->error($exception->getMessage());
+                $this->promptError($exception->getMessage());
             }
 
             return self::FAILURE;
@@ -109,7 +121,7 @@ final class RetentionPolicyCommand extends Command
             return self::SUCCESS;
         }
 
-        $this->table(['Field', 'Value'], [
+        $this->promptTable(['Field', 'Value'], [
             ['Driver', (string) $payload['driver']],
             ['Mode', (string) $payload['mode']],
             ['Retention enabled', ((bool) $payload['retention_enabled']) ? 'yes' : 'no'],
@@ -131,23 +143,24 @@ final class RetentionPolicyCommand extends Command
             ];
         }
 
-        $this->table(['Policy', 'Label', 'Keep days', 'Count'], $policyRows);
+        $this->promptTable(['Policy', 'Label', 'Keep days', 'Count'], $policyRows);
 
         $sample = $payload['sample'];
-        $this->table(
+        $sampleRows = array_values(array_map(
+            static fn (array $row): array => [
+                (string) ($row['id'] ?? ''),
+                (string) ($row['operation'] ?? ''),
+                (string) ($row['status'] ?? ''),
+                (string) ($row['age_days'] ?? ''),
+                (string) ($row['policy'] ?? ''),
+                (string) ($row['keep_days'] ?? ''),
+                (string) ($row['reason'] ?? ''),
+            ],
+            $sample,
+        ));
+        $this->promptTable(
             ['ID', 'Operation', 'Status', 'Age (days)', 'Policy', 'Keep days', 'Reason'],
-            array_map(
-                static fn (array $row): array => [
-                    (string) ($row['id'] ?? ''),
-                    (string) ($row['operation'] ?? ''),
-                    (string) ($row['status'] ?? ''),
-                    (string) ($row['age_days'] ?? ''),
-                    (string) ($row['policy'] ?? ''),
-                    (string) ($row['keep_days'] ?? ''),
-                    (string) ($row['reason'] ?? ''),
-                ],
-                $sample,
-            ),
+            $sampleRows,
         );
 
         return self::SUCCESS;

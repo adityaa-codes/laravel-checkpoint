@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
+use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
@@ -11,12 +12,17 @@ use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
 
 use function Laravel\Prompts\intro;
+use function Laravel\Prompts\note;
 
 final class DoctorCommand extends Command
 {
+    use UsesLaravelPrompts;
+
     protected $signature = 'db-ops:doctor {--format=table} {--agent : Emit compact AI-agent friendly JSON output.}';
 
     protected $description = 'Show checkpoint package health checks.';
+
+    protected $aliases = ['db-ops:check:doctor'];
 
     public function __construct(
         private readonly ConfigValidator $validator,
@@ -35,11 +41,15 @@ final class DoctorCommand extends Command
 
         if ($this->enhancedInteractiveMode() && $outputMode === 'table') {
             intro('Checkpoint Doctor: Health Checks');
+            note('What: validate config posture, binaries, storage, queue, and safety signals.');
+            note('When: during setup, after config edits, or while debugging failures.');
+            note('Next: if healthy, continue with db-ops:do:backup and db-ops:do:status.');
         }
 
         try {
             $this->validator->validate();
             $checks = $this->reportBuilder->healthChecks();
+            $exitCode = $this->hasActiveDriverBinaryFailure($checks) ? self::FAILURE : self::SUCCESS;
         } catch (\Throwable $exception) {
             $checks = [[
                 'code' => 'config.validation',
@@ -63,7 +73,7 @@ final class DoctorCommand extends Command
                 return self::FAILURE;
             }
 
-            $this->table(['Check', 'Status', 'Notes'], array_map(
+            $this->promptTable(['Check', 'Status', 'Notes'], array_map(
                 fn (array $check): array => [$check['check'], $this->statusWord($check['status']), $check['notes']],
                 $checks,
             ));
@@ -74,21 +84,21 @@ final class DoctorCommand extends Command
         if ($outputMode === 'json') {
             $this->line($this->jsonReport($checks));
 
-            return self::SUCCESS;
+            return $exitCode;
         }
 
         if ($outputMode === 'agent') {
             $this->line($this->agentReport($checks));
 
-            return self::SUCCESS;
+            return $exitCode;
         }
 
-        $this->table(['Check', 'Status', 'Notes'], array_map(
+        $this->promptTable(['Check', 'Status', 'Notes'], array_map(
             fn (array $check): array => [$check['check'], $this->statusWord($check['status']), $check['notes']],
             $checks,
         ));
 
-        return self::SUCCESS;
+        return $exitCode;
     }
 
     private function statusWord(string $level): string
@@ -224,6 +234,18 @@ final class DoctorCommand extends Command
 
                 continue;
             }
+
+            $commands = str_starts_with($code, 'driver.binary.')
+                ? ($check['data']['remediation_commands'] ?? null)
+                : null;
+
+            if (is_array($commands)) {
+                foreach ($commands as $command) {
+                    if (is_string($command) && trim($command) !== '') {
+                        $suggestions[] = 'Run '.trim($command).'.';
+                    }
+                }
+            }
         }
 
         $suggestions = array_values(array_unique($suggestions));
@@ -231,9 +253,24 @@ final class DoctorCommand extends Command
         return array_slice($suggestions, 0, 5);
     }
 
-    private function enhancedInteractiveMode(): bool
+    /**
+     * @param  list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>  $checks
+     */
+    private function hasActiveDriverBinaryFailure(array $checks): bool
     {
-        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
+        foreach ($checks as $check) {
+            if ((string) $check['status'] !== 'fail') {
+                continue;
+            }
+
+            $code = (string) $check['code'];
+
+            if (str_starts_with($code, 'driver.binary.')) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

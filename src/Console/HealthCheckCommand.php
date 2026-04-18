@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
+use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Console\Command;
@@ -12,13 +13,18 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Log\LogManager;
 
 use function Laravel\Prompts\intro;
+use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 
 final class HealthCheckCommand extends Command
 {
+    use UsesLaravelPrompts;
+
     protected $signature = 'db-ops:health-check';
 
     protected $description = 'Mark timed-out running command runs as failed.';
+
+    protected $aliases = ['db-ops:check:health'];
 
     public function __construct(
         private readonly Repository $config,
@@ -32,6 +38,9 @@ final class HealthCheckCommand extends Command
     {
         if ($this->enhancedInteractiveMode()) {
             intro('Health Check: Running Command Timeout Sweep');
+            note('What: detect and fail stale running runs based on heartbeat/timeout.');
+            note('When: scheduled maintenance or investigating stuck running jobs.');
+            note('Next: run db-ops:admin:recover-orphans if jobs were marked stale.');
         }
 
         $timeoutSeconds = max(1, (int) $this->config->get('checkpoint.queue.timeout', 3600));
@@ -66,7 +75,7 @@ final class HealthCheckCommand extends Command
                         'timeout_seconds' => $timeoutSeconds,
                     ]));
 
-                $this->line($this->recoveryMessage((int) $run->getKey(), $timeoutSeconds));
+                $this->promptInfo($this->recoveryMessage((int) $run->getKey(), $timeoutSeconds));
             });
 
         if ($this->enhancedInteractiveMode()) {
@@ -113,8 +122,4 @@ final class HealthCheckCommand extends Command
         ], static fn (mixed $value): bool => $value !== null);
     }
 
-    private function enhancedInteractiveMode(): bool
-    {
-        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
-    }
 }

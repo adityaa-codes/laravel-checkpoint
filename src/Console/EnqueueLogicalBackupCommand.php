@@ -5,23 +5,32 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
+use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use Illuminate\Console\Command;
 use Throwable;
 
 use function Laravel\Prompts\intro;
+use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 
 final class EnqueueLogicalBackupCommand extends Command
 {
+    use UsesLaravelPrompts;
+
     protected $signature = 'db-ops:enqueue-backup';
 
     protected $description = 'Queue a logical backup command run.';
+
+    protected $aliases = ['db-ops:do:backup'];
 
     public function handle(EnqueueCommandRunAction $enqueueCommandRun): int
     {
         try {
             if ($this->enhancedInteractiveMode()) {
                 intro('Queue Logical Backup');
+                note('What: enqueue one logical backup run.');
+                note('When: daily operations and post-deploy backup smoke checks.');
+                note('Next: run db-ops:do:status to monitor the run.');
             }
 
             $run = $enqueueCommandRun->execute('logical_backup');
@@ -31,12 +40,12 @@ final class EnqueueLogicalBackupCommand extends Command
             if ($this->enhancedInteractiveMode()) {
                 outro($message);
             } else {
-                $this->info($message);
+                $this->promptInfo($message);
             }
 
             return self::SUCCESS;
         } catch (Throwable $exception) {
-            $this->error($exception->getMessage());
+            $this->promptError($exception->getMessage());
 
             return self::FAILURE;
         }
@@ -62,8 +71,4 @@ final class EnqueueLogicalBackupCommand extends Command
         return (string) $message;
     }
 
-    private function enhancedInteractiveMode(): bool
-    {
-        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
-    }
 }

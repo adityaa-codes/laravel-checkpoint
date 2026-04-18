@@ -6,6 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\BuildReplicationCommandPayloadAction;
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
+use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use Illuminate\Console\Command;
 use Throwable;
 
@@ -18,6 +19,8 @@ use function Laravel\Prompts\warning;
 
 final class ReplicateCommand extends Command
 {
+    use UsesLaravelPrompts;
+
     protected $signature = 'db-ops:replicate
         {source? : Source endpoint (profile:<id>, DSN, or key=value pairs)}
         {destination? : Destination endpoint (profile:<id>, DSN, or key=value pairs)}
@@ -29,6 +32,8 @@ final class ReplicateCommand extends Command
 
     protected $description = 'Queue a replication sync run with conservative defaults.';
 
+    protected $aliases = ['db-ops:do:replicate'];
+
     public function handle(
         EnqueueCommandRunAction $enqueueCommandRun,
         BuildReplicationCommandPayloadAction $buildPayload,
@@ -37,6 +42,9 @@ final class ReplicateCommand extends Command
             if ($this->enhancedInteractiveMode()) {
                 intro('Replication Sync Wizard');
                 note('Default mode is dry-run. Use apply mode only after validation.');
+                note('What: queue replication diff/apply workflow between endpoints.');
+                note('When: controlled data sync or migration scenarios.');
+                note('Next: run db-ops:do:status to monitor replication execution.');
             }
 
             $applyRequested = (bool) $this->option('apply');
@@ -59,7 +67,7 @@ final class ReplicateCommand extends Command
             );
 
             if ($this->enhancedInteractiveMode()) {
-                $this->table(['Field', 'Value'], [
+                $this->promptTable(['Field', 'Value'], [
                     ['Mode', $payload['dry_run'] ? 'dry-run' : 'apply'],
                     ['Force overwrite', $payload['force_overwrite'] ? 'yes' : 'no'],
                     ['Critical tables', implode(', ', $payload['critical_tables']) ?: '-'],
@@ -78,12 +86,12 @@ final class ReplicateCommand extends Command
             if ($this->enhancedInteractiveMode()) {
                 outro($message);
             } else {
-                $this->info($message);
+                $this->promptInfo($message);
             }
 
             return self::SUCCESS;
         } catch (Throwable $exception) {
-            $this->error($exception->getMessage());
+            $this->promptError($exception->getMessage());
 
             return self::FAILURE;
         }
@@ -103,14 +111,14 @@ final class ReplicateCommand extends Command
             return trim($argument);
         }
 
-        if ($this->enhancedInteractiveMode()) {
-            return trim(password(
-                label: sprintf('Enter %s replication endpoint', $role),
-                required: true,
-            ));
+        if (app()->runningUnitTests()) {
+            return trim((string) $this->secret(sprintf('Enter %s replication endpoint', $role)));
         }
 
-        return trim((string) $this->secret(sprintf('Enter %s replication endpoint', $role)));
+        return trim(password(
+            label: sprintf('Enter %s replication endpoint', $role),
+            required: true,
+        ));
     }
 
     /**
@@ -141,11 +149,6 @@ final class ReplicateCommand extends Command
         }
 
         return (string) $message;
-    }
-
-    private function enhancedInteractiveMode(): bool
-    {
-        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
     }
 
     private function safeEndpointLabel(string $endpoint): string

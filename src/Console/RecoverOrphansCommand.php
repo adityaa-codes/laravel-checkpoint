@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
+use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Events\OrphanRunRedispatched;
 use AdityaaCodes\LaravelCheckpoint\Events\QueueLagDetected;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
@@ -16,13 +17,18 @@ use Illuminate\Log\LogManager;
 use Throwable;
 
 use function Laravel\Prompts\intro;
+use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 
 final class RecoverOrphansCommand extends Command
 {
+    use UsesLaravelPrompts;
+
     protected $signature = 'db-ops:recover-orphans';
 
     protected $description = 'Re-dispatch stale pending checkpoint command runs.';
+
+    protected $aliases = ['db-ops:admin:recover-orphans'];
 
     public function __construct(
         private readonly Repository $config,
@@ -37,6 +43,9 @@ final class RecoverOrphansCommand extends Command
     {
         if ($this->enhancedInteractiveMode()) {
             intro('Recover Orphaned Queue Runs');
+            note('What: reclaim stale pending runs and re-dispatch processing jobs.');
+            note('When: queue lag, worker crashes, or stale pending growth.');
+            note('Next: run db-ops:do:status to confirm backlog recovery.');
         }
 
         $thresholdMinutes = max(1, (int) $this->config->get('checkpoint.queue.orphan_threshold', 10));
@@ -123,7 +132,7 @@ final class RecoverOrphansCommand extends Command
                                 'stale_age_minutes' => $staleAgeMinutes,
                             ]));
 
-                        $this->line($this->redispatchedMessage((int) $run->getKey()));
+                        $this->promptInfo($this->redispatchedMessage((int) $run->getKey()));
                     });
                 });
         } catch (Throwable $exception) {
@@ -195,8 +204,4 @@ final class RecoverOrphansCommand extends Command
         ], static fn (mixed $value): bool => $value !== null);
     }
 
-    private function enhancedInteractiveMode(): bool
-    {
-        return $this->input !== null && $this->input->isInteractive() && ! app()->runningUnitTests();
-    }
 }
