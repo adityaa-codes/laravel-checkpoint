@@ -27,8 +27,6 @@ final class ShellCommandDriver implements BackupDriver
 {
     public function execute(CommandRun $run): void
     {
-        $this->restoreSafetyGuard()->ensureSafe($run, $this->plannedMetadata($run));
-
         if ($this->shouldCreatePreRestoreSnapshot($run)) {
             $snapshotRun = $this->createSnapshotRun($run);
             $this->runProcess($snapshotRun);
