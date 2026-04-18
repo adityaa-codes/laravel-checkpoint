@@ -5,6 +5,7 @@ declare(strict_types=1);
 use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use Illuminate\Foundation\Auth\User;
 
@@ -186,6 +187,9 @@ return [
             'backup_prefix' => $env('DB_OPS_BACKUP_PREFIX', 'backup'),
             'pre_restore_snapshot' => (bool) $env('DB_OPS_PRE_RESTORE_SNAPSHOT', true),
             'command_timeout_seconds' => (int) $env('DB_OPS_CMD_TIMEOUT', $queueTimeoutDefault),
+        ],
+        'postgres' => [
+            'class' => PostgresDriver::class,
         ],
         'pgbackrest' => [
             'class' => PgBackRestDriver::class,

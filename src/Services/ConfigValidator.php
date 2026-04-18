@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Services;
 
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Support\NotificationEventMap;
 use Illuminate\Contracts\Config\Repository;
@@ -50,7 +55,7 @@ final readonly class ConfigValidator
             );
         }
 
-        $class = $drivers[$driver]['class'] ?? null;
+        $class = $drivers[$driver]['class'] ?? $this->defaultDriverClass($driver);
 
         if (! is_string($class) || $class === '' || ! class_exists($class)) {
             throw new ConfigurationException(
@@ -63,6 +68,22 @@ final readonly class ConfigValidator
                 sprintf('Driver class %s must implement %s.', $class, BackupDriver::class),
             );
         }
+
+        if (($drivers[$driver]['class'] ?? null) !== $class) {
+            config()->set("checkpoint.drivers.{$driver}.class", $class);
+        }
+    }
+
+    private function defaultDriverClass(string $driver): ?string
+    {
+        return match ($driver) {
+            'shell' => ShellCommandDriver::class,
+            'postgres' => PostgresDriver::class,
+            'pgbackrest' => PgBackRestDriver::class,
+            'pgdump' => PgDumpDriver::class,
+            'mysql' => MysqlDriver::class,
+            default => null,
+        };
     }
 
     private function validateLogChannel(): void

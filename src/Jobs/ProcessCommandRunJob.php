@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Jobs;
 
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
@@ -115,7 +120,7 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
     private function resolveDriver(): BackupDriver
     {
         $driver = (string) config('checkpoint.driver', 'shell');
-        $class = config("checkpoint.drivers.{$driver}.class");
+        $class = config("checkpoint.drivers.{$driver}.class") ?? $this->defaultDriverClass($driver);
 
         if (! is_string($class) || $class === '') {
             throw new ConfigurationException(
@@ -132,6 +137,18 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
         }
 
         return $resolved;
+    }
+
+    private function defaultDriverClass(string $driver): ?string
+    {
+        return match ($driver) {
+            'shell' => ShellCommandDriver::class,
+            'postgres' => PostgresDriver::class,
+            'pgbackrest' => PgBackRestDriver::class,
+            'pgdump' => PgDumpDriver::class,
+            'mysql' => MysqlDriver::class,
+            default => null,
+        };
     }
 
     /**

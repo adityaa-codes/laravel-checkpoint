@@ -7,6 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Tests;
 use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpointServiceProvider;
 use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
@@ -160,6 +161,9 @@ class TestCase extends Orchestra
                     'backup_prefix' => 'backup',
                     'pre_restore_snapshot' => true,
                     'command_timeout_seconds' => 5,
+                ],
+                'postgres' => [
+                    'class' => PostgresDriver::class,
                 ],
                 'pgbackrest' => [
                     'class' => PgBackRestDriver::class,
