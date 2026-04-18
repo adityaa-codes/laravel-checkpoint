@@ -6,6 +6,18 @@ sidebar_position: 1
 
 Start with the simplest driver that matches your real backup tool.
 
+## `postgres`
+
+Use this as the default PostgreSQL choice. It is a unified facade:
+
+- routes logical operations (`logical_*`, `replication_sync`) to `pgdump`
+- routes `pgbackrest_*` operations to `pgbackrest`
+
+Best for:
+
+- consumer-friendly PostgreSQL setups with one driver key
+- production PostgreSQL where you need both DR and logical workflows
+
 ## `shell`
 
 Use this when you already have working shell scripts or wrapper commands.
@@ -45,4 +57,8 @@ Best for:
 
 ## Recommendation
 
-If you are unsure, start with `shell`.
+If you are unsure:
+
+- PostgreSQL: start with `postgres`
+- MySQL: start with `mysql`
+- custom/legacy commands: use `shell`

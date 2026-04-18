@@ -8,6 +8,7 @@ Laravel Checkpoint resolves the active `BackupDriver` from `checkpoint.driver` a
 
 ## Bundled drivers
 
+- `postgres`: unified PostgreSQL facade (`pgdump` + `pgbackrest` routing)
 - `shell`: generic command-template driver
 - `pgbackrest`: PostgreSQL backup and restore workflows around `pgbackrest`
 - `pgdump`: PostgreSQL logical export and restore workflows
@@ -15,9 +16,10 @@ Laravel Checkpoint resolves the active `BackupDriver` from `checkpoint.driver` a
 
 ## How to choose
 
+- use `postgres` for a single PostgreSQL driver experience in most consumer setups
 - use `shell` when you already have a stable wrapper script or platform-specific command set
-- use `pgbackrest` for PostgreSQL disaster recovery and repository-aware backup workflows
-- use `pgdump` for PostgreSQL logical exports and restoreable logical artifacts
+- use `pgbackrest` directly when you only want explicit pgBackRest operations
+- use `pgdump` directly when you only want explicit logical-export operations
 - use `mysql` for `mysqldump`-based exports and MySQL binlog replay workflows
 
 ## Custom drivers

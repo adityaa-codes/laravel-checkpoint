@@ -10,7 +10,19 @@ Install the package in your Laravel application:
 composer require adityaa-codes/laravel-checkpoint
 ```
 
-Publish the package config and migrations:
+Run guided install (recommended):
+
+```bash
+php artisan db-ops:install --preset=minimal
+```
+
+Available presets:
+
+- `minimal`: local/testing baseline (`shell`)
+- `postgres-prod`: production PostgreSQL baseline (`postgres` facade)
+- `mysql-prod`: production MySQL baseline (`mysql`)
+
+If you need manual control, you can still publish and migrate directly:
 
 ```bash
 php artisan vendor:publish --tag="laravel-checkpoint-config"

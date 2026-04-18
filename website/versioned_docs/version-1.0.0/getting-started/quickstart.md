@@ -6,48 +6,46 @@ sidebar_position: 2
 
 This package boots a config validator during service-provider startup, so a working quickstart has two parts:
 
-1. publish the config and migrations
-2. make the selected driver configuration internally consistent before the app boots
+1. run guided install
+2. run worker and scheduler
 
-## Minimal shell-driver setup
+Command groups:
 
-The default driver is `shell`. Configure the queue and shell driver first:
+- `db-ops:do:*` → operator workflow
+- `db-ops:check:*` → diagnostics/readiness
+- `db-ops:admin:*` → maintenance/governance
 
-```env
-DB_OPS_DRIVER=shell
-DB_OPS_QUEUE_NAME=db-ops
-DB_OPS_QUEUE_TIMEOUT=3600
-DB_OPS_QUEUE_RETRY_AFTER=3660
-DB_OPS_QUEUE_UNIQUE_FOR=3660
-DB_OPS_CMD_TIMEOUT=3600
-
-DB_OPS_CMD_LOGICAL_BACKUP="/usr/local/bin/checkpoint-backup"
-DB_OPS_CMD_RESTORE_LATEST="/usr/local/bin/checkpoint-restore-latest"
-DB_OPS_CMD_RESTORE_FILE="/usr/local/bin/checkpoint-restore-file {argument}"
-DB_OPS_CMD_PITR_RESTORE="/usr/local/bin/checkpoint-pitr-restore {argument}"
-DB_OPS_CMD_BACKUP_DRILL="/usr/local/bin/checkpoint-drill"
-```
-
-## Run the package
-
-Queue a logical backup:
+## 1. Run guided install
 
 ```bash
-php artisan db-ops:enqueue-backup
+php artisan db-ops:do:install --preset=minimal
 ```
 
-Inspect recent runs:
+For PostgreSQL production, prefer:
 
 ```bash
-php artisan db-ops:status --limit=10
-php artisan db-ops:status --summary
+php artisan db-ops:do:install --preset=postgres-prod --write-env
 ```
 
-Run operator diagnostics:
+This uses the unified `postgres` facade driver.
+
+## 2. Run the package
+
+Start worker and scheduler:
 
 ```bash
-php artisan db-ops:doctor
-php artisan db-ops:report --limit=10
+php artisan queue:work --queue=db-ops --timeout=3600
+php artisan schedule:work
+```
+
+Queue and inspect:
+
+```bash
+php artisan db-ops:do:backup
+php artisan db-ops:do:status --limit=10
+php artisan db-ops:do:status --summary
+php artisan db-ops:check:doctor
+php artisan db-ops:check:report --limit=10
 ```
 
 ## Before enabling restore
