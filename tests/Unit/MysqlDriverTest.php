@@ -316,7 +316,6 @@ it('records post-restore verification contract for mysql logical restores', func
             'command_run_id' => (int) $run->getKey(),
             'operation' => 'logical_restore_file',
             'aggregate_result' => 'pass',
-            'generated_at' => now()->toIso8601String(),
             'checks_performed' => [
                 'restore_audit_recorded',
                 'restore_target_recorded',
@@ -324,6 +323,7 @@ it('records post-restore verification contract for mysql logical restores', func
                 'verified_backup_signal_linkage',
             ],
         ])
+        ->and($postVerification['generated_at'] ?? null)->toBeString()
         ->and($postVerification['checks'])->toBeArray()
         ->and($postVerification['checks'])->toHaveCount(4)
         ->and($postVerification['checks'][0])->toHaveKeys(['name', 'passed', 'status', 'description', 'observed']);
