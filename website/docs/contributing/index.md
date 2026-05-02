@@ -11,11 +11,16 @@ Keep package changes small, atomic, and test-backed.
 Before opening a PR, run the narrowest relevant check and then the broader package quality commands when needed:
 
 ```bash
-ddev exec vendor/bin/pest
-ddev exec vendor/bin/phpstan analyse
-ddev exec vendor/bin/pint
-ddev composer quality
+vendor/bin/pest
+vendor/bin/phpstan analyse
+vendor/bin/pint
+composer quality
 ```
+
+CI compatibility policy:
+
+- run tests across Laravel 12/13 and PHP 8.3/8.4/8.5
+- validate both `prefer-stable` and `prefer-lowest` dependency resolution paths
 
 ## Docs workflow
 

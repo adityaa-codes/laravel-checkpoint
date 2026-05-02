@@ -4,7 +4,7 @@ sidebar_position: 3
 
 # Run A Drill
 
-A drill helps you prove your restore process works, not just that backups exist.
+A drill helps you prove your restore process works, rather than only confirming backups exist.
 
 ## Queue a drill
 

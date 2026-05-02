@@ -49,13 +49,14 @@ Journey command map:
 
 ## Installation command
 
-`db-ops:install {--preset=} {--skip-publish} {--skip-migrate} {--skip-doctor} {--write-env} {--force}`
+`db-ops:install {--preset=} {--skip-publish} {--skip-migrate} {--skip-doctor} {--smoke-backup} {--write-env} {--force}`
 
 What it does:
 
 - runs guided package installation
 - applies an opinionated preset
 - can publish config/migrations, run migrate, and run doctor checks
+- can optionally run a one-backup smoke test (`--smoke-backup`) and fail install if smoke fails
 
 Common presets:
 
@@ -104,6 +105,10 @@ Parameters:
   - `nightly-backup.sql`
   - `2026-03-11 11:30:00`
 
+Non-interactive note:
+
+- in non-interactive runs (for example CI with `--no-interaction`), missing `operation` or required `--argument` fails immediately instead of prompting
+
 Examples:
 
 ```bash
@@ -147,7 +152,7 @@ php artisan db-ops:enqueue-drill
 
 ## Status and health commands
 
-`db-ops:status {--limit=10} {--summary} {--format=table} {--agent}`
+`db-ops:status {--limit=10} {--summary} {--brief} {--format=table} {--agent} {--policy-profile=}`
 
 What it does:
 
@@ -168,6 +173,8 @@ Parameters:
   - `25`
 - `--summary`
   Shows summary output instead of individual runs.
+- `--brief`
+  Shows incident-triage output (cause + action) in a compact format.
 - `--format`
   Output format.
   Example values:
@@ -175,6 +182,8 @@ Parameters:
   - `json`
 - `--agent`
   Emits compact JSON for automation or AI agents
+- `--policy-profile`
+  Overrides gate policy profile selection for CI/automation runs.
 
 Examples:
 
@@ -182,16 +191,19 @@ Examples:
 php artisan db-ops:status
 php artisan db-ops:status --limit=25
 php artisan db-ops:status --summary
+php artisan db-ops:status --brief
 php artisan db-ops:status --format=json
+php artisan db-ops:status --agent
 ```
 
-`db-ops:doctor {--format=table} {--agent}`
+`db-ops:doctor {--brief} {--format=table} {--agent} {--policy-profile=}`
 
 What it does:
 
 - checks package health
 - validates config
 - helps explain setup failures
+- labels checks by severity (`blocker`, `warning`, `info`)
 
 When to use it:
 
@@ -203,17 +215,24 @@ Parameters:
   Example values:
   - `table`
   - `json`
+- `--brief`
+  Shows top issues and immediate next action.
 - `--agent`
   Compact machine-friendly output
+- `--policy-profile`
+  Overrides gate policy profile selection for CI/automation runs.
+- default table output prioritizes P0/P1 checks and suppresses passing checks unless you run with `-v`
 
 Examples:
 
 ```bash
 php artisan db-ops:doctor
+php artisan db-ops:doctor --brief
 php artisan db-ops:doctor --format=json
+php artisan db-ops:doctor --agent
 ```
 
-`db-ops:report {--limit=10} {--format=table} {--agent}`
+`db-ops:report {--limit=10} {--brief} {--format=table} {--agent} {--policy-profile=}`
 
 What it does:
 
@@ -234,15 +253,46 @@ Parameters:
   Example values:
   - `table`
   - `json`
+- `--brief`
+  Shows incident-first summary with last failed run, cause, and action.
 - `--agent`
   Compact machine-friendly output
+- `--policy-profile`
+  Overrides gate policy profile selection for CI/automation runs.
+- default table output prioritizes P0/P1 checks and suppresses passing checks unless you run with `-v`
 
 Examples:
 
 ```bash
 php artisan db-ops:report --limit=10
+php artisan db-ops:report --limit=10 --brief
 php artisan db-ops:report --limit=10 --format=json
+php artisan db-ops:report --limit=10 --agent
 ```
+
+Agent-friendly output tips:
+
+- use `--agent` when you want concise output for scripts and agent loops
+- agent responses include `schema_version` for contract-safe parsing
+- use `--format=json` when you need full structured fields for downstream parsing
+- for test output, run `vendor/bin/pest --compact`; PAO hooks in automatically when an agent is detected
+
+## Exit code semantics (policy-gated)
+
+Operational commands evaluate safety/evidence gates and return deterministic exit codes:
+
+- `0` → pass
+- `2` → warning-only policy result (when enabled by profile policy)
+- `10` → safety gate failed
+- `11` → evidence gate failed
+- `12` → gate policy/config evaluation failed
+
+Policy profile resolution order:
+
+1. `--policy-profile=<name>` (highest priority)
+2. `DB_OPS_GATE_PROFILE` / `checkpoint.gates.override_profile`
+3. `checkpoint.gates.environment_profile_map[APP_ENV]`
+4. `checkpoint.gates.default_profile`
 
 ## Drill and PITR commands
 
@@ -482,6 +532,13 @@ Endpoint input formats:
 - `profile:<id>`
 - DSN such as `pgsql://user:pass@host/database`
 - key/value pairs when your workflow uses that format
+
+Replication semantics (current behavior):
+
+- execution supports only local/configured endpoint semantics
+- remote/cross-host source/destination intent is rejected at runtime
+- apply mode re-checks governance preflight at execution time
+- in non-interactive runs (`--no-interaction`), missing source/destination fails immediately instead of prompting
 
 ## Restore operations explained
 

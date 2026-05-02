@@ -27,6 +27,7 @@ Use it when:
 
 - you want a quick operational summary
 - you do not need full per-run details
+- you want the latest failure reason and immediate next action without opening logs
 
 ## `db-ops:doctor`
 

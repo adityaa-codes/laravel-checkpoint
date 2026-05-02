@@ -48,6 +48,16 @@ php artisan db-ops:check:doctor
 php artisan db-ops:check:report --limit=10
 ```
 
+## 3. Replace placeholder backup command (minimal preset)
+
+If you installed with `--preset=minimal`, the seeded shell command is:
+
+```env
+DB_OPS_CMD_LOGICAL_BACKUP="php -r if(!is_dir($argv[1]))mkdir($argv[1],0777,true);touch($argv[2]); {backup_dir} {output}"
+```
+
+Replace it with your real backup command once queue wiring is validated.
+
 ## Before enabling restore
 
 Do not enable restore workflows until you have configured:

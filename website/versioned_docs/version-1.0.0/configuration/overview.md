@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Configuration Overview
 
-The package configuration lives in `config/checkpoint.php`. The current top-level groups are:
+The package configuration lives in `config/checkpoint.php`. These are the top-level groups:
 
 - `user_model`, `user_name_column`, `table_prefix`
 - `queue`
@@ -24,18 +24,23 @@ The package configuration lives in `config/checkpoint.php`. The current top-leve
 
 ## Driver selection
 
-`checkpoint.driver` selects the active backup driver. The package currently ships:
+`checkpoint.driver` selects the active backup driver. Available drivers:
 
 - `shell`
 - `pgbackrest`
 - `pgdump`
 - `mysql`
 
-Each driver block in `checkpoint.drivers` also declares the class that will be resolved for the `BackupDriver` contract.
+Each block under `checkpoint.drivers` also declares the class resolved for the `BackupDriver` contract.
+
+Shell driver prerequisite:
+
+- define command templates for every operation you plan to run; if a template is missing, execution fails with a configuration error.
+- guided install `--preset=minimal` seeds `logical_backup` with a local bootstrap placeholder command; replace it with your real backup command before relying on artifacts.
 
 ## Scheduling
 
-The service provider registers scheduled commands when the matching config switches are enabled:
+The service provider registers scheduled commands when the matching config flags are enabled:
 
 - `schedule.logical_backup_enabled`
 - `schedule.backup_drill_enabled`
@@ -43,16 +48,16 @@ The service provider registers scheduled commands when the matching config switc
 - `schedule.recover_orphans_enabled`
 - `schedule.prune_enabled`
 
-By default, scheduled commands also opt into:
+By default, scheduled commands also use:
 
 - `withoutOverlapping()`
 - `onOneServer()`
 
-That means clustered deployments need a shared cache backend and a safe lock store.
+In clustered deployments, this requires a shared cache backend and a safe lock store.
 
 ## Output and temp storage
 
-The package supports persisted output limits and optional filesystem-backed command output storage:
+You can limit persisted output and optionally store command output on a filesystem:
 
 - `output.max_persisted_bytes`
 - `output.storage`
