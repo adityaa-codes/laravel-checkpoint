@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 
 /**
  * @api
@@ -15,8 +16,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $decision
  * @property string $reason
  * @property array<string,mixed>|null $payload
- * @property \Illuminate\Support\Carbon|null $created_at
- * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
  */
 class RestoreDecisionEvent extends Model
 {

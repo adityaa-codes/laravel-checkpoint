@@ -241,9 +241,10 @@ final class CommandJsonFixtureSupport
 
     public static function seedPitrReadinessState(): void
     {
-        $baseline = '/tmp/checkpoint-pitr-fixture-baseline.sql';
-        $binlogA = '/tmp/checkpoint-pitr-fixture-binlog-a.log';
-        $binlogB = '/tmp/checkpoint-pitr-fixture-binlog-b.log';
+        $suffix = self::parallelProcessSuffix();
+        $baseline = sprintf('/tmp/checkpoint-pitr-fixture%s-baseline.sql', $suffix);
+        $binlogA = sprintf('/tmp/checkpoint-pitr-fixture%s-binlog-a.log', $suffix);
+        $binlogB = sprintf('/tmp/checkpoint-pitr-fixture%s-binlog-b.log', $suffix);
 
         file_put_contents($baseline, 'baseline');
         file_put_contents($binlogA, 'binlog-a');
@@ -263,6 +264,21 @@ final class CommandJsonFixtureSupport
             'attempts' => 1,
             'exit_code' => 0,
         ]);
+    }
+
+    private static function parallelProcessSuffix(): string
+    {
+        foreach (['TEST_TOKEN', 'PARATEST', 'PARATEST_PROCESS', 'LARAVEL_PARALLEL_TESTING_TOKEN'] as $key) {
+            $token = getenv($key);
+
+            if (! is_string($token) || trim($token) === '') {
+                continue;
+            }
+
+            return '-'.$token;
+        }
+
+        return '';
     }
 
     public static function withEmptyPath(callable $callback): void

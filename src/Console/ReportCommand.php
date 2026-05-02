@@ -7,6 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
+use AdityaaCodes\LaravelCheckpoint\Services\GatePolicyEvaluator;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
@@ -18,17 +19,18 @@ final class ReportCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'db-ops:report {--limit=10 : Number of recent runs to include.} {--format=table : Output format: table or json.} {--agent : Emit compact AI-agent friendly JSON output.}';
+    protected $signature = 'checkpoint:report {--limit=10 : Number of recent runs to include.} {--brief : Show triage-first report output with cause and next action.} {--format=table : Output format: table or json.} {--agent : Emit compact AI-agent friendly JSON output.} {--policy-profile= : Override gate policy profile for CI/automation.}';
 
     protected $description = 'Show checkpoint operational report (table by default, json/agent supported).';
 
-    protected $aliases = ['db-ops:check:report'];
+    protected $aliases = ['checkpoint:check:report'];
 
     public function __construct(
         private readonly ConfigValidator $validator,
         private readonly Repository $config,
         private readonly OperationalReportBuilder $reportBuilder,
         private readonly CommandJsonContract $jsonContract,
+        private readonly GatePolicyEvaluator $gatePolicyEvaluator,
     ) {
         parent::__construct();
     }
@@ -36,14 +38,16 @@ final class ReportCommand extends Command
     public function handle(): int
     {
         $agentMode = (bool) $this->option('agent');
+        $briefMode = (bool) $this->option('brief');
         $format = $this->stringOption('format') ?? 'table';
+        $policyProfile = $this->policyProfileOverride();
         $outputMode = $agentMode ? 'agent' : $this->normalizedOutputMode($format);
 
         if ($this->enhancedInteractiveMode() && $outputMode === 'table') {
             intro('Checkpoint Operational Report');
             note('What: consolidated operational report across runs, health, and verification.');
             note('When: handoff reporting, audits, and broader operational review.');
-            note('Next: use db-ops:check:doctor to troubleshoot failing checks from this report.');
+            note('Next: use checkpoint:check:doctor to troubleshoot failing checks from this report.');
         }
 
         if ($outputMode === '') {
@@ -57,7 +61,6 @@ final class ReportCommand extends Command
         try {
             $this->validator->validate();
             $reportPayload = $this->reportBuilder->reportPayload($effectiveLimit);
-            $exitCode = self::SUCCESS;
         } catch (\Throwable $exception) {
             $reportPayload = [
                 'recent_runs' => [],
@@ -77,21 +80,36 @@ final class ReportCommand extends Command
                     ]],
                 ],
             ];
-            $exitCode = self::FAILURE;
         }
+
+        $gateDecision = $this->gatePolicyEvaluator->evaluate(
+            is_array($reportPayload['health']['checks'] ?? null) ? $reportPayload['health']['checks'] : [],
+            is_array($reportPayload['summary'] ?? null) ? $reportPayload['summary'] : [],
+            $policyProfile,
+        );
+        $exitCode = $gateDecision['exit_code'];
 
         if ($outputMode === 'agent') {
             $this->line(json_encode($this->jsonContract->envelope('report', $this->agentReportPayload(
                 requestedLimit: $requestedLimit,
                 effectiveLimit: $effectiveLimit,
                 reportPayload: $reportPayload,
+                briefMode: $briefMode,
+                gateDecision: $gateDecision,
             )), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
         } elseif ($outputMode === 'json') {
+            $lastFailedRun = is_array($reportPayload['summary']['latest_failed_run'] ?? null)
+                ? $reportPayload['summary']['latest_failed_run']
+                : ['label' => '-', 'timestamp' => null, 'operation' => null, 'status' => null, 'exit_code' => null, 'failure_reason' => null, 'next_action' => null];
+
             $this->line(json_encode($this->jsonContract->envelope('report', [
+                'mode' => $briefMode ? 'brief' : 'full',
                 'generated_at' => now()->toIso8601String(),
                 'driver' => (string) $this->config->get('checkpoint.driver'),
                 'limit_requested' => $requestedLimit,
                 'limit' => $effectiveLimit,
+                'gates' => $this->machineGateDecision($gateDecision),
+                'last_failed_run' => $lastFailedRun,
                 'recent_runs' => $reportPayload['recent_runs'],
                 'summary' => $reportPayload['summary'],
                 'breakdown' => $reportPayload['breakdown'],
@@ -99,7 +117,7 @@ final class ReportCommand extends Command
                 'health' => $reportPayload['health'],
             ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
         } else {
-            $this->renderTableReport($reportPayload, $requestedLimit, $effectiveLimit);
+            $this->renderTableReport($reportPayload, $requestedLimit, $effectiveLimit, $briefMode);
         }
 
         return $exitCode;
@@ -165,7 +183,7 @@ final class ReportCommand extends Command
                 'severity' => 'critical',
                 'title' => 'No backup drill evidence available',
                 'summary' => 'No backup drill run is recorded. Schedule and record a drill run before relying on restore readiness.',
-                'recommended_commands' => ['db-ops:enqueue-drill'],
+                'recommended_commands' => ['checkpoint:enqueue-drill'],
                 'steps' => [],
                 'evidence' => [
                     'window_days' => $windowDays,
@@ -183,6 +201,7 @@ final class ReportCommand extends Command
             ],
             'latest_restore_run' => ['label' => '-', 'timestamp' => null, 'operation' => null, 'status' => null, 'target' => null, 'audit' => null],
             'latest_restore_failure' => ['label' => '-', 'timestamp' => null, 'operation' => null, 'target' => null],
+            'latest_failed_run' => ['label' => '-', 'timestamp' => null, 'operation' => null, 'status' => null, 'exit_code' => null, 'failure_reason' => null, 'next_action' => null],
         ];
     }
 
@@ -229,12 +248,15 @@ final class ReportCommand extends Command
      * @param  array{recent_runs:list<array<string,mixed>>,summary:array<string,mixed>,breakdown:array<string,mixed>,verification:array<string,mixed>,health:array{ok:bool,checks:list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>}}  $reportPayload
      * @return array<string,mixed>
      */
-    private function agentReportPayload(int $requestedLimit, int $effectiveLimit, array $reportPayload): array
+    private function agentReportPayload(int $requestedLimit, int $effectiveLimit, array $reportPayload, bool $briefMode, array $gateDecision): array
     {
         $checks = $reportPayload['health']['checks'];
         $failedChecks = count(array_filter($checks, static fn (array $check): bool => (string) $check['status'] === 'fail'));
         $warnChecks = count(array_filter($checks, static fn (array $check): bool => (string) $check['status'] === 'warn'));
         $failedRuns = count(array_filter($reportPayload['recent_runs'], static fn (array $run): bool => (string) ($run['status'] ?? '') === 'failed'));
+        $lastFailedRun = is_array($reportPayload['summary']['latest_failed_run'] ?? null)
+            ? $reportPayload['summary']['latest_failed_run']
+            : ['label' => '-', 'timestamp' => null, 'operation' => null, 'status' => null, 'exit_code' => null, 'failure_reason' => null, 'next_action' => null];
 
         $result = $failedChecks > 0 ? 'failed' : (($warnChecks > 0 || $failedRuns > 0) ? 'partial' : 'passed');
         $code = $failedChecks > 0 ? 'report.health.failed' : (($warnChecks > 0 || $failedRuns > 0) ? 'report.health.warn' : 'report.health.ok');
@@ -249,10 +271,13 @@ final class ReportCommand extends Command
                 $warnChecks,
             ),
             'data' => [
+                'mode' => $briefMode ? 'brief' : 'full',
                 'generated_at' => now()->toIso8601String(),
                 'driver' => (string) $this->config->get('checkpoint.driver'),
                 'limit_requested' => $requestedLimit,
                 'limit' => $effectiveLimit,
+                'gates' => $gateDecision,
+                'last_failed_run' => $lastFailedRun,
                 'recent_runs' => $reportPayload['recent_runs'],
                 'summary' => $reportPayload['summary'],
                 'breakdown' => $reportPayload['breakdown'],
@@ -266,7 +291,7 @@ final class ReportCommand extends Command
                     warnChecks: $warnChecks,
                 ),
             ],
-            'suggestions' => $this->reportSuggestions($checks, $failedRuns),
+            'suggestions' => $this->reportSuggestions($checks, $failedRuns, $lastFailedRun),
         ];
     }
 
@@ -360,14 +385,20 @@ final class ReportCommand extends Command
 
     /**
      * @param  list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>  $checks
+     * @param  array{label?:string,timestamp?:string|null,operation?:string|null,status?:string|null,exit_code?:int|null,failure_reason?:string|null,next_action?:string|null}  $lastFailedRun
      * @return list<string>
      */
-    private function reportSuggestions(array $checks, int $failedRuns): array
+    private function reportSuggestions(array $checks, int $failedRuns, array $lastFailedRun): array
     {
         $suggestions = [];
+        $checks = $this->prioritizeChecks($checks);
 
         if ($failedRuns > 0) {
             $suggestions[] = 'Inspect failed runs in data.recent_runs and rerun impacted operation with corrected inputs.';
+        }
+
+        if (is_string($lastFailedRun['next_action'] ?? null) && trim($lastFailedRun['next_action']) !== '') {
+            $suggestions[] = trim((string) $lastFailedRun['next_action']);
         }
 
         foreach ($checks as $check) {
@@ -380,7 +411,7 @@ final class ReportCommand extends Command
             if ($code === 'config.validation') {
                 $suggestions[] = 'Resolve config validation failures before executing queue operations.';
             } elseif ($code === 'queue.orphaned_runs') {
-                $suggestions[] = 'Run db-ops:recover-orphans and verify worker heartbeat settings.';
+                $suggestions[] = 'Run checkpoint:recover-orphans and verify worker heartbeat settings.';
             } elseif (str_starts_with($code, 'backup_drill.')) {
                 $suggestions[] = 'Run a backup drill and track pass-rate/freshness health signals.';
 
@@ -406,8 +437,34 @@ final class ReportCommand extends Command
     /**
      * @param  array{recent_runs:list<array<string,mixed>>,summary:array<string,mixed>,verification:array<string,mixed>,health:array{ok:bool,checks:list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>}}  $reportPayload
      */
-    private function renderTableReport(array $reportPayload, int $requestedLimit, int $effectiveLimit): void
+    private function renderTableReport(array $reportPayload, int $requestedLimit, int $effectiveLimit, bool $briefMode): void
     {
+        if ($briefMode) {
+            $lastFailedRun = is_array($reportPayload['summary']['latest_failed_run'] ?? null)
+                ? $reportPayload['summary']['latest_failed_run']
+                : [];
+            $failedChecks = count(array_filter($reportPayload['health']['checks'], static fn (array $check): bool => (string) $check['status'] === 'fail'));
+            $warnChecks = count(array_filter($reportPayload['health']['checks'], static fn (array $check): bool => (string) $check['status'] === 'warn'));
+            $suppressedLowerPriority = count(array_filter($reportPayload['health']['checks'], static fn (array $check): bool => (string) $check['status'] === 'pass'));
+            $reason = (string) ($lastFailedRun['failure_reason'] ?? 'No recent failed run reason available.');
+            $actionNow = (string) ($lastFailedRun['next_action'] ?? 'Run php artisan checkpoint:report --limit=10 --format=json for full failure context.');
+
+            $this->line('Checkpoint report (brief)');
+            $this->line(sprintf(
+                'Failed runs (24h): %d | Health checks: %d fail, %d warn',
+                (int) ($reportPayload['summary']['failed_runs_24h'] ?? 0),
+                $failedChecks,
+                $warnChecks,
+            ));
+            $this->line(sprintf('P0: %d | P1: %d | Suppressed lower-priority: %d', $failedChecks, $warnChecks, $suppressedLowerPriority));
+            $this->line('Last failed: '.(string) ($lastFailedRun['label'] ?? '-'));
+            $this->line('Cause: '.$reason);
+            $this->line('Action now: '.$actionNow);
+            $this->line('Deep dive: php artisan checkpoint:report --limit=10 --format=json');
+
+            return;
+        }
+
         $this->promptTable(['Field', 'Value'], [
             ['Driver', (string) $this->config->get('checkpoint.driver')],
             ['Limit requested', (string) $requestedLimit],
@@ -448,14 +505,28 @@ final class ReportCommand extends Command
             ));
         }
 
-        $this->promptTable(['Check', 'Status', 'Notes'], array_map(
-            static fn (array $check): array => [
-                $check['check'],
-                $check['status'],
-                $check['notes'],
+        $orderedChecks = $this->orderedChecksForDisplay($reportPayload['health']['checks']);
+        $visibleChecks = $this->shouldCollapsePassingChecks()
+            ? array_values(array_filter($orderedChecks, static fn (array $check): bool => (string) ($check['status'] ?? '') !== 'pass'))
+            : $orderedChecks;
+
+        $this->promptTable(['Check', 'Status', 'Priority', 'Notes'], array_map(
+            fn (array $check): array => [
+                (string) ($check['check'] ?? '-'),
+                (string) ($check['status'] ?? '-'),
+                $this->priorityLabel((string) ($check['status'] ?? 'pass')),
+                (string) ($check['notes'] ?? '-'),
             ],
-            $reportPayload['health']['checks'],
+            $visibleChecks,
         ));
+
+        if ($this->shouldCollapsePassingChecks()) {
+            $suppressedPassChecks = count(array_filter($orderedChecks, static fn (array $check): bool => (string) ($check['status'] ?? '') === 'pass'));
+
+            if ($suppressedPassChecks > 0) {
+                $this->line(sprintf('Suppressed %d passing checks (P2/P3). Re-run with -v for full detail.', $suppressedPassChecks));
+            }
+        }
     }
 
     private function stringOption(string $key): ?string
@@ -463,6 +534,76 @@ final class ReportCommand extends Command
         $value = $this->option($key);
 
         return is_string($value) ? $value : null;
+    }
+
+    private function shouldCollapsePassingChecks(): bool
+    {
+        return ! $this->getOutput()->isVerbose();
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $checks
+     * @return list<array<string,mixed>>
+     */
+    private function orderedChecksForDisplay(array $checks): array
+    {
+        usort($checks, static function (array $left, array $right): int {
+            $rank = [
+                'fail' => 0,
+                'warn' => 1,
+                'pass' => 2,
+            ];
+
+            $leftStatus = (string) ($left['status'] ?? 'pass');
+            $rightStatus = (string) ($right['status'] ?? 'pass');
+            $leftRank = $rank[$leftStatus] ?? 3;
+            $rightRank = $rank[$rightStatus] ?? 3;
+
+            if ($leftRank !== $rightRank) {
+                return $leftRank <=> $rightRank;
+            }
+
+            return strcmp((string) ($left['check'] ?? ''), (string) ($right['check'] ?? ''));
+        });
+
+        return $checks;
+    }
+
+    private function priorityLabel(string $status): string
+    {
+        return match ($status) {
+            'fail' => 'P0',
+            'warn' => 'P1',
+            default => 'P3',
+        };
+    }
+
+    private function policyProfileOverride(): ?string
+    {
+        $override = $this->stringOption('policy-profile');
+
+        if (! is_string($override)) {
+            return null;
+        }
+
+        $override = trim($override);
+
+        return $override !== '' ? $override : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $gateDecision
+     * @return array{profile:string,profile_source:string,verdict:string,failed_gate:string,exit_code:int}
+     */
+    private function machineGateDecision(array $gateDecision): array
+    {
+        return [
+            'profile' => (string) ($gateDecision['profile'] ?? 'unknown'),
+            'profile_source' => (string) ($gateDecision['profile_source'] ?? 'default'),
+            'verdict' => (string) ($gateDecision['verdict'] ?? 'fail'),
+            'failed_gate' => (string) ($gateDecision['failed_gate'] ?? 'policy'),
+            'exit_code' => (int) ($gateDecision['exit_code'] ?? 12),
+        ];
     }
 
     /**
@@ -483,5 +624,20 @@ final class ReportCommand extends Command
         }
 
         return 'pass';
+    }
+
+    /**
+     * @param  list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>  $checks
+     * @return list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>
+     */
+    private function prioritizeChecks(array $checks): array
+    {
+        usort($checks, static function (array $left, array $right): int {
+            $rank = ['fail' => 0, 'warn' => 1, 'pass' => 2];
+
+            return ($rank[(string) $left['status']] ?? 3) <=> ($rank[(string) $right['status']] ?? 3);
+        });
+
+        return $checks;
     }
 }

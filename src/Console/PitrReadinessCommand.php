@@ -10,17 +10,18 @@ use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
+
 use function Laravel\Prompts\note;
 
 final class PitrReadinessCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'db-ops:pitr-readiness {target? : PITR target datetime (defaults to now).} {--format=table : Output format: table or json.} {--agent : Emit compact AI-agent friendly JSON output.}';
+    protected $signature = 'checkpoint:pitr-readiness {target? : PITR target datetime (defaults to now).} {--format=table : Output format: table or json.} {--agent : Emit compact AI-agent friendly JSON output.}';
 
     protected $description = 'Evaluate PITR readiness for a target timestamp.';
 
-    protected $aliases = ['db-ops:check:pitr'];
+    protected $aliases = ['checkpoint:check:pitr'];
 
     public function __construct(
         private readonly ConfigValidator $validator,
@@ -33,14 +34,15 @@ final class PitrReadinessCommand extends Command
 
     public function handle(): int
     {
-        if ($this->enhancedInteractiveMode() && ! (bool) $this->option('agent')) {
+        $agentMode = (bool) $this->option('agent');
+
+        if ($this->enhancedInteractiveMode() && ! $agentMode) {
             note('What: evaluate whether PITR prerequisites are currently satisfied.');
             note('When: before relying on point-in-time recovery in real incidents.');
-            note('Next: remediate failing checks, then rerun db-ops:check:pitr.');
+            note('Next: remediate failing checks, then rerun checkpoint:check:pitr.');
         }
 
         $format = $this->stringOption('format') ?? 'table';
-        $agentMode = (bool) $this->option('agent');
         $target = $this->argument('target');
         $targetInput = is_string($target) ? $target : null;
 

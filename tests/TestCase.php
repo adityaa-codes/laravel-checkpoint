@@ -151,6 +151,90 @@ class TestCase extends Orchestra
                     'inline_bytes' => 2048,
                 ],
             ],
+            'gates' => [
+                'override_profile' => null,
+                'default_profile' => 'production',
+                'environment_profile_map' => [
+                    'local' => 'local',
+                    'testing' => 'local',
+                    'staging' => 'staging',
+                    'production' => 'production',
+                ],
+                'code_map' => [
+                    'pass' => 0,
+                    'warn' => 2,
+                    'safety_fail' => 10,
+                    'evidence_fail' => 11,
+                    'policy_error' => 12,
+                ],
+                'profiles' => [
+                    'local' => [
+                        'exit_on_warn' => false,
+                        'safety' => [
+                            'fail_on_statuses' => ['fail'],
+                            'fail_on_warning_codes' => [],
+                        ],
+                        'evidence' => [
+                            'enabled' => false,
+                            'fail_on_codes' => [
+                                'restore.post_verification',
+                                'backup_drill.latest_run',
+                                'backup_drill.pass_rate',
+                                'verification.runs',
+                            ],
+                            'max_restore_verification_age_days' => 0,
+                        ],
+                    ],
+                    'staging' => [
+                        'exit_on_warn' => false,
+                        'safety' => [
+                            'fail_on_statuses' => ['fail'],
+                            'fail_on_warning_codes' => [
+                                'restore.posture.environments',
+                                'restore.posture.databases',
+                                'restore.posture.ci_bypass',
+                                'restore.posture.verified_backup',
+                                'queue.orphaned_runs',
+                                'config.validation',
+                            ],
+                        ],
+                        'evidence' => [
+                            'enabled' => true,
+                            'fail_on_codes' => [
+                                'restore.post_verification',
+                                'backup_drill.latest_run',
+                                'backup_drill.pass_rate',
+                                'verification.runs',
+                            ],
+                            'max_restore_verification_age_days' => 14,
+                        ],
+                    ],
+                    'production' => [
+                        'exit_on_warn' => false,
+                        'safety' => [
+                            'fail_on_statuses' => ['fail'],
+                            'fail_on_warning_codes' => [
+                                'restore.posture.environments',
+                                'restore.posture.databases',
+                                'restore.posture.ci_bypass',
+                                'restore.posture.verified_backup',
+                                'queue.orphaned_runs',
+                                'config.validation',
+                            ],
+                        ],
+                        'evidence' => [
+                            'enabled' => true,
+                            'fail_on_codes' => [
+                                'restore.post_verification',
+                                'backup_drill.latest_run',
+                                'backup_drill.pass_rate',
+                                'verification.runs',
+                            ],
+                            'max_restore_verification_age_days' => 7,
+                        ],
+                    ],
+                ],
+            ],
             'temp_dir' => sys_get_temp_dir().'/checkpoint-tmp',
             'drivers' => [
                 'shell' => [

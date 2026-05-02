@@ -20,13 +20,14 @@
         "illuminate/contracts": "^12.0|^13.0",
         "laravel/prompts": "^0.3",
         "spatie/laravel-package-tools": "^1.16",
-        "symfony/process": "^7.0"
+        "symfony/process": "^7.0|^8.0"
     },
     "require-dev": {
         "driftingly/rector-laravel": "^2.1",
         "infection/infection": "^0.31.0",
         "larastan/larastan": "^3.0",
         "laravel/pint": "^1.14",
+        "nunomaduro/pao": "^1.0",
         "orchestra/testbench": "^10.0|^11.0",
         "pestphp/pest": "^4.0",
         "pestphp/pest-plugin-arch": "^4.0",

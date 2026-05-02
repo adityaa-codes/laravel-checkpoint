@@ -488,14 +488,14 @@ SH
 
     $run = CommandRun::query()->create([
         'operation' => 'replication_sync',
-        'argument_text' => '{"source":"profile:mysql-source","destination":"mysql://[REDACTED]","dry_run":true,"apply":false}',
+        'argument_text' => '{"source":"profile:mysql-local","destination":"profile:mysql-local","dry_run":true,"apply":false}',
         'status' => CommandRunStatus::Pending,
         'attempts' => 0,
         'metadata' => [
             'replication' => [
                 'engine' => 'mysql',
-                'source' => ['kind' => 'config_profile', 'identifier' => 'mysql-source', 'redacted' => 'profile:mysql-source'],
-                'destination' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'mysql://root:secret@db.internal'],
+                'source' => ['kind' => 'config_profile', 'identifier' => 'mysql-local', 'redacted' => 'profile:mysql-local'],
+                'destination' => ['kind' => 'config_profile', 'identifier' => 'mysql-local', 'redacted' => 'profile:mysql-local'],
                 'queue_only' => true,
                 'dry_run_requested' => true,
             ],
@@ -510,7 +510,7 @@ SH
         ->and($run->metadata['replication']['result'] ?? null)->toBe('dry_run_only')
         ->and($run->metadata['replication']['sanity']['method'] ?? null)->toBe('artifact_hash')
         ->and($run->metadata['replication']['sanity']['fallback_reason'] ?? null)->toBe('apply_not_requested_or_dry_run_enforced')
-        ->and($run->metadata['replication']['destination']['redacted'] ?? null)->not->toContain('secret');
+        ->and($run->metadata['replication']['destination']['redacted'] ?? null)->toBe('profile:mysql-local');
 });
 
 it('adds structured failure analysis and debug suggestions for mysql replication dry-run failures', function (): void {
@@ -533,14 +533,14 @@ SH
 
     $run = CommandRun::query()->create([
         'operation' => 'replication_sync',
-        'argument_text' => '{"source":"profile:mysql-source","destination":"mysql://[REDACTED]","dry_run":true,"apply":false}',
+        'argument_text' => '{"source":"profile:mysql-local","destination":"profile:mysql-local","dry_run":true,"apply":false}',
         'status' => CommandRunStatus::Pending,
         'attempts' => 0,
         'metadata' => [
             'replication' => [
                 'engine' => 'mysql',
-                'source' => ['kind' => 'config_profile', 'identifier' => 'mysql-source', 'redacted' => 'profile:mysql-source'],
-                'destination' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'mysql://root:secret@db.internal'],
+                'source' => ['kind' => 'config_profile', 'identifier' => 'mysql-local', 'redacted' => 'profile:mysql-local'],
+                'destination' => ['kind' => 'config_profile', 'identifier' => 'mysql-local', 'redacted' => 'profile:mysql-local'],
                 'queue_only' => true,
                 'dry_run_requested' => true,
             ],
@@ -553,10 +553,96 @@ SH
     expect($run->status)->toBe(CommandRunStatus::Failed)
         ->and($run->command_output)->toContain('[replication_sync:debug]')
         ->and($run->command_output)->toContain('category: auth_credential_failure')
-        ->and($run->metadata['replication']['failure_analysis']['diagnostics']['destination'] ?? null)->toBe('mysql://[REDACTED]@db.internal')
+        ->and($run->metadata['replication']['failure_analysis']['diagnostics']['destination'] ?? null)->toBe('profile:mysql-local')
         ->and($run->metadata['replication']['failure_analysis']['category'] ?? null)->toBe('auth_credential_failure')
         ->and($run->metadata['replication']['failure_analysis']['immediate_fix'] ?? null)->toBeString()
         ->and($run->metadata['replication']['failure_context']['suggestions'][0] ?? null)->toBe($run->metadata['replication']['failure_analysis']['immediate_fix'] ?? null);
+});
+
+it('fails replication_sync when endpoints indicate remote or cross-host semantics', function (): void {
+    $run = CommandRun::query()->create([
+        'operation' => 'replication_sync',
+        'argument_text' => '{"source":"profile:mysql-source","destination":"mysql://[REDACTED]","dry_run":true,"apply":false}',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'metadata' => [
+            'replication' => [
+                'engine' => 'mysql',
+                'source' => ['kind' => 'config_profile', 'identifier' => 'mysql-source', 'redacted' => 'profile:mysql-source'],
+                'destination' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'mysql://[REDACTED]@db.internal'],
+                'queue_only' => true,
+                'dry_run_requested' => true,
+            ],
+        ],
+    ]);
+
+    expect(function () use ($run): void {
+        (new MysqlDriver)->execute($run);
+    })
+        ->toThrow(ConfigurationException::class, 'mysql replication execution currently supports only local/configured endpoint semantics.');
+});
+
+it('blocks mysql replication apply when governance preflight disallows execution-time apply', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-repl-governance-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary mysql replication governance path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    $tempDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-repl-governance-temp-');
+
+    if ($tempDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary mysql replication governance temp path.');
+    }
+
+    unlink($tempDir);
+    mkdir($tempDir, 0755, true);
+
+    config()->set('checkpoint.drivers.mysql.dump_binary', fakeMysqlScript(<<<'SH'
+#!/bin/sh
+for arg in "$@"; do
+  case "$arg" in
+    --result-file=*)
+      target="${arg#--result-file=}"
+      printf 'mysql replication export payload' > "$target"
+      ;;
+  esac
+done
+printf 'dry-run export ok'
+SH
+    ));
+    config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
+    config()->set('checkpoint.temp_dir', $tempDir);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'replication_sync',
+        'argument_text' => '{"source":"profile:mysql-local","destination":"profile:mysql-local","dry_run":false,"apply":true,"force_overwrite":true}',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'metadata' => [
+            'replication' => [
+                'engine' => 'mysql',
+                'source' => ['kind' => 'config_profile', 'identifier' => 'mysql-local', 'redacted' => 'profile:mysql-local'],
+                'destination' => ['kind' => 'config_profile', 'identifier' => 'mysql-local', 'redacted' => 'profile:mysql-local'],
+                'queue_only' => true,
+                'dry_run_requested' => false,
+                'apply_requested' => true,
+                'overwrite_destination' => true,
+                'governance_preflight' => [
+                    'allowed' => false,
+                    'blocked_reasons' => ['outside_change_window'],
+                ],
+            ],
+        ],
+    ]);
+
+    expect(function () use ($run): void {
+        (new MysqlDriver)->execute($run);
+    })
+        ->toThrow(ConfigurationException::class, 'Replication apply is blocked by governance preflight at execution time: outside_change_window.');
 });
 
 it('maps checksum mismatch signatures in replication failure analysis', function (): void {

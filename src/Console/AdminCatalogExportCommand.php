@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 final class AdminCatalogExportCommand extends Command
 {
-    protected $signature = 'db-ops:admin:catalog-export {--output= : Destination file path for exported JSON.}';
+    protected $signature = 'checkpoint:admin:catalog-export {--output= : Destination file path for exported JSON.}';
 
     protected $description = 'Journey command: export restore catalog snapshot.';
 
@@ -18,7 +18,6 @@ final class AdminCatalogExportCommand extends Command
             '--output' => $this->option('output'),
         ], static fn (mixed $value): bool => $value !== null && $value !== '');
 
-        return $this->call('db-ops:catalog-export', $parameters);
+        return $this->call('checkpoint:catalog-export', $parameters);
     }
 }
-

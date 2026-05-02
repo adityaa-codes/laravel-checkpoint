@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 final class AdminRetentionCommand extends Command
 {
-    protected $signature = 'db-ops:admin:retention
+    protected $signature = 'checkpoint:admin:retention
         {--format=table : Output format: table or json.}
         {--limit=100 : Maximum number of candidate rows to evaluate.}
         {--dry-run : Preview retention decisions without deleting records.}
@@ -25,6 +25,6 @@ final class AdminRetentionCommand extends Command
             '--apply' => (bool) $this->option('apply') ? true : null,
         ], static fn (mixed $value): bool => $value !== null);
 
-        return $this->call('db-ops:retention-policy', $parameters);
+        return $this->call('checkpoint:retention-policy', $parameters);
     }
 }

@@ -118,7 +118,7 @@ final readonly class OperationalReportBuilder
     }
 
     /**
-     * @param  array{command_run_counts:array{pending_runs:int,running_runs:int,failed_runs_24h:int},drill_window_days:int,drill_summary:array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int},last_known_good:?CommandRun,latest_verified:?CommandRun,latest_restore_failure:?CommandRun,latest_restore_run:?CommandRun}  $snapshot
+     * @param  array{command_run_counts:array{pending_runs:int,running_runs:int,failed_runs_24h:int},drill_window_days:int,drill_summary:array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int},last_known_good:?CommandRun,latest_verified:?CommandRun,latest_restore_failure:?CommandRun,latest_restore_run:?CommandRun,latest_failed_run:?CommandRun}  $snapshot
      * @return array<string, mixed>
      */
     private function summaryFromSnapshot(array $snapshot): array
@@ -132,6 +132,7 @@ final readonly class OperationalReportBuilder
             'pending_runs' => $commandRunCounts['pending_runs'],
             'running_runs' => $commandRunCounts['running_runs'],
             'failed_runs_24h' => $commandRunCounts['failed_runs_24h'],
+            'latest_failed_run' => $this->latestFailedRunPayload($snapshot['latest_failed_run']),
             'last_known_good_backup' => $this->summarySignalPayload($snapshot['last_known_good'], 'last_known_good_at'),
             'latest_verified_backup' => $this->summarySignalPayload($snapshot['latest_verified'], 'verified_at'),
             'latest_backup_drill' => $this->drillPayload($drillSummary['latest']),
@@ -224,7 +225,7 @@ final readonly class OperationalReportBuilder
     }
 
     /**
-     * @param  array{command_run_counts:array{pending_runs:int,running_runs:int,failed_runs_24h:int},drill_window_days:int,drill_summary:array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int},last_known_good:?CommandRun,latest_verified:?CommandRun,latest_restore_failure:?CommandRun,latest_restore_run:?CommandRun}  $snapshot
+     * @param  array{command_run_counts:array{pending_runs:int,running_runs:int,failed_runs_24h:int},drill_window_days:int,drill_summary:array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int},last_known_good:?CommandRun,latest_verified:?CommandRun,latest_restore_failure:?CommandRun,latest_restore_run:?CommandRun,latest_failed_run:?CommandRun}  $snapshot
      * @return list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>
      */
     private function healthChecksFromSnapshot(array $snapshot): array
@@ -327,7 +328,7 @@ final readonly class OperationalReportBuilder
     }
 
     /**
-     * @return array{command_run_counts:array{pending_runs:int,running_runs:int,failed_runs_24h:int},drill_window_days:int,drill_summary:array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int},last_known_good:?CommandRun,latest_verified:?CommandRun,latest_restore_failure:?CommandRun,latest_restore_run:?CommandRun}
+     * @return array{command_run_counts:array{pending_runs:int,running_runs:int,failed_runs_24h:int},drill_window_days:int,drill_summary:array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int},last_known_good:?CommandRun,latest_verified:?CommandRun,latest_restore_failure:?CommandRun,latest_restore_run:?CommandRun,latest_failed_run:?CommandRun}
      */
     private function summarySnapshot(): array
     {
@@ -361,6 +362,12 @@ final readonly class OperationalReportBuilder
                 ->whereIn('operation', $restoreOperations)
                 ->latest('finished_at')
                 ->latest('started_at')
+                ->latest('id')
+                ->first(),
+            'latest_failed_run' => CommandRun::query()
+                ->select($this->failedRunSummaryColumns())
+                ->where('status', CommandRunStatus::Failed)
+                ->latest('finished_at')
                 ->latest('id')
                 ->first(),
         ];
@@ -417,6 +424,43 @@ final readonly class OperationalReportBuilder
     }
 
     /**
+     * @return array{label:string,timestamp:string|null,operation:string|null,status:string|null,exit_code:int|null,failure_reason:string|null,next_action:string|null}
+     */
+    private function latestFailedRunPayload(?CommandRun $run): array
+    {
+        if (! $run instanceof CommandRun) {
+            return [
+                'label' => '-',
+                'timestamp' => null,
+                'operation' => null,
+                'status' => null,
+                'exit_code' => null,
+                'failure_reason' => null,
+                'next_action' => null,
+            ];
+        }
+
+        $timestamp = $run->finished_at ?? $run->started_at;
+        $reason = $this->resolveFailureReason($run);
+        $nextAction = $this->nextActionForFailure($run, $reason);
+
+        return [
+            'label' => sprintf(
+                '%s [failed] (exit: %s)%s',
+                $run->operation,
+                $run->exit_code !== null ? (string) $run->exit_code : '-',
+                $timestamp instanceof Carbon ? ' at '.$timestamp->format('Y-m-d H:i:s') : '',
+            ),
+            'timestamp' => $timestamp?->format('Y-m-d H:i:s'),
+            'operation' => $run->operation,
+            'status' => (string) $run->status->value,
+            'exit_code' => $run->exit_code,
+            'failure_reason' => $reason,
+            'next_action' => $nextAction,
+        ];
+    }
+
+    /**
      * @return array{label:string,timestamp:string|null,operation:string|null,target:string|null}
      */
     private function restoreFailurePayload(?CommandRun $run): array
@@ -442,6 +486,53 @@ final readonly class OperationalReportBuilder
             'operation' => $run->operation,
             'target' => $target,
         ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function failedRunSummaryColumns(): array
+    {
+        return [
+            'id',
+            'operation',
+            'status',
+            'exit_code',
+            'command_output',
+            'started_at',
+            'finished_at',
+            'metadata',
+        ];
+    }
+
+    private function resolveFailureReason(CommandRun $run): ?string
+    {
+        if (is_string($run->command_output) && trim($run->command_output) !== '') {
+            $line = trim(strtok($run->command_output, "\n") ?: '');
+
+            if ($line !== '') {
+                return mb_substr($line, 0, 240);
+            }
+        }
+
+        if ($run->exit_code !== null) {
+            return sprintf('Command exited with code %d.', $run->exit_code);
+        }
+
+        return null;
+    }
+
+    private function nextActionForFailure(CommandRun $run, ?string $reason): string
+    {
+        if (
+            $run->operation === 'logical_backup'
+            && is_string($reason)
+            && str_contains($reason, 'No shell command configured')
+        ) {
+            return 'Set DB_OPS_CMD_LOGICAL_BACKUP, then run php artisan checkpoint:enqueue-backup.';
+        }
+
+        return 'Run php artisan checkpoint:report --limit=10 --format=json for full failure context.';
     }
 
     /**
@@ -711,7 +802,7 @@ final readonly class OperationalReportBuilder
                 $recentOutcomes[] = [
                     'run_uuid' => $run->run_uuid,
                     'result' => $result,
-                        'executed_at' => $run->executed_at->format('Y-m-d H:i:s'),
+                    'executed_at' => $run->executed_at->format('Y-m-d H:i:s'),
                 ];
             }
         }
@@ -1679,7 +1770,7 @@ final readonly class OperationalReportBuilder
             ? [
                 sprintf('command -v %s', $trimmedBinary !== '' ? $trimmedBinary : '<binary>'),
                 sprintf('export %s=/absolute/path/to/%s', $envKey, $trimmedBinary !== '' ? basename($trimmedBinary) : '<binary>'),
-                'php artisan db-ops:doctor --format=json',
+                'php artisan checkpoint:doctor --format=json',
             ]
             : [];
 

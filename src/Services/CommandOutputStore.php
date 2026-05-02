@@ -93,7 +93,7 @@ final readonly class CommandOutputStore
             return;
         }
 
-        if (file_put_contents($session['temp_path'], $chunk, FILE_APPEND) === false) {
+        if (@file_put_contents($session['temp_path'], $chunk, FILE_APPEND) === false) {
             throw new ConfigurationException('Unable to append command output to temporary storage.');
         }
     }
@@ -120,7 +120,7 @@ final readonly class CommandOutputStore
             return $this->persist($run, $capturedOutput);
         }
 
-        $stream = fopen($session['temp_path'], 'rb');
+        $stream = @fopen($session['temp_path'], 'rb');
 
         if (! is_resource($stream)) {
             $this->discardCapture($session);

@@ -12,16 +12,23 @@ it('renders a machine-readable operational report', function (): void {
     config()->set('checkpoint.observability.backup_drill_pass_rate_window_days', 14);
     OperatorCommandTestSupport::seedOperatorSummaryState();
 
-    Artisan::call('db-ops:report', ['--limit' => 2, '--format' => 'json']);
+    Artisan::call('checkpoint:report', ['--limit' => 2, '--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
         ->and($report['version'])->toBe(2)
         ->and($report['surface'])->toBe('report')
+        ->and($report['mode'])->toBe('full')
         ->and($report['driver'])->toBe('shell')
         ->and($report['limit_requested'])->toBe(2)
         ->and($report['limit'])->toBe(2)
+        ->and($report['last_failed_run'])->toMatchArray([
+            'operation' => 'logical_restore_file',
+            'status' => 'failed',
+            'exit_code' => 1,
+            'failure_reason' => 'Command exited with code 1.',
+        ])
         ->and($report['recent_runs'])->toHaveCount(2)
         ->and($report['recent_runs'][0])->toMatchArray([
             'id' => 3,
@@ -119,14 +126,18 @@ it('returns a failed report when config validation fails', function (): void {
     config()->set('checkpoint.queue.retry_after', 300);
     config()->set('checkpoint.table_prefix', 'broken_');
 
-    $exitCode = Artisan::call('db-ops:report', ['--format' => 'json']);
+    $exitCode = Artisan::call('checkpoint:report', ['--format' => 'json']);
     $report = json_decode(Artisan::output(), true);
 
-    expect($exitCode)->toBe(1)
+    expect($exitCode)->toBe(10)
         ->and($report)->toBeArray()
         ->and($report['version'])->toBe(2)
         ->and($report['surface'])->toBe('report')
-        ->and($report)->toHaveKeys(['generated_at', 'driver', 'recent_runs', 'summary', 'verification', 'health'])
+        ->and($report)->toHaveKeys(['generated_at', 'driver', 'recent_runs', 'summary', 'verification', 'health', 'gates'])
+        ->and($report['gates'])->toMatchArray([
+            'failed_gate' => 'safety',
+            'exit_code' => 10,
+        ])
         ->and($report['recent_runs'])->toBeArray()
         ->and($report['summary'])->toBeArray()
         ->and($report['verification'])->toMatchArray([
@@ -144,12 +155,27 @@ it('returns a failed report when config validation fails', function (): void {
         ]);
 });
 
+it('returns evidence gate exit code when staging profile evidence is degraded', function (): void {
+    $exitCode = Artisan::call('checkpoint:report', ['--limit' => 2, '--agent' => true, '--policy-profile' => 'staging']);
+    $report = json_decode(Artisan::output(), true);
+
+    expect($exitCode)->toBe(11)
+        ->and($report)->toBeArray()
+        ->and($report['data']['gates'])->toMatchArray([
+            'profile' => 'staging',
+            'profile_source' => 'override',
+            'failed_gate' => 'evidence',
+            'verdict' => 'fail',
+            'exit_code' => 11,
+        ]);
+});
+
 it('caps operational report recent runs to the configured reporting limit', function (): void {
     OperatorCommandTestSupport::freezeTime();
     OperatorCommandTestSupport::seedOperatorSummaryState();
     config()->set('checkpoint.reporting.max_recent_runs', 1);
 
-    Artisan::call('db-ops:report', ['--limit' => 50, '--format' => 'json']);
+    Artisan::call('checkpoint:report', ['--limit' => 50, '--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
 
@@ -163,7 +189,7 @@ it('renders report in table format by default', function (): void {
     OperatorCommandTestSupport::freezeTime();
     OperatorCommandTestSupport::seedOperatorSummaryState();
 
-    checkpoint_artisan('db-ops:report --limit=2')
+    checkpoint_artisan('checkpoint:report --limit=2')
         ->expectsOutputToContain('Driver')
         ->expectsOutputToContain('Recent runs returned')
         ->expectsOutputToContain('Health OK')
@@ -171,13 +197,30 @@ it('renders report in table format by default', function (): void {
         ->expectsOutputToContain('Latest restore post-verification')
         ->expectsOutputToContain('Check')
         ->expectsOutputToContain('Status')
+        ->expectsOutputToContain('Suppressed')
+        ->assertSuccessful();
+
+    OperatorCommandTestSupport::resetTime();
+});
+
+it('renders triage-first brief report output with cause and action', function (): void {
+    OperatorCommandTestSupport::freezeTime();
+    OperatorCommandTestSupport::seedOperatorSummaryState();
+
+    checkpoint_artisan('checkpoint:report --limit=2 --brief')
+        ->expectsOutputToContain('Checkpoint report (brief)')
+        ->expectsOutputToContain('Failed runs (24h): 1')
+        ->expectsOutputToContain('P0: ')
+        ->expectsOutputToContain('Last failed: logical_restore_file [failed] (exit: 1) at 2026-03-11 11:42:00')
+        ->expectsOutputToContain('Cause: Command exited with code 1.')
+        ->expectsOutputToContain('Action now: Run php artisan checkpoint:report --limit=10 --format=json for full failure context.')
         ->assertSuccessful();
 
     OperatorCommandTestSupport::resetTime();
 });
 
 it('fails for unsupported report output formats', function (): void {
-    checkpoint_artisan('db-ops:report --format=xml')
+    checkpoint_artisan('checkpoint:report --format=xml')
         ->expectsOutput('The --format option must be table or json.')
         ->assertFailed();
 });
@@ -186,7 +229,7 @@ it('renders compact agent-friendly report output', function (): void {
     OperatorCommandTestSupport::freezeTime();
     OperatorCommandTestSupport::seedOperatorSummaryState();
 
-    Artisan::call('db-ops:report', ['--limit' => 2, '--agent' => true]);
+    Artisan::call('checkpoint:report', ['--limit' => 2, '--agent' => true]);
 
     $report = json_decode(Artisan::output(), true);
 
@@ -196,6 +239,8 @@ it('renders compact agent-friendly report output', function (): void {
         ->and($report['result'])->toBeString()
         ->and($report['code'])->toBeString()
         ->and($report['summary'])->toBeString()
+        ->and($report['compact'])->toBeArray()
+        ->and($report['compact'])->toHaveKeys(['verdict', 'severity', 'top_issue', 'next_action', 'exit_code'])
         ->and($report['data']['driver'])->toBe('shell')
         ->and($report['data']['limit_requested'])->toBe(2)
         ->and($report['data']['limit'])->toBe(2)
@@ -265,7 +310,7 @@ it('provides driver repository and stanza breakdown groups in json report output
         'updated_at' => now()->subHours(2),
     ]);
 
-    Artisan::call('db-ops:report', ['--limit' => 10, '--format' => 'json']);
+    Artisan::call('checkpoint:report', ['--limit' => 10, '--format' => 'json']);
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()

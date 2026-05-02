@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 final class DoReplicateCommand extends Command
 {
-    protected $signature = 'db-ops:do:replicate
+    protected $signature = 'checkpoint:do:replicate
         {source? : Source endpoint (profile:<id>, DSN, or key=value pairs)}
         {destination? : Destination endpoint (profile:<id>, DSN, or key=value pairs)}
         {--source= : Source endpoint override}
@@ -31,7 +31,6 @@ final class DoReplicateCommand extends Command
             '--critical-table' => $this->option('critical-table'),
         ], static fn (mixed $value): bool => $value !== null);
 
-        return $this->call('db-ops:replicate', $parameters);
+        return $this->call('checkpoint:replicate', $parameters);
     }
 }
-

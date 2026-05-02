@@ -17,6 +17,13 @@
             "finished_at": null
         }
     ],
+    "gates": {
+        "profile": "local",
+        "profile_source": "environment",
+        "verdict": "pass",
+        "failed_gate": "none",
+        "exit_code": 0
+    },
     "version": 1,
     "surface": "status"
 }

@@ -42,7 +42,7 @@ it('evaluates retention policy in dry-run mode with tiered windows', function ()
         'updated_at' => now()->subDays(500),
     ]);
 
-    Artisan::call('db-ops:retention-policy', ['--format' => 'json', '--dry-run' => true, '--limit' => 100]);
+    Artisan::call('checkpoint:retention-policy', ['--format' => 'json', '--dry-run' => true, '--limit' => 100]);
 
     $payload = json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR);
 
@@ -97,7 +97,7 @@ it('applies retention policy and prunes matching rows and externalized output', 
         'updated_at' => now()->subDays(5),
     ]);
 
-    Artisan::call('db-ops:retention-policy', ['--format' => 'json', '--apply' => true, '--limit' => 100]);
+    Artisan::call('checkpoint:retention-policy', ['--format' => 'json', '--apply' => true, '--limit' => 100]);
 
     $payload = json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR);
 
@@ -113,11 +113,11 @@ it('applies retention policy and prunes matching rows and externalized output', 
 });
 
 it('fails for invalid retention policy options', function (): void {
-    checkpoint_artisan('db-ops:retention-policy --format=csv')
+    checkpoint_artisan('checkpoint:retention-policy --format=csv')
         ->expectsOutput('The --format option must be table or json.')
         ->assertFailed();
 
-    checkpoint_artisan('db-ops:retention-policy --dry-run --apply')
+    checkpoint_artisan('checkpoint:retention-policy --dry-run --apply')
         ->expectsOutput('Use either --dry-run or --apply, not both.')
         ->assertFailed();
 });

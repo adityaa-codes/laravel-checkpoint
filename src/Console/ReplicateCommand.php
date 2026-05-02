@@ -7,6 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 use AdityaaCodes\LaravelCheckpoint\Actions\BuildReplicationCommandPayloadAction;
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
 use Illuminate\Console\Command;
 use Throwable;
 
@@ -21,7 +22,7 @@ final class ReplicateCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'db-ops:replicate
+    protected $signature = 'checkpoint:replicate
         {source? : Source endpoint (profile:<id>, DSN, or key=value pairs)}
         {destination? : Destination endpoint (profile:<id>, DSN, or key=value pairs)}
         {--source= : Source endpoint override}
@@ -32,7 +33,7 @@ final class ReplicateCommand extends Command
 
     protected $description = 'Queue a replication sync run with conservative defaults.';
 
-    protected $aliases = ['db-ops:do:replicate'];
+    protected $aliases = ['checkpoint:do:replicate'];
 
     public function handle(
         EnqueueCommandRunAction $enqueueCommandRun,
@@ -44,7 +45,7 @@ final class ReplicateCommand extends Command
                 note('Default mode is dry-run. Use apply mode only after validation.');
                 note('What: queue replication diff/apply workflow between endpoints.');
                 note('When: controlled data sync or migration scenarios.');
-                note('Next: run db-ops:do:status to monitor replication execution.');
+                note('Next: run checkpoint:do:status to monitor replication execution.');
             }
 
             $applyRequested = (bool) $this->option('apply');
@@ -109,6 +110,15 @@ final class ReplicateCommand extends Command
 
         if (is_string($argument) && trim($argument) !== '') {
             return trim($argument);
+        }
+
+        if ($this->input !== null && ! $this->input->isInteractive()) {
+            throw new InvalidArgumentException(sprintf(
+                'Replication %s endpoint is required in non-interactive mode. Pass --%s=... or the positional %s argument.',
+                $role,
+                $role,
+                $role,
+            ));
         }
 
         if (app()->runningUnitTests()) {

@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 final class DoRestoreFileCommand extends Command
 {
-    protected $signature = 'db-ops:do:restore:file {file : Backup file path or label to restore}';
+    protected $signature = 'checkpoint:do:restore:file {file : Backup file path or label to restore}';
 
     protected $description = 'Journey command: restore a specific logical backup file.';
 
@@ -22,7 +22,7 @@ final class DoRestoreFileCommand extends Command
             return self::INVALID;
         }
 
-        return $this->call('db-ops:enqueue', [
+        return $this->call('checkpoint:enqueue', [
             'operation' => 'logical_restore_file',
             '--argument' => $file,
         ]);

@@ -8,11 +8,11 @@ use Illuminate\Console\Command;
 
 final class DoInstallCommand extends Command
 {
-    protected $signature = 'db-ops:do:install
+    protected $signature = 'checkpoint:do:install
         {--preset= : Installation preset (minimal, postgres-prod, mysql-prod).}
         {--skip-publish : Skip publishing package config and migrations.}
         {--skip-migrate : Skip running migrations.}
-        {--skip-doctor : Skip db-ops:doctor health checks.}
+        {--skip-doctor : Skip checkpoint:doctor health checks.}
         {--write-env : Persist selected preset values into the app environment file.}
         {--force : Force vendor publish overwrite.}';
 
@@ -29,6 +29,6 @@ final class DoInstallCommand extends Command
             '--force' => (bool) $this->option('force') ? true : null,
         ], static fn (mixed $value): bool => $value !== null);
 
-        return $this->call('db-ops:install', $parameters);
+        return $this->call('checkpoint:install', $parameters);
     }
 }

@@ -448,7 +448,6 @@ it('requires an explicit pgbackrest backup label when verified backup enforcemen
         );
 });
 
-
 it('records append-only restore decision evidence for blocked restore checks', function (): void {
     config()->set('app.env', 'production');
     config()->set('checkpoint.restore.allowed_environments', ['staging']);

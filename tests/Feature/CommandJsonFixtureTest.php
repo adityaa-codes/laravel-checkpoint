@@ -9,7 +9,7 @@ it('matches the status runs json fixture', function (): void {
     CommandJsonFixtureSupport::freezeTime();
     CommandJsonFixtureSupport::seedStatusRuns();
 
-    Artisan::call('db-ops:status', ['--limit' => 1, '--format' => 'json']);
+    Artisan::call('checkpoint:status', ['--limit' => 1, '--format' => 'json']);
 
     checkpoint_assert_matches_fixture(
         json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR),
@@ -23,7 +23,7 @@ it('matches the status summary json fixture', function (): void {
     CommandJsonFixtureSupport::freezeTime();
     CommandJsonFixtureSupport::seedOperatorState();
 
-    Artisan::call('db-ops:status', ['--summary' => true, '--format' => 'json']);
+    Artisan::call('checkpoint:status', ['--summary' => true, '--format' => 'json']);
 
     checkpoint_assert_matches_fixture(
         json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR),
@@ -40,7 +40,7 @@ it('matches the doctor json fixture', function (): void {
     CommandJsonFixtureSupport::seedOperatorState();
 
     CommandJsonFixtureSupport::withEmptyPath(function (): void {
-        Artisan::call('db-ops:doctor', ['--format' => 'json']);
+        Artisan::call('checkpoint:doctor', ['--format' => 'json']);
     });
 
     checkpoint_assert_matches_fixture(
@@ -56,7 +56,7 @@ it('matches the failed doctor json fixture', function (): void {
     config()->set('checkpoint.queue.timeout', 3600);
     config()->set('checkpoint.queue.retry_after', 300);
 
-    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+    Artisan::call('checkpoint:doctor', ['--format' => 'json']);
 
     checkpoint_assert_matches_fixture(
         json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR),
@@ -72,7 +72,7 @@ it('matches the operational report json fixture', function (): void {
     CommandJsonFixtureSupport::seedOperatorState();
 
     CommandJsonFixtureSupport::withEmptyPath(function (): void {
-        Artisan::call('db-ops:report', ['--limit' => 2, '--format' => 'json']);
+        Artisan::call('checkpoint:report', ['--limit' => 2, '--format' => 'json']);
     });
 
     checkpoint_assert_matches_fixture(
@@ -88,7 +88,7 @@ it('matches the failed operational report json fixture', function (): void {
     config()->set('checkpoint.queue.timeout', 3600);
     config()->set('checkpoint.queue.retry_after', 300);
 
-    Artisan::call('db-ops:report', ['--limit' => 2, '--format' => 'json']);
+    Artisan::call('checkpoint:report', ['--limit' => 2, '--format' => 'json']);
 
     checkpoint_assert_matches_fixture(
         json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR),
@@ -102,7 +102,7 @@ it('matches the catalog export json fixture', function (): void {
     CommandJsonFixtureSupport::freezeTime();
     CommandJsonFixtureSupport::seedCatalogExports();
 
-    Artisan::call('db-ops:catalog-export', ['--format' => 'json', '--limit' => 10]);
+    Artisan::call('checkpoint:catalog-export', ['--format' => 'json', '--limit' => 10]);
 
     checkpoint_assert_matches_fixture(
         json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR),
@@ -116,7 +116,7 @@ it('matches the pitr readiness json fixture', function (): void {
     CommandJsonFixtureSupport::freezeTime();
     CommandJsonFixtureSupport::seedPitrReadinessState();
 
-    Artisan::call('db-ops:pitr-readiness', ['target' => '2026-03-11 11:30:00', '--format' => 'json']);
+    Artisan::call('checkpoint:pitr-readiness', ['target' => '2026-03-11 11:30:00', '--format' => 'json']);
 
     checkpoint_assert_matches_fixture(
         json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR),

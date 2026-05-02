@@ -12,7 +12,7 @@ it('queues dry-run replication when endpoints are provided as arguments', functi
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    checkpoint_artisan('db-ops:replicate profile:pg-source profile:pg-destination')
+    checkpoint_artisan('checkpoint:replicate profile:pg-source profile:pg-destination')
         ->expectsOutput('Queued Replication Sync run #1.')
         ->assertSuccessful();
 
@@ -39,7 +39,7 @@ it('prompts for missing source and destination endpoints using hidden input', fu
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    checkpoint_artisan('db-ops:replicate')
+    checkpoint_artisan('checkpoint:replicate')
         ->expectsQuestion('Enter source replication endpoint', 'profile:pg-source')
         ->expectsQuestion('Enter destination replication endpoint', 'profile:pg-destination')
         ->expectsOutput('Queued Replication Sync run #1.')
@@ -53,12 +53,40 @@ it('prompts for missing source and destination endpoints using hidden input', fu
         ->and($payload['dry_run'] ?? null)->toBeTrue();
 });
 
+it('fails deterministically in non-interactive mode when source is missing', function (): void {
+    Bus::fake();
+
+    checkpoint_artisan('checkpoint:replicate', [
+        '--no-interaction' => true,
+        '--destination' => 'profile:pg-destination',
+    ])
+        ->expectsOutput('Replication source endpoint is required in non-interactive mode. Pass --source=... or the positional source argument.')
+        ->assertFailed();
+
+    expect(CommandRun::query()->count())->toBe(0);
+    Bus::assertNothingDispatched();
+});
+
+it('fails deterministically in non-interactive mode when destination is missing', function (): void {
+    Bus::fake();
+
+    checkpoint_artisan('checkpoint:replicate', [
+        '--no-interaction' => true,
+        '--source' => 'profile:pg-source',
+    ])
+        ->expectsOutput('Replication destination endpoint is required in non-interactive mode. Pass --destination=... or the positional destination argument.')
+        ->assertFailed();
+
+    expect(CommandRun::query()->count())->toBe(0);
+    Bus::assertNothingDispatched();
+});
+
 it('queues apply mode with force-overwrite and explicit critical tables', function (): void {
     Bus::fake();
     Event::fake([BackupQueued::class]);
     config()->set('checkpoint.replication.allowlisted_destinations', ['profile:pg-destination']);
 
-    checkpoint_artisan('db-ops:replicate --source=profile:pg-source --destination=profile:pg-destination --apply --force-overwrite --critical-table=users --critical-table=orders')
+    checkpoint_artisan('checkpoint:replicate --source=profile:pg-source --destination=profile:pg-destination --apply --force-overwrite --critical-table=users --critical-table=orders')
         ->expectsOutput('Queued Replication Sync run #1.')
         ->assertSuccessful();
 
@@ -82,7 +110,7 @@ it('uses configured critical table fallback when option is omitted', function ()
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    checkpoint_artisan('db-ops:replicate profile:pg-source profile:pg-destination')
+    checkpoint_artisan('checkpoint:replicate profile:pg-source profile:pg-destination')
         ->expectsOutput('Queued Replication Sync run #1.')
         ->assertSuccessful();
 
@@ -96,7 +124,7 @@ it('uses configured critical table fallback when option is omitted', function ()
 it('surfaces parser validation errors from invalid replication input', function (): void {
     Bus::fake();
 
-    checkpoint_artisan('db-ops:replicate --source=invalid-source --destination=profile:pg-destination')
+    checkpoint_artisan('checkpoint:replicate --source=invalid-source --destination=profile:pg-destination')
         ->expectsOutput('Replication endpoint must be one of: profile:<id>, <engine>:// DSN, or key=value pairs.')
         ->assertFailed();
 
@@ -108,7 +136,7 @@ it('uses option values over positional arguments when both are present', functio
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    checkpoint_artisan('db-ops:replicate invalid-source invalid-destination --source=profile:pg-source --destination=profile:pg-destination')
+    checkpoint_artisan('checkpoint:replicate invalid-source invalid-destination --source=profile:pg-source --destination=profile:pg-destination')
         ->expectsOutput('Queued Replication Sync run #1.')
         ->assertSuccessful();
 
@@ -122,7 +150,7 @@ it('uses option values over positional arguments when both are present', functio
 it('fails when apply mode is requested with empty critical-table values', function (): void {
     Bus::fake();
 
-    checkpoint_artisan('db-ops:replicate --source=profile:pg-source --destination=profile:pg-destination --apply --critical-table=')
+    checkpoint_artisan('checkpoint:replicate --source=profile:pg-source --destination=profile:pg-destination --apply --critical-table=')
         ->expectsOutput('Critical tables must be non-empty strings.')
         ->assertFailed();
 
@@ -139,7 +167,7 @@ it('fails apply mode when destination is outside replication governance allowlis
     ]);
     config()->set('checkpoint.replication.allowlisted_destinations', ['staging-replica']);
 
-    checkpoint_artisan('db-ops:replicate --source=profile:pg-source --destination=profile:prod-destination --apply')
+    checkpoint_artisan('checkpoint:replicate --source=profile:pg-source --destination=profile:prod-destination --apply')
         ->expectsOutput('Replication apply is blocked by governance preflight: destination_not_allowlisted.')
         ->assertFailed();
 

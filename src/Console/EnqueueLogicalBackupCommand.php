@@ -9,36 +9,26 @@ use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use Illuminate\Console\Command;
 use Throwable;
 
-use function Laravel\Prompts\intro;
-use function Laravel\Prompts\note;
-use function Laravel\Prompts\outro;
-
 final class EnqueueLogicalBackupCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'db-ops:enqueue-backup';
+    protected $signature = 'checkpoint:enqueue-backup';
 
     protected $description = 'Queue a logical backup command run.';
 
-    protected $aliases = ['db-ops:do:backup'];
+    protected $aliases = ['checkpoint:do:backup'];
 
     public function handle(EnqueueCommandRunAction $enqueueCommandRun): int
     {
         try {
-            if ($this->enhancedInteractiveMode()) {
-                intro('Queue Logical Backup');
-                note('What: enqueue one logical backup run.');
-                note('When: daily operations and post-deploy backup smoke checks.');
-                note('Next: run db-ops:do:status to monitor the run.');
-            }
-
             $run = $enqueueCommandRun->execute('logical_backup');
 
             $message = $this->queuedMessage((int) $run->getKey());
 
             if ($this->enhancedInteractiveMode()) {
-                outro($message);
+                \Laravel\Prompts\info($message);
+                \Laravel\Prompts\note('Monitor progress: php artisan checkpoint:do:status');
             } else {
                 $this->promptInfo($message);
             }
@@ -70,5 +60,4 @@ final class EnqueueLogicalBackupCommand extends Command
 
         return (string) $message;
     }
-
 }

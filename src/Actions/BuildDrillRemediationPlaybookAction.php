@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Actions;
 
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
-use Illuminate\Support\Carbon;
 
 final readonly class BuildDrillRemediationPlaybookAction
 {
@@ -62,8 +61,8 @@ final readonly class BuildDrillRemediationPlaybookAction
                 title: 'No backup drill evidence available',
                 summary: 'No backup drill run is recorded. Schedule and record a drill run before relying on restore readiness.',
                 recommendedCommands: [
-                    'db-ops:enqueue-drill',
-                    'db-ops:record-drill --run-uuid=<uuid> --overall-result=pass --executed-at="<iso-8601>"',
+                    'checkpoint:enqueue-drill',
+                    'checkpoint:record-drill --run-uuid=<uuid> --overall-result=pass --executed-at="<iso-8601>"',
                 ],
                 steps: [
                     'Queue and execute a backup drill immediately.',
@@ -81,8 +80,8 @@ final readonly class BuildDrillRemediationPlaybookAction
                 title: 'Backup drill evidence is stale',
                 summary: sprintf('Latest drill run %s is %d day(s) old and exceeds the %d-day freshness target.', (string) $latestRunUuid, (int) $latestAgeDays, $maxAgeDays),
                 recommendedCommands: [
-                    'db-ops:enqueue-drill',
-                    'db-ops:doctor --format=json',
+                    'checkpoint:enqueue-drill',
+                    'checkpoint:doctor --format=json',
                 ],
                 steps: [
                     'Run a fresh backup drill and confirm it completes.',
@@ -100,8 +99,8 @@ final readonly class BuildDrillRemediationPlaybookAction
                 title: 'Backup drill trend is degrading',
                 summary: 'Recent drill outcomes show a degrading trajectory. Investigate repeated failure patterns before the next restore event.',
                 recommendedCommands: [
-                    'db-ops:report --format=json',
-                    'db-ops:doctor --agent',
+                    'checkpoint:report --format=json',
+                    'checkpoint:doctor --agent',
                 ],
                 steps: [
                     'Inspect the latest failing drill outcomes and identify recurring failure stages.',
@@ -119,8 +118,8 @@ final readonly class BuildDrillRemediationPlaybookAction
                 title: 'Backup drill pass rate is below threshold',
                 summary: sprintf('Drill pass rate is %.1f%% in the last %d day(s), below the configured %.1f%% threshold.', $passRatePercent, $windowDays, $minimumPassRatePercent),
                 recommendedCommands: [
-                    'db-ops:enqueue-drill',
-                    'db-ops:status --summary --format=json',
+                    'checkpoint:enqueue-drill',
+                    'checkpoint:status --summary --format=json',
                 ],
                 steps: [
                     'Run a new drill and validate marker, RTO, and RPO checks.',
@@ -138,7 +137,7 @@ final readonly class BuildDrillRemediationPlaybookAction
                 title: 'Latest backup drill failed',
                 summary: 'The most recent drill run failed even though aggregate trend and pass-rate are currently acceptable.',
                 recommendedCommands: [
-                    'db-ops:report --format=json',
+                    'checkpoint:report --format=json',
                 ],
                 steps: [
                     'Review the latest drill failure reason and remediation notes.',
@@ -154,7 +153,7 @@ final readonly class BuildDrillRemediationPlaybookAction
             title: 'Backup drill posture is healthy',
             summary: 'Drill freshness, trend, and pass-rate are within configured expectations.',
             recommendedCommands: [
-                'db-ops:status --summary',
+                'checkpoint:status --summary',
             ],
             steps: [
                 'Keep drill automation enabled and monitor trend and pass-rate fields.',

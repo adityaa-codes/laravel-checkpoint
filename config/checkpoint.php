@@ -169,6 +169,90 @@ return [
             'inline_bytes' => (int) $env('DB_OPS_OUTPUT_FILESYSTEM_INLINE_BYTES', 2048),
         ],
     ],
+    'gates' => [
+        'override_profile' => $env('DB_OPS_GATE_PROFILE'),
+        'default_profile' => (string) $env('DB_OPS_GATE_DEFAULT_PROFILE', 'production'),
+        'environment_profile_map' => [
+            'local' => (string) $env('DB_OPS_GATE_PROFILE_LOCAL', 'local'),
+            'testing' => (string) $env('DB_OPS_GATE_PROFILE_TESTING', 'local'),
+            'staging' => (string) $env('DB_OPS_GATE_PROFILE_STAGING', 'staging'),
+            'production' => (string) $env('DB_OPS_GATE_PROFILE_PRODUCTION', 'production'),
+        ],
+        'code_map' => [
+            'pass' => (int) $env('DB_OPS_GATE_EXIT_PASS', 0),
+            'warn' => (int) $env('DB_OPS_GATE_EXIT_WARN', 2),
+            'safety_fail' => (int) $env('DB_OPS_GATE_EXIT_SAFETY_FAIL', 10),
+            'evidence_fail' => (int) $env('DB_OPS_GATE_EXIT_EVIDENCE_FAIL', 11),
+            'policy_error' => (int) $env('DB_OPS_GATE_EXIT_POLICY_ERROR', 12),
+        ],
+        'profiles' => [
+            'local' => [
+                'exit_on_warn' => (bool) $env('DB_OPS_GATE_LOCAL_EXIT_ON_WARN', false),
+                'safety' => [
+                    'fail_on_statuses' => ['fail'],
+                    'fail_on_warning_codes' => [],
+                ],
+                'evidence' => [
+                    'enabled' => (bool) $env('DB_OPS_GATE_LOCAL_EVIDENCE_ENABLED', false),
+                    'fail_on_codes' => [
+                        'restore.post_verification',
+                        'backup_drill.latest_run',
+                        'backup_drill.pass_rate',
+                        'verification.runs',
+                    ],
+                    'max_restore_verification_age_days' => (int) $env('DB_OPS_GATE_LOCAL_MAX_RESTORE_VERIFICATION_AGE_DAYS', 0),
+                ],
+            ],
+            'staging' => [
+                'exit_on_warn' => (bool) $env('DB_OPS_GATE_STAGING_EXIT_ON_WARN', false),
+                'safety' => [
+                    'fail_on_statuses' => ['fail'],
+                    'fail_on_warning_codes' => [
+                        'restore.posture.environments',
+                        'restore.posture.databases',
+                        'restore.posture.ci_bypass',
+                        'restore.posture.verified_backup',
+                        'queue.orphaned_runs',
+                        'config.validation',
+                    ],
+                ],
+                'evidence' => [
+                    'enabled' => (bool) $env('DB_OPS_GATE_STAGING_EVIDENCE_ENABLED', true),
+                    'fail_on_codes' => [
+                        'restore.post_verification',
+                        'backup_drill.latest_run',
+                        'backup_drill.pass_rate',
+                        'verification.runs',
+                    ],
+                    'max_restore_verification_age_days' => (int) $env('DB_OPS_GATE_STAGING_MAX_RESTORE_VERIFICATION_AGE_DAYS', 14),
+                ],
+            ],
+            'production' => [
+                'exit_on_warn' => (bool) $env('DB_OPS_GATE_PRODUCTION_EXIT_ON_WARN', false),
+                'safety' => [
+                    'fail_on_statuses' => ['fail'],
+                    'fail_on_warning_codes' => [
+                        'restore.posture.environments',
+                        'restore.posture.databases',
+                        'restore.posture.ci_bypass',
+                        'restore.posture.verified_backup',
+                        'queue.orphaned_runs',
+                        'config.validation',
+                    ],
+                ],
+                'evidence' => [
+                    'enabled' => (bool) $env('DB_OPS_GATE_PRODUCTION_EVIDENCE_ENABLED', true),
+                    'fail_on_codes' => [
+                        'restore.post_verification',
+                        'backup_drill.latest_run',
+                        'backup_drill.pass_rate',
+                        'verification.runs',
+                    ],
+                    'max_restore_verification_age_days' => (int) $env('DB_OPS_GATE_PRODUCTION_MAX_RESTORE_VERIFICATION_AGE_DAYS', 7),
+                ],
+            ],
+        ],
+    ],
     'temp_dir' => $env('DB_OPS_TEMP_DIR', storage_path('app/checkpoint/tmp')),
     'drivers' => [
         'shell' => [

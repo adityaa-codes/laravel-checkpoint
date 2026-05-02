@@ -64,7 +64,7 @@ it('exports backup catalog in machine-readable json', function (): void {
         'finished_at' => now()->subMinute(),
     ]);
 
-    Artisan::call('db-ops:catalog-export', ['--format' => 'json', '--limit' => 10]);
+    Artisan::call('checkpoint:catalog-export', ['--format' => 'json', '--limit' => 10]);
 
     $payload = json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR);
 
@@ -135,7 +135,7 @@ it('exports backup catalog as deterministic csv rows', function (): void {
         'updated_at' => now()->subMinutes(1),
     ]);
 
-    Artisan::call('db-ops:catalog-export', ['--format' => 'csv', '--limit' => 1]);
+    Artisan::call('checkpoint:catalog-export', ['--format' => 'csv', '--limit' => 1]);
 
     $lines = array_values(array_filter(explode(PHP_EOL, trim(Artisan::output())), static fn (string $line): bool => $line !== ''));
 
@@ -214,7 +214,7 @@ it('filters catalog exports by driver repository stanza and window', function ()
         'updated_at' => now()->subHours(30),
     ]);
 
-    Artisan::call('db-ops:catalog-export', [
+    Artisan::call('checkpoint:catalog-export', [
         '--format' => 'json',
         '--driver' => 'pgbackrest',
         '--repository' => '2',
@@ -238,15 +238,15 @@ it('filters catalog exports by driver repository stanza and window', function ()
 });
 
 it('fails for invalid catalog export options', function (): void {
-    checkpoint_artisan('db-ops:catalog-export --format=xml')
+    checkpoint_artisan('checkpoint:catalog-export --format=xml')
         ->expectsOutput('The --format option must be json or csv.')
         ->assertFailed();
 
-    checkpoint_artisan('db-ops:catalog-export --repository=abc')
+    checkpoint_artisan('checkpoint:catalog-export --repository=abc')
         ->expectsOutput('The --repository option must be an integer or "none".')
         ->assertFailed();
 
-    checkpoint_artisan('db-ops:catalog-export --window=0')
+    checkpoint_artisan('checkpoint:catalog-export --window=0')
         ->expectsOutput('The --window option must be a positive integer.')
         ->assertFailed();
 });

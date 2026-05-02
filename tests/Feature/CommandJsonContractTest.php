@@ -41,3 +41,27 @@ it('tracks versions independently per command surface', function (): void {
         'surface' => 'report',
     ]);
 });
+
+it('adds compact block to agent contract payloads', function (): void {
+    $envelope = resolve(CommandJsonContract::class)->envelope('status', [
+        'result' => 'partial',
+        'code' => 'status.summary.degraded',
+        'summary' => 'Pending: 0, Running: 1, Failed (24h): 1.',
+        'data' => [
+            'last_failed_run' => [
+                'failure_reason' => 'Command exited with code 1.',
+                'next_action' => 'Run php artisan checkpoint:report --limit=10 --format=json',
+            ],
+        ],
+        'suggestions' => ['Run checkpoint:doctor --format=json'],
+    ]);
+
+    expect($envelope)->toHaveKey('compact')
+        ->and($envelope['compact'])->toMatchArray([
+            'verdict' => 'WARN',
+            'severity' => 'P1',
+            'top_issue' => 'Command exited with code 1.',
+            'next_action' => 'Run php artisan checkpoint:report --limit=10 --format=json',
+            'exit_code' => 2,
+        ]);
+});

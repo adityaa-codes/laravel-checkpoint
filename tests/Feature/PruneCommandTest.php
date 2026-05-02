@@ -49,7 +49,7 @@ it('prunes old runs and expired backup drill records while retaining recent prot
         'executed_at' => Date::now()->subDays(10),
     ]);
 
-    checkpoint_artisan('db-ops:prune')
+    checkpoint_artisan('checkpoint:prune')
         ->expectsOutput('Pruned 1 command run records and 1 backup drill records.')
         ->assertSuccessful();
 

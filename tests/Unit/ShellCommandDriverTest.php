@@ -10,7 +10,6 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 it('executes argv tokens without shell interpretation', function (): void {
@@ -120,7 +119,7 @@ it('aborts restore operations when the pre-restore snapshot fails', function ():
 
     Event::assertDispatchedTimes(BackupStarted::class, 1);
     Event::assertDispatchedTimes(BackupCompleted::class, 0);
-    Event::assertDispatchedTimes(BackupFailed::class, 2);
+    Event::assertDispatchedTimes(BackupFailed::class, 1);
 });
 
 it('blocks restore execution when confirmation is missing', function (): void {
@@ -295,5 +294,5 @@ it('externalizes shell command output to filesystem storage with an inline previ
         ->and($run->resolvedCommandOutput())->toBe(str_repeat('A', 120));
 
     Storage::disk('local')->assertExists('checkpoint/test-output/command-run-'.$run->getKey().'.log');
-    Event::assertDispatched(fn (\AdityaaCodes\LaravelCheckpoint\Events\BackupCompleted $event): bool => $event->output === (string) $run->command_output);
+    Event::assertDispatched(fn (BackupCompleted $event): bool => $event->output === (string) $run->command_output);
 });

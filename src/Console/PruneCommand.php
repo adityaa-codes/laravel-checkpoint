@@ -17,11 +17,11 @@ final class PruneCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'db-ops:prune';
+    protected $signature = 'checkpoint:prune';
 
     protected $description = 'Prune old checkpoint runs and backup drill records.';
 
-    protected $aliases = ['db-ops:admin:prune'];
+    protected $aliases = ['checkpoint:admin:prune'];
 
     public function handle(): int
     {
@@ -29,7 +29,7 @@ final class PruneCommand extends Command
             intro('Prune Checkpoint Records');
             note('What: remove aged operational rows according to prune model rules.');
             note('When: periodic maintenance to keep operational tables lean.');
-            note('Next: run db-ops:check:report to confirm retained history looks healthy.');
+            note('Next: run checkpoint:check:report to confirm retained history looks healthy.');
         }
 
         $commandRunCount = (new CommandRun)->pruneAll();
@@ -63,5 +63,4 @@ final class PruneCommand extends Command
 
         return (string) $message;
     }
-
 }

@@ -11,14 +11,16 @@ use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
+
 use function Laravel\Prompts\note;
 
 final class CatalogExportCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'db-ops:catalog-export
+    protected $signature = 'checkpoint:catalog-export
         {--format=json : Output format: json or csv.}
+        {--output= : Destination file path for exported payload.}
         {--driver= : Filter by driver name. Use "none" for null values.}
         {--repository= : Filter by repository id. Use "none" for null values.}
         {--stanza= : Filter by stanza. Use "none" for null values.}
@@ -27,7 +29,7 @@ final class CatalogExportCommand extends Command
 
     protected $description = 'Export backup catalog snapshots in machine-friendly JSON or CSV formats.';
 
-    protected $aliases = ['db-ops:admin:catalog-export'];
+    protected $aliases = ['checkpoint:admin:catalog-export'];
 
     public function __construct(
         private readonly ConfigValidator $validator,
@@ -50,6 +52,14 @@ final class CatalogExportCommand extends Command
 
         if (! in_array($format, ['json', 'csv'], true)) {
             $this->promptError('The --format option must be json or csv.');
+
+            return self::FAILURE;
+        }
+
+        $outputPath = $this->stringOption('output');
+
+        if ($outputPath !== null && trim($outputPath) === '') {
+            $this->promptError('The --output option must not be empty.');
 
             return self::FAILURE;
         }
@@ -110,7 +120,7 @@ final class CatalogExportCommand extends Command
         );
 
         if ($format === 'json') {
-            $this->line(json_encode($this->jsonContract->envelope('catalog_export', [
+            $payload = json_encode($this->jsonContract->envelope('catalog_export', [
                 'generated_at' => now()->toIso8601String(),
                 'driver' => (string) $this->config->get('checkpoint.driver'),
                 'format' => 'json',
@@ -119,12 +129,20 @@ final class CatalogExportCommand extends Command
                 'filters' => $export['filters'],
                 'count' => count($export['rows']),
                 'rows' => $export['rows'],
-            ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+
+            if (! $this->writePayloadToOutputPath($payload)) {
+                $this->line($payload);
+            }
 
             return self::SUCCESS;
         }
 
-        $this->line($this->csvPayload($export['rows']));
+        $payload = $this->csvPayload($export['rows']);
+
+        if (! $this->writePayloadToOutputPath($payload)) {
+            $this->line($payload);
+        }
 
         return self::SUCCESS;
     }
@@ -211,6 +229,25 @@ final class CatalogExportCommand extends Command
         }
 
         return $trimmed;
+    }
+
+    private function writePayloadToOutputPath(string $payload): bool
+    {
+        $outputPath = $this->stringOption('output');
+
+        if ($outputPath === null) {
+            return false;
+        }
+
+        $trimmed = trim($outputPath);
+
+        if (@file_put_contents($trimmed, $payload) === false) {
+            throw new ConfigurationException(sprintf('Unable to write catalog export to [%s].', $trimmed));
+        }
+
+        $this->promptInfo(sprintf('Catalog export written to %s', $trimmed));
+
+        return true;
     }
 
     /**

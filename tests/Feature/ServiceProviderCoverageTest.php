@@ -39,11 +39,11 @@ it('registers the default scheduled checkpoint commands', function (): void {
         ->filter()
         ->implode("\n");
 
-    expect($commands)->toContain('db-ops:enqueue-backup')
-        ->toContain('db-ops:enqueue-drill')
-        ->toContain('db-ops:health-check')
-        ->toContain('db-ops:recover-orphans')
-        ->toContain('db-ops:prune');
+    expect($commands)->toContain('checkpoint:enqueue-backup')
+        ->toContain('checkpoint:enqueue-drill')
+        ->toContain('checkpoint:health-check')
+        ->toContain('checkpoint:recover-orphans')
+        ->toContain('checkpoint:prune');
 
     $events->each(function ($event): void {
         expect($event->withoutOverlapping)->toBeTrue()
@@ -54,36 +54,36 @@ it('registers the default scheduled checkpoint commands', function (): void {
 
 it('registers the public report and catalog commands', function (): void {
 
-    expect(Artisan::all())->toHaveKey('db-ops:report')
-        ->toHaveKey('db-ops:catalog-export')
-        ->toHaveKey('db-ops:admin:catalog-export')
-        ->toHaveKey('db-ops:admin:prune')
-        ->toHaveKey('db-ops:admin:recover-orphans')
-        ->toHaveKey('db-ops:admin:retention')
-        ->toHaveKey('db-ops:check:doctor')
-        ->toHaveKey('db-ops:check:health')
-        ->toHaveKey('db-ops:check:pitr')
-        ->toHaveKey('db-ops:check:report')
-        ->toHaveKey('db-ops:do:backup')
-        ->toHaveKey('db-ops:do:backup:diff')
-        ->toHaveKey('db-ops:do:backup:full')
-        ->toHaveKey('db-ops:do:backup:incr')
-        ->toHaveKey('db-ops:do:backup:logical')
-        ->toHaveKey('db-ops:do:drill')
-        ->toHaveKey('db-ops:install')
-        ->toHaveKey('db-ops:do:install')
-        ->toHaveKey('db-ops:do:replicate')
-        ->toHaveKey('db-ops:do:restore:file')
-        ->toHaveKey('db-ops:do:restore:latest')
-        ->toHaveKey('db-ops:do:restore:pitr')
-        ->toHaveKey('db-ops:do:status')
-        ->toHaveKey('db-ops:pitr-readiness')
-        ->toHaveKey('db-ops:retention-policy')
-        ->toHaveKey('db-ops:enqueue-drill');
+    expect(Artisan::all())->toHaveKey('checkpoint:report')
+        ->toHaveKey('checkpoint:catalog-export')
+        ->toHaveKey('checkpoint:admin:catalog-export')
+        ->toHaveKey('checkpoint:admin:prune')
+        ->toHaveKey('checkpoint:admin:recover-orphans')
+        ->toHaveKey('checkpoint:admin:retention')
+        ->toHaveKey('checkpoint:check:doctor')
+        ->toHaveKey('checkpoint:check:health')
+        ->toHaveKey('checkpoint:check:pitr')
+        ->toHaveKey('checkpoint:check:report')
+        ->toHaveKey('checkpoint:do:backup')
+        ->toHaveKey('checkpoint:do:backup:diff')
+        ->toHaveKey('checkpoint:do:backup:full')
+        ->toHaveKey('checkpoint:do:backup:incr')
+        ->toHaveKey('checkpoint:do:backup:logical')
+        ->toHaveKey('checkpoint:do:drill')
+        ->toHaveKey('checkpoint:install')
+        ->toHaveKey('checkpoint:do:install')
+        ->toHaveKey('checkpoint:do:replicate')
+        ->toHaveKey('checkpoint:do:restore:file')
+        ->toHaveKey('checkpoint:do:restore:latest')
+        ->toHaveKey('checkpoint:do:restore:pitr')
+        ->toHaveKey('checkpoint:do:status')
+        ->toHaveKey('checkpoint:pitr-readiness')
+        ->toHaveKey('checkpoint:retention-policy')
+        ->toHaveKey('checkpoint:enqueue-drill');
 });
 
 it('registers the replicate command interface', function (): void {
-    expect(Artisan::all())->toHaveKey('db-ops:replicate');
+    expect(Artisan::all())->toHaveKey('checkpoint:replicate');
 });
 
 it('registers published migrations in dependency order', function (): void {

@@ -216,6 +216,7 @@ final readonly class ReplicationFailureSuggestionMapper
 
             if (is_string($value)) {
                 $diagnostics[$key] = $this->secretRedactor->redact($value);
+
                 continue;
             }
 

@@ -12,9 +12,9 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
-use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\PostRestoreVerificationBuilder;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use Illuminate\Support\Facades\Log;
@@ -25,8 +25,12 @@ use Throwable;
 /** @internal */
 final class ShellCommandDriver implements BackupDriver
 {
+    private bool $failureEventDispatched = false;
+
     public function execute(CommandRun $run): void
     {
+        $this->failureEventDispatched = false;
+
         if ($this->shouldCreatePreRestoreSnapshot($run)) {
             $snapshotRun = $this->createSnapshotRun($run);
             $this->runProcess($snapshotRun);
@@ -36,7 +40,7 @@ final class ShellCommandDriver implements BackupDriver
                 $message = __('messages.errors.pre_restore_failed');
 
                 $run->markAsFailed(output: $message);
-                event(new BackupFailed($run, -1, $message));
+                $this->dispatchBackupFailed($run, -1, $message);
 
                 $this->logger()->error('Pre-restore snapshot failed', [
                     'run_id' => $run->getKey(),
@@ -120,7 +124,7 @@ final class ShellCommandDriver implements BackupDriver
 
             $run->markAsFailed($exitCode, $output);
             $run = $run->fresh() ?? $run;
-            event(new BackupFailed($run, $exitCode, $output));
+            $this->dispatchBackupFailed($run, $exitCode, $output);
 
             $this->logger()->error('Checkpoint operation failed', $this->logContext($run, [
                 'exit_code' => $exitCode,
@@ -134,7 +138,7 @@ final class ShellCommandDriver implements BackupDriver
 
             $run->markAsFailed(output: $exception->getMessage());
             $run = $run->fresh() ?? $run;
-            event(new BackupFailed($run, -1, $exception->getMessage(), $exception));
+            $this->dispatchBackupFailed($run, -1, $exception->getMessage(), $exception);
 
             $this->logger()->error('Checkpoint operation crashed', $this->logContext($run, [
                 'error' => $exception->getMessage(),
@@ -387,4 +391,13 @@ final class ShellCommandDriver implements BackupDriver
             ->count();
     }
 
+    private function dispatchBackupFailed(CommandRun $run, int $exitCode, string $output, ?Throwable $exception = null): void
+    {
+        if ($this->failureEventDispatched) {
+            return;
+        }
+
+        $this->failureEventDispatched = true;
+        event(new BackupFailed($run, $exitCode, $output, $exception));
+    }
 }

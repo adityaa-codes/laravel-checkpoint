@@ -6,6 +6,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillFreshnessAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillPassRateAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFreshnessAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
+use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
 
 it('renders the doctor health table', function (): void {
-    checkpoint_artisan('db-ops:doctor')
+    checkpoint_artisan('checkpoint:doctor -v')
         ->expectsOutputToContain('Config: driver')
         ->expectsOutputToContain('Config: queue.name')
         ->expectsOutputToContain('Config: pgbackrest.stanza')
@@ -43,9 +44,39 @@ it('renders the doctor health table', function (): void {
         ->assertSuccessful();
 });
 
+it('prioritizes P0/P1 checks and collapses lower-priority checks by default', function (): void {
+    checkpoint_artisan('checkpoint:doctor')
+        ->expectsOutputToContain('Suppressed')
+        ->expectsOutputToContain('Backup drills: pass rate')
+        ->doesntExpectOutputToContain('Config: driver')
+        ->assertSuccessful();
+});
+
+it('renders triage-first brief doctor output with top issue and action', function (): void {
+    checkpoint_artisan('checkpoint:doctor --brief')
+        ->expectsOutputToContain('Doctor triage (brief)')
+        ->expectsOutputToContain('Blockers:')
+        ->expectsOutputToContain('P0:')
+        ->expectsOutputToContain('Action now:')
+        ->expectsOutputToContain('Deep dive: php artisan checkpoint:doctor --format=json')
+        ->assertSuccessful();
+});
+
 it('supports the check doctor command alias', function (): void {
-    checkpoint_artisan('db-ops:check:doctor')
-        ->expectsOutputToContain('Config: driver')
+    checkpoint_artisan('checkpoint:check:doctor')
+        ->expectsOutputToContain('Suppressed')
+        ->assertSuccessful();
+});
+
+it('renders stable status labels when translation keys cannot be resolved', function (): void {
+    config()->set('app.locale', 'zz');
+    config()->set('app.fallback_locale', 'zz');
+
+    checkpoint_artisan('checkpoint:doctor')
+        ->expectsOutputToContain('WARN')
+        ->doesntExpectOutputToContain('messages.cli.doctor_pass')
+        ->doesntExpectOutputToContain('messages.cli.doctor_warn')
+        ->doesntExpectOutputToContain('messages.cli.doctor_fail')
         ->assertSuccessful();
 });
 
@@ -60,9 +91,24 @@ it('fails doctor when queue timeout settings are unsafe', function (): void {
     config()->set('checkpoint.queue.timeout', 3600);
     config()->set('checkpoint.queue.retry_after', 300);
 
-    checkpoint_artisan('db-ops:doctor')
+    checkpoint_artisan('checkpoint:doctor')
         ->expectsOutputToContain('Config validation')
         ->assertFailed();
+});
+
+it('returns non-zero when any doctor check fails', function (): void {
+    config()->set('checkpoint.queue.timeout', 3600);
+    config()->set('checkpoint.queue.retry_after', 300);
+
+    $exitCode = Artisan::call('checkpoint:doctor', ['--format' => 'json']);
+    $report = json_decode(Artisan::output(), true);
+
+    expect($exitCode)->toBe(10)
+        ->and($report)->toBeArray()
+        ->and(collect($report['checks'])->contains(
+            fn (array $check): bool => $check['code'] === 'config.validation'
+                && $check['status'] === 'fail',
+        ))->toBeTrue();
 });
 
 it('warns about unsafe restore posture in non-local environments', function (): void {
@@ -75,7 +121,7 @@ it('warns about unsafe restore posture in non-local environments', function (): 
     config()->set('checkpoint.restore.allow_in_ci', true);
     config()->set('checkpoint.restore.require_verified_backup', false);
 
-    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+    Artisan::call('checkpoint:doctor', ['--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
 
@@ -131,7 +177,7 @@ it('surfaces post-restore verification health posture in machine-readable doctor
         'finished_at' => now()->subMinute(),
     ]);
 
-    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+    Artisan::call('checkpoint:doctor', ['--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
 
@@ -149,10 +195,10 @@ it('fails when active driver binary is missing and includes remediation commands
     config()->set('checkpoint.driver', 'pgbackrest');
     config()->set('checkpoint.drivers.pgbackrest.binary', 'missing-pgbackrest-binary');
 
-    $exitCode = Artisan::call('db-ops:doctor', ['--format' => 'json']);
+    $exitCode = Artisan::call('checkpoint:doctor', ['--format' => 'json']);
     $report = json_decode(Artisan::output(), true);
 
-    expect($exitCode)->toBe(1)
+    expect($exitCode)->toBe(10)
         ->and($report)->toBeArray()
         ->and(collect($report['checks'])->contains(
             fn (array $check): bool => $check['code'] === 'driver.binary.pgbackrest'
@@ -186,7 +232,7 @@ it('shows selected remote repo hardening details without secrets', function (): 
         ],
     ]);
 
-    checkpoint_artisan('db-ops:doctor')
+    checkpoint_artisan('checkpoint:doctor -v')
         ->expectsOutputToContain('s3://checkpoint-backups via s3.example.com')
         ->expectsOutputToContain('verify disabled')
         ->expectsOutputToContain('enabled (aes-256-cbc)')
@@ -211,7 +257,7 @@ it('renders a machine-readable json report', function (): void {
         'error_detail' => 'verification failed',
     ]);
 
-    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+    Artisan::call('checkpoint:doctor', ['--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
 
@@ -223,6 +269,7 @@ it('renders a machine-readable json report', function (): void {
         ->and(collect($report['checks'])->contains(
             fn (array $check): bool => $check['code'] === 'config.driver'
                 && $check['status'] === 'pass'
+                && $check['severity'] === 'info'
                 && $check['data']['driver'] === 'shell',
         ))->toBeTrue()
         ->and(collect($report['checks'])->contains(
@@ -236,7 +283,7 @@ it('reports drill freshness and pass rate in machine-readable json', function ()
     DoctorCommandTestSupport::freezeTime();
     DoctorCommandTestSupport::seedRecentDrillPair();
 
-    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+    Artisan::call('checkpoint:doctor', ['--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
 
@@ -276,7 +323,7 @@ it('dispatches drill alarms when drill freshness and pass rate fall below thresh
 
     $latestRun = DoctorCommandTestSupport::seedStaleDrillAlarmState()['latest'];
 
-    checkpoint_artisan('db-ops:doctor')->assertSuccessful();
+    checkpoint_artisan('checkpoint:doctor')->assertSuccessful();
 
     Event::assertDispatched(fn (BackupDrillFreshnessAlarmTriggered $event): bool => $event->reason === 'stale'
         && $event->run?->is($latestRun) === true
@@ -298,15 +345,15 @@ it('dispatches drill alarms when drill freshness and pass rate fall below thresh
 it('dispatches drill alarms when no backup drills exist', function (): void {
     Event::fake([BackupDrillFreshnessAlarmTriggered::class, BackupDrillPassRateAlarmTriggered::class]);
 
-    checkpoint_artisan('db-ops:doctor')->assertSuccessful();
+    checkpoint_artisan('checkpoint:doctor')->assertSuccessful();
 
     Event::assertDispatched(fn (BackupDrillFreshnessAlarmTriggered $event): bool => $event->reason === 'missing'
-        && !$event->run instanceof \AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun
+        && ! $event->run instanceof BackupDrillRun
         && $event->ageDays === null
         && $event->thresholdDays === 30
         && $event->version === 1);
 
-    Event::assertDispatched(fn (BackupDrillPassRateAlarmTriggered $event): bool => !$event->latestRun instanceof \AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun
+    Event::assertDispatched(fn (BackupDrillPassRateAlarmTriggered $event): bool => ! $event->latestRun instanceof BackupDrillRun
         && $event->windowDays === 30
         && $event->passing === 0
         && $event->total === 0
@@ -319,22 +366,27 @@ it('returns a failed machine-readable json report for invalid config', function 
     config()->set('checkpoint.queue.timeout', 3600);
     config()->set('checkpoint.queue.retry_after', 300);
 
-    $exitCode = Artisan::call('db-ops:doctor', ['--format' => 'json']);
+    $exitCode = Artisan::call('checkpoint:doctor', ['--format' => 'json']);
     $report = json_decode(Artisan::output(), true);
 
-    expect($exitCode)->toBe(1)
+    expect($exitCode)->toBe(10)
         ->and($report)->toBeArray()
         ->and($report['version'])->toBe(3)
         ->and($report['surface'])->toBe('doctor')
         ->and($report['ok'])->toBeFalse()
+        ->and($report['gates'])->toMatchArray([
+            'failed_gate' => 'safety',
+            'exit_code' => 10,
+        ])
         ->and(collect($report['checks'])->contains(
             fn (array $check): bool => $check['code'] === 'config.validation'
-                && $check['status'] === 'fail',
+                && $check['status'] === 'fail'
+                && $check['severity'] === 'blocker',
         ))->toBeTrue();
 });
 
 it('renders compact agent-friendly doctor output', function (): void {
-    Artisan::call('db-ops:doctor', ['--agent' => true]);
+    Artisan::call('checkpoint:doctor', ['--agent' => true]);
 
     $report = json_decode(Artisan::output(), true);
 
@@ -344,8 +396,13 @@ it('renders compact agent-friendly doctor output', function (): void {
         ->and($report['result'])->toBeString()
         ->and($report['code'])->toBeString()
         ->and($report['summary'])->toBeString()
+        ->and($report['compact'])->toBeArray()
+        ->and($report['compact'])->toHaveKeys(['verdict', 'severity', 'top_issue', 'next_action', 'exit_code'])
         ->and($report['data']['ok'])->toBeBool()
         ->and($report['data']['checks'])->toBeArray()
+        ->and($report['data']['checks'][0])->toHaveKeys(['code', 'check', 'status', 'severity', 'notes', 'data'])
+        ->and($report['data']['severity_totals'])->toBeArray()
+        ->and($report['data']['severity_totals'])->toHaveKeys(['blocker', 'warning', 'info'])
         ->and($report['data']['slo'])->toBeArray()
         ->and($report['data']['slo'])->toHaveKeys(['window', 'indicators', 'overall_status'])
         ->and($report['data']['slo']['indicators'])->toBeArray()
@@ -354,6 +411,21 @@ it('renders compact agent-friendly doctor output', function (): void {
         ->and(collect($report['suggestions'])->contains(
             static fn (mixed $suggestion): bool => is_string($suggestion) && str_contains($suggestion, 'post-verification'),
         ))->toBeTrue();
+});
+
+it('returns evidence gate exit code when staging profile evidence is degraded', function (): void {
+    $exitCode = Artisan::call('checkpoint:doctor', ['--agent' => true, '--policy-profile' => 'staging']);
+    $report = json_decode(Artisan::output(), true);
+
+    expect($exitCode)->toBe(11)
+        ->and($report)->toBeArray()
+        ->and($report['data']['gates'])->toMatchArray([
+            'profile' => 'staging',
+            'profile_source' => 'override',
+            'failed_gate' => 'evidence',
+            'verdict' => 'fail',
+            'exit_code' => 11,
+        ]);
 });
 
 it('warns when the last known good backup is stale and the latest run is anomalously slow', function (): void {
@@ -367,7 +439,7 @@ it('warns when the last known good backup is stale and the latest run is anomalo
 
     DoctorCommandTestSupport::seedAnomalousBackupHistory();
 
-    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+    Artisan::call('checkpoint:doctor', ['--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
 
@@ -391,7 +463,7 @@ it('dispatches a freshness alarm when the last-known-good backup is stale', func
 
     DoctorCommandTestSupport::seedStaleLastKnownGoodBackup();
 
-    checkpoint_artisan('db-ops:doctor')->assertSuccessful();
+    checkpoint_artisan('checkpoint:doctor')->assertSuccessful();
 
     $dispatched = Event::dispatched(BackupFreshnessAlarmTriggered::class);
 
@@ -412,13 +484,13 @@ it('dispatches a freshness alarm when the last-known-good backup is stale', func
 it('dispatches a freshness alarm when no last-known-good backup exists', function (): void {
     Event::fake([BackupFreshnessAlarmTriggered::class]);
 
-    checkpoint_artisan('db-ops:doctor')->assertSuccessful();
+    checkpoint_artisan('checkpoint:doctor')->assertSuccessful();
 
     Event::assertDispatched(fn (BackupFreshnessAlarmTriggered $event): bool => $event->reason === 'missing'
         && $event->ageHours === null
         && $event->thresholdHours === 24
         && $event->version === 1
-        && !$event->run instanceof \AdityaaCodes\LaravelCheckpoint\Models\CommandRun);
+        && ! $event->run instanceof CommandRun);
 });
 
 it('counts pending rows by their last worker heartbeat rather than claim timestamp', function (): void {
@@ -433,7 +505,7 @@ it('counts pending rows by their last worker heartbeat rather than claim timesta
         'orphan_recovery_claimed_at' => now()->subMinute(),
     ]);
 
-    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+    Artisan::call('checkpoint:doctor', ['--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
 
@@ -457,7 +529,7 @@ it('warns when stale orphaned runs remain beyond the threshold', function (): vo
         'updated_at' => now()->subMinutes(45),
     ]);
 
-    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+    Artisan::call('checkpoint:doctor', ['--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
 

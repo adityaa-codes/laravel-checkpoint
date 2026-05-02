@@ -237,7 +237,6 @@ it('records restore audit metadata for pgbackrest restore runs', function (): vo
             'command_run_id' => (int) $run->getKey(),
             'operation' => 'pgbackrest_restore',
             'aggregate_result' => 'pass',
-            'generated_at' => now()->toIso8601String(),
             'checks_performed' => [
                 'restore_audit_recorded',
                 'restore_target_recorded',
@@ -245,6 +244,7 @@ it('records restore audit metadata for pgbackrest restore runs', function (): vo
                 'verified_backup_signal_linkage',
             ],
         ])
+        ->and($postVerification['generated_at'] ?? null)->toBeString()
         ->and($postVerification['checks'])->toBeArray()
         ->and($postVerification['checks'])->toHaveCount(4)
         ->and($postVerification['checks'][0])->toHaveKeys(['name', 'passed', 'status', 'description', 'observed']);
@@ -414,7 +414,7 @@ SH));
 
     $logger->shouldReceive('info')
         ->once()
-        ->with('Starting pgBackRest operation', Mockery::on(fn(array $context): bool => str_contains((string) $context['command_line'], '--config=')
+        ->with('Starting pgBackRest operation', Mockery::on(fn (array $context): bool => str_contains((string) $context['command_line'], '--config=')
             && $context['driver'] === 'pgbackrest'
             && $context['repository'] === 1
             && $context['stanza'] === 'main'

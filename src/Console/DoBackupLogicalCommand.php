@@ -8,13 +8,12 @@ use Illuminate\Console\Command;
 
 final class DoBackupLogicalCommand extends Command
 {
-    protected $signature = 'db-ops:do:backup:logical';
+    protected $signature = 'checkpoint:do:backup:logical';
 
     protected $description = 'Journey command: queue logical backup.';
 
     public function handle(): int
     {
-        return $this->call('db-ops:enqueue', ['operation' => 'logical_backup']);
+        return $this->call('checkpoint:enqueue', ['operation' => 'logical_backup']);
     }
 }
-

@@ -856,11 +856,16 @@ final class MysqlDriver implements BackupDriver
     private function executeReplicationSync(array $plannedMetadata): array
     {
         $replication = is_array($plannedMetadata['metadata']['replication'] ?? null) ? $plannedMetadata['metadata']['replication'] : [];
+        $this->assertLocalConfiguredReplicationSemantics($replication);
         $artifactPath = (string) ($replication['artifact_path'] ?? '');
 
         if ($artifactPath === '') {
             throw new ConfigurationException('mysql replication requires a writable staging artifact path.');
         }
+
+        $applyRequested = (bool) ($replication['apply_requested'] ?? false);
+        $dryRunRequested = (bool) ($replication['dry_run_requested'] ?? true);
+        $this->assertReplicationGovernanceAllowsApply($replication, $applyRequested, $dryRunRequested);
 
         $dryRun = $this->executeSingleProcess($this->mysqlReplicationDryRunProcess($plannedMetadata));
 
@@ -895,8 +900,6 @@ final class MysqlDriver implements BackupDriver
         }
 
         $sourceSnapshot = $this->replicationArtifactSnapshot($artifactPath);
-        $applyRequested = (bool) ($replication['apply_requested'] ?? false);
-        $dryRunRequested = (bool) ($replication['dry_run_requested'] ?? true);
         $overwriteAllowed = (bool) ($replication['overwrite_destination'] ?? false) || (bool) ($replication['force_requested'] ?? false);
 
         if (! $applyRequested || $dryRunRequested) {
@@ -1101,8 +1104,60 @@ final class MysqlDriver implements BackupDriver
             'apply_requested' => (bool) ($payload['apply'] ?? false),
             'force_requested' => (bool) ($payload['force'] ?? false),
             'overwrite_destination' => (bool) ($payload['overwrite_destination'] ?? false),
+            'governance_preflight' => is_array($payload['governance_preflight'] ?? null)
+                ? $payload['governance_preflight']
+                : (is_array($replicationMetadata['governance_preflight'] ?? null) ? $replicationMetadata['governance_preflight'] : null),
             'artifact_path' => $this->replicationArtifactPath($run),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $replication
+     */
+    private function assertLocalConfiguredReplicationSemantics(array $replication): void
+    {
+        $source = is_array($replication['source'] ?? null) ? $replication['source'] : [];
+        $destination = is_array($replication['destination'] ?? null) ? $replication['destination'] : [];
+        $sourceKind = strtolower(trim((string) ($source['kind'] ?? '')));
+        $destinationKind = strtolower(trim((string) ($destination['kind'] ?? '')));
+        $usesHostBoundEndpoint = in_array($sourceKind, ['dsn', 'key_value'], true)
+            || in_array($destinationKind, ['dsn', 'key_value'], true);
+
+        if (! $usesHostBoundEndpoint) {
+            return;
+        }
+
+        throw new ConfigurationException(
+            'mysql replication execution currently supports only local/configured endpoint semantics. '
+            .'Remote or cross-host source/destination endpoints are not supported. '
+            .'Use matching local profile endpoints and run remote replication through external tooling.',
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $replication
+     */
+    private function assertReplicationGovernanceAllowsApply(array $replication, bool $applyRequested, bool $dryRunRequested): void
+    {
+        if (! $applyRequested || $dryRunRequested) {
+            return;
+        }
+
+        $preflight = is_array($replication['governance_preflight'] ?? null) ? $replication['governance_preflight'] : null;
+
+        if ($preflight !== null && (bool) ($preflight['allowed'] ?? false)) {
+            return;
+        }
+
+        $reasons = $preflight['blocked_reasons'] ?? null;
+        $reasonText = is_array($reasons) && $reasons !== []
+            ? implode(', ', array_map(static fn (mixed $reason): string => (string) $reason, $reasons))
+            : 'missing_governance_preflight_metadata';
+
+        throw new ConfigurationException(sprintf(
+            'Replication apply is blocked by governance preflight at execution time: %s. Re-queue with approved destination/change window, or run dry-run mode.',
+            $reasonText,
+        ));
     }
 
     /**
@@ -1454,5 +1509,4 @@ final class MysqlDriver implements BackupDriver
     {
         return resolve(ReplicationFailureSuggestionMapper::class);
     }
-
 }

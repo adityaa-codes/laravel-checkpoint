@@ -508,14 +508,14 @@ SH));
 
     $run = CommandRun::query()->create([
         'operation' => 'replication_sync',
-        'argument_text' => '{"source":"profile:pg-source","destination":"pgsql://[REDACTED]","dry_run":true,"apply":false}',
+        'argument_text' => '{"source":"profile:pg-local","destination":"profile:pg-local","dry_run":true,"apply":false}',
         'status' => CommandRunStatus::Pending,
         'attempts' => 0,
         'metadata' => [
             'replication' => [
                 'engine' => 'pgsql',
-                'source' => ['kind' => 'config_profile', 'identifier' => 'pg-source', 'redacted' => 'profile:pg-source'],
-                'destination' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'pgsql://replicator:secret@db.internal'],
+                'source' => ['kind' => 'config_profile', 'identifier' => 'pg-local', 'redacted' => 'profile:pg-local'],
+                'destination' => ['kind' => 'config_profile', 'identifier' => 'pg-local', 'redacted' => 'profile:pg-local'],
                 'queue_only' => true,
                 'dry_run_requested' => true,
             ],
@@ -530,7 +530,7 @@ SH));
         ->and($run->metadata['replication']['result'] ?? null)->toBe('dry_run_only')
         ->and($run->metadata['replication']['sanity']['method'] ?? null)->toBe('artifact_hash')
         ->and($run->metadata['replication']['sanity']['fallback_reason'] ?? null)->toBe('apply_not_requested_or_dry_run_enforced')
-        ->and($run->metadata['replication']['destination']['redacted'] ?? null)->not->toContain('secret');
+        ->and($run->metadata['replication']['destination']['redacted'] ?? null)->toBe('profile:pg-local');
 });
 
 it('adds structured failure analysis and debug suggestions for pg replication dry-run failures', function (): void {
@@ -553,14 +553,14 @@ SH
 
     $run = CommandRun::query()->create([
         'operation' => 'replication_sync',
-        'argument_text' => '{"source":"profile:pg-source","destination":"pgsql://[REDACTED]","dry_run":true,"apply":false}',
+        'argument_text' => '{"source":"profile:pg-local","destination":"profile:pg-local","dry_run":true,"apply":false}',
         'status' => CommandRunStatus::Pending,
         'attempts' => 0,
         'metadata' => [
             'replication' => [
                 'engine' => 'pgsql',
-                'source' => ['kind' => 'config_profile', 'identifier' => 'pg-source', 'redacted' => 'profile:pg-source'],
-                'destination' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'pgsql://replicator:secret@db.internal'],
+                'source' => ['kind' => 'config_profile', 'identifier' => 'pg-local', 'redacted' => 'profile:pg-local'],
+                'destination' => ['kind' => 'config_profile', 'identifier' => 'pg-local', 'redacted' => 'profile:pg-local'],
                 'queue_only' => true,
                 'dry_run_requested' => true,
             ],
@@ -576,6 +576,82 @@ SH
         ->and($run->command_output)->not->toContain('secret')
         ->and($run->metadata['replication']['failure_analysis']['category'] ?? null)->toBe('dns_network_connection_refused')
         ->and($run->metadata['replication']['failure_context']['suggestions'][0] ?? null)->toBe($run->metadata['replication']['failure_analysis']['immediate_fix'] ?? null);
+});
+
+it('fails replication_sync when endpoints indicate remote or cross-host semantics', function (): void {
+    $run = CommandRun::query()->create([
+        'operation' => 'replication_sync',
+        'argument_text' => '{"source":"profile:pg-source","destination":"pgsql://[REDACTED]","dry_run":true,"apply":false}',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'metadata' => [
+            'replication' => [
+                'engine' => 'pgsql',
+                'source' => ['kind' => 'config_profile', 'identifier' => 'pg-source', 'redacted' => 'profile:pg-source'],
+                'destination' => ['kind' => 'dsn', 'identifier' => null, 'redacted' => 'pgsql://[REDACTED]@db.internal'],
+                'queue_only' => true,
+                'dry_run_requested' => true,
+            ],
+        ],
+    ]);
+
+    expect(function () use ($run): void {
+        (new PgDumpDriver)->execute($run);
+    })
+        ->toThrow(ConfigurationException::class, 'pg_dump replication execution currently supports only local/configured endpoint semantics.');
+});
+
+it('blocks pg_dump replication apply when governance preflight disallows execution-time apply', function (): void {
+    $outputDir = tempnam(sys_get_temp_dir(), 'checkpoint-pgdump-repl-governance-');
+
+    if ($outputDir === false) {
+        throw new RuntimeException('Unable to allocate a temporary pgdump replication governance path.');
+    }
+
+    unlink($outputDir);
+    mkdir($outputDir, 0755, true);
+
+    config()->set('checkpoint.drivers.pgdump.dump_binary', fakePgDumpScript(<<<'SH'
+#!/bin/sh
+for arg in "$@"; do
+  case "$arg" in
+    --file=*)
+      target="${arg#--file=}"
+      printf 'replication export payload' > "$target"
+      ;;
+  esac
+done
+printf 'dry-run export ok'
+SH
+    ));
+    config()->set('checkpoint.drivers.pgdump.output_dir', $outputDir);
+
+    $run = CommandRun::query()->create([
+        'operation' => 'replication_sync',
+        'argument_text' => '{"source":"profile:pg-local","destination":"profile:pg-local","dry_run":false,"apply":true,"force_overwrite":true}',
+        'status' => CommandRunStatus::Pending,
+        'attempts' => 0,
+        'metadata' => [
+            'replication' => [
+                'engine' => 'pgsql',
+                'source' => ['kind' => 'config_profile', 'identifier' => 'pg-local', 'redacted' => 'profile:pg-local'],
+                'destination' => ['kind' => 'config_profile', 'identifier' => 'pg-local', 'redacted' => 'profile:pg-local'],
+                'queue_only' => true,
+                'dry_run_requested' => false,
+                'apply_requested' => true,
+                'overwrite_destination' => true,
+                'governance_preflight' => [
+                    'allowed' => false,
+                    'blocked_reasons' => ['destination_not_allowlisted'],
+                ],
+            ],
+        ],
+    ]);
+
+    expect(function () use ($run): void {
+        (new PgDumpDriver)->execute($run);
+    })
+        ->toThrow(ConfigurationException::class, 'Replication apply is blocked by governance preflight at execution time: destination_not_allowlisted.');
 });
 
 it('maps invalid dsn parse signatures in replication failure analysis', function (): void {
@@ -793,7 +869,6 @@ it('records restore audit metadata for pgdump restore runs', function (): void {
             'command_run_id' => (int) $run->getKey(),
             'operation' => 'logical_restore_file',
             'aggregate_result' => 'pass',
-            'generated_at' => now()->toIso8601String(),
             'checks_performed' => [
                 'restore_audit_recorded',
                 'restore_target_recorded',
@@ -801,6 +876,7 @@ it('records restore audit metadata for pgdump restore runs', function (): void {
                 'verified_backup_signal_linkage',
             ],
         ])
+        ->and($postVerification['generated_at'] ?? null)->toBeString()
         ->and($postVerification['checks'])->toBeArray()
         ->and($postVerification['checks'])->toHaveCount(4)
         ->and($postVerification['checks'][0])->toHaveKeys(['name', 'passed', 'status', 'description', 'observed']);

@@ -9,36 +9,26 @@ use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use Illuminate\Console\Command;
 use Throwable;
 
-use function Laravel\Prompts\intro;
-use function Laravel\Prompts\note;
-use function Laravel\Prompts\outro;
-
 final class EnqueueBackupDrillCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'db-ops:enqueue-drill';
+    protected $signature = 'checkpoint:enqueue-drill';
 
     protected $description = 'Queue a backup drill command run.';
 
-    protected $aliases = ['db-ops:do:drill'];
+    protected $aliases = ['checkpoint:do:drill'];
 
     public function handle(EnqueueCommandRunAction $enqueueCommandRun): int
     {
         try {
-            if ($this->enhancedInteractiveMode()) {
-                intro('Queue Backup Drill');
-                note('What: enqueue one restore drill evidence run.');
-                note('When: periodic restore-readiness validation.');
-                note('Next: run db-ops:check:report to review drill posture and trend.');
-            }
-
             $run = $enqueueCommandRun->execute('backup_drill');
 
             $message = $this->queuedMessage((int) $run->getKey());
 
             if ($this->enhancedInteractiveMode()) {
-                outro($message);
+                \Laravel\Prompts\info($message);
+                \Laravel\Prompts\note('Monitor progress: php artisan checkpoint:check:report');
             } else {
                 $this->promptInfo($message);
             }
@@ -70,5 +60,4 @@ final class EnqueueBackupDrillCommand extends Command
 
         return (string) $message;
     }
-
 }

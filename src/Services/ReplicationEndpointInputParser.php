@@ -72,7 +72,7 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
 
         $engine = ReplicationEngine::fromInput($scheme);
 
-        if (!$engine instanceof \AdityaaCodes\LaravelCheckpoint\Enums\ReplicationEngine) {
+        if (! $engine instanceof ReplicationEngine) {
             throw new InvalidArgumentException(
                 'Unsupported DSN engine. Replication v1 supports only pgsql:// and mysql://.',
             );
@@ -111,7 +111,7 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
         $engineInput = $attributes['engine'] ?? null;
         $engine = is_string($engineInput) ? ReplicationEngine::fromInput($engineInput) : null;
 
-        if ($engineInput !== null && !$engine instanceof \AdityaaCodes\LaravelCheckpoint\Enums\ReplicationEngine) {
+        if ($engineInput !== null && ! $engine instanceof ReplicationEngine) {
             throw new InvalidArgumentException(
                 'Unsupported engine in key=value endpoint. Supported engines are pgsql and mysql.',
             );

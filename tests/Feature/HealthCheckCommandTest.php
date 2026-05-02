@@ -36,7 +36,7 @@ it('marks timed-out running runs as failed and leaves recent runs untouched', fu
         'started_at' => Date::now()->subMinutes(2),
     ]);
 
-    checkpoint_artisan('db-ops:health-check')
+    checkpoint_artisan('checkpoint:health-check')
         ->expectsOutput('Marked run #1 as failed (timed out after 300 seconds).')
         ->assertSuccessful();
 
@@ -68,7 +68,7 @@ it('keeps long-running runs alive when heartbeats are fresh', function (): void 
         'heartbeat_at' => Date::now()->subMinutes(2),
     ]);
 
-    checkpoint_artisan('db-ops:health-check')->assertSuccessful();
+    checkpoint_artisan('checkpoint:health-check')->assertSuccessful();
 
     $run->refresh();
 

@@ -51,7 +51,7 @@ final readonly class ReplicationRequestFactory
                 ? ReplicationEngine::fromInput($profile['engine'])
                 : null;
 
-            if (!$engineValue instanceof \AdityaaCodes\LaravelCheckpoint\Enums\ReplicationEngine) {
+            if (! $engineValue instanceof ReplicationEngine) {
                 throw new InvalidArgumentException(
                     sprintf('Replication profile [%s] must define engine as pgsql or mysql.', $parsed->identifier ?? ''),
                 );
@@ -74,7 +74,7 @@ final readonly class ReplicationRequestFactory
         $sourceEngine = $source->engine;
         $destinationEngine = $destination->engine;
 
-        if (!$sourceEngine instanceof \AdityaaCodes\LaravelCheckpoint\Enums\ReplicationEngine || !$destinationEngine instanceof \AdityaaCodes\LaravelCheckpoint\Enums\ReplicationEngine) {
+        if (! $sourceEngine instanceof ReplicationEngine || ! $destinationEngine instanceof ReplicationEngine) {
             throw new InvalidArgumentException(
                 'Replication requires explicit source and destination engines. Use profile, DSN scheme, or key=value engine field.',
             );

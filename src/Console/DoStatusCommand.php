@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 final class DoStatusCommand extends Command
 {
-    protected $signature = 'db-ops:do:status
+    protected $signature = 'checkpoint:do:status
         {--limit=10}
         {--summary : Show an operator-facing summary instead of recent runs.}
         {--format=table : Output format: table or json.}
@@ -25,6 +25,6 @@ final class DoStatusCommand extends Command
             '--agent' => (bool) $this->option('agent') ? true : null,
         ], static fn (mixed $value): bool => $value !== null);
 
-        return $this->call('db-ops:status', $parameters);
+        return $this->call('checkpoint:status', $parameters);
     }
 }

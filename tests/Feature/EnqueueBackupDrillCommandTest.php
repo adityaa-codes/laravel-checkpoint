@@ -14,7 +14,7 @@ it('queues a backup drill from the artisan command', function (): void {
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    checkpoint_artisan('db-ops:enqueue-drill')
+    checkpoint_artisan('checkpoint:enqueue-drill')
         ->expectsOutput('Queued Backup Drill run #1.')
         ->assertSuccessful();
 
@@ -37,7 +37,7 @@ it('prints an error and exits with failure when drill enqueueing fails', functio
 
     app()->instance(EnqueueCommandRunAction::class, $action);
 
-    checkpoint_artisan('db-ops:enqueue-drill')
+    checkpoint_artisan('checkpoint:enqueue-drill')
         ->expectsOutputToContain('Drill queue unavailable.')
         ->assertFailed();
 

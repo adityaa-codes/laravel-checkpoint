@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
+use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use RuntimeException;
@@ -21,17 +22,20 @@ final class InstallCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'db-ops:install
+    private const string MINIMAL_LOGICAL_BACKUP_PLACEHOLDER = 'php -r if(!is_dir($argv[1]))mkdir($argv[1],0777,true);touch($argv[2]); {backup_dir} {output}';
+
+    protected $signature = 'checkpoint:install
         {--preset= : Installation preset (minimal, postgres-prod, mysql-prod).}
         {--skip-publish : Skip publishing package config and migrations.}
         {--skip-migrate : Skip running migrations.}
-        {--skip-doctor : Skip db-ops:doctor health checks.}
+        {--skip-doctor : Skip checkpoint:doctor health checks.}
+        {--smoke-backup : Queue and process one logical backup smoke run after install.}
         {--write-env : Persist selected preset values into the app environment file.}
         {--force : Force vendor publish overwrite.}';
 
     protected $description = 'Guided install for Laravel Checkpoint with safe presets.';
 
-    protected $aliases = ['db-ops:do:install'];
+    protected $aliases = ['checkpoint:do:install'];
 
     /**
      * @var array<string, array{
@@ -46,6 +50,7 @@ final class InstallCommand extends Command
             'env' => [
                 'DB_OPS_DRIVER' => 'shell',
                 'DB_OPS_QUEUE_NAME' => 'db-ops',
+                'DB_OPS_CMD_LOGICAL_BACKUP' => self::MINIMAL_LOGICAL_BACKUP_PLACEHOLDER,
                 'DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS' => 'local,testing',
                 'DB_OPS_RESTORE_REQUIRE_CONFIRMATION' => 'false',
                 'DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP' => 'false',
@@ -54,6 +59,7 @@ final class InstallCommand extends Command
             'config' => [
                 'checkpoint.driver' => 'shell',
                 'checkpoint.queue.name' => 'db-ops',
+                'checkpoint.drivers.shell.commands.logical_backup' => self::MINIMAL_LOGICAL_BACKUP_PLACEHOLDER,
                 'checkpoint.restore.allowed_environments' => ['local', 'testing'],
                 'checkpoint.restore.require_confirmation' => false,
                 'checkpoint.restore.require_verified_backup' => false,
@@ -111,7 +117,7 @@ final class InstallCommand extends Command
                 intro('Laravel Checkpoint Install Wizard');
                 note('What: bootstrap config, migrations, baseline safety defaults, and health checks.');
                 note('When: first-time setup or after major config resets.');
-                note('Next: run db-ops:do:backup, then db-ops:do:status and db-ops:check:doctor.');
+                note('Next: run checkpoint:do:backup, then checkpoint:do:status and checkpoint:check:doctor.');
             }
 
             $recommendation = $this->presetRecommendation();
@@ -134,12 +140,18 @@ final class InstallCommand extends Command
                 $this->runMigrations();
             }
 
-            $doctor = ['ok' => null, 'failed' => 0, 'warn' => 0];
+            $doctor = ['ok' => null, 'failed' => 0, 'warn' => 0, 'warn_effective' => 0, 'blocker' => 0, 'warning' => 0, 'warning_effective' => 0];
             if (! (bool) $this->option('skip-doctor')) {
                 $doctor = $this->runDoctor();
             }
 
-            $this->renderSummary($preset, $envWritten, $doctor);
+            $smoke = ['executed' => false, 'ok' => null, 'label' => 'not requested', 'should_fail' => false];
+            if ((bool) $this->option('smoke-backup')) {
+                $smoke = $this->runSmokeBackup((bool) $this->option('skip-migrate'));
+            }
+
+            $readiness = $this->readinessAssessment($preset, $doctor, $smoke);
+            $this->renderSummary($preset, $envWritten, $doctor, $readiness, $smoke);
 
             if (
                 ! is_string($this->option('preset'))
@@ -153,7 +165,7 @@ final class InstallCommand extends Command
                 ));
             }
 
-            return $doctor['failed'] > 0 ? self::FAILURE : self::SUCCESS;
+            return $readiness['should_fail'] ? self::FAILURE : self::SUCCESS;
         } catch (Throwable $exception) {
             foreach (preg_split('/\r\n|\r|\n/', $exception->getMessage()) ?: [] as $line) {
                 if (trim((string) $line) !== '') {
@@ -255,16 +267,16 @@ final class InstallCommand extends Command
 
     private function publishArtifacts(bool $force): void
     {
-        $configCode = Artisan::call('vendor:publish', $this->publishParameters('laravel-checkpoint-config', $force));
+        $configCode = Artisan::call('vendor:publish', $this->publishParameters('checkpoint-config', $force));
 
         if ($configCode !== self::SUCCESS) {
-            throw new RuntimeException(trim((string) Artisan::output()) ?: 'Failed publishing laravel-checkpoint-config.');
+            throw new RuntimeException(trim((string) Artisan::output()) ?: 'Failed publishing checkpoint-config.');
         }
 
-        $migrationCode = Artisan::call('vendor:publish', $this->publishParameters('laravel-checkpoint-migrations', $force));
+        $migrationCode = Artisan::call('vendor:publish', $this->publishParameters('checkpoint-migrations', $force));
 
         if ($migrationCode !== self::SUCCESS) {
-            throw new RuntimeException(trim((string) Artisan::output()) ?: 'Failed publishing laravel-checkpoint-migrations.');
+            throw new RuntimeException(trim((string) Artisan::output()) ?: 'Failed publishing checkpoint-migrations.');
         }
     }
 
@@ -400,11 +412,11 @@ final class InstallCommand extends Command
     }
 
     /**
-     * @return array{ok:bool|null,failed:int,warn:int}
+     * @return array{ok:bool|null,failed:int,warn:int,warn_effective:int,blocker:int,warning:int,warning_effective:int}
      */
     private function runDoctor(): array
     {
-        $code = Artisan::call('db-ops:doctor', ['--format' => 'json']);
+        $code = Artisan::call('checkpoint:doctor', ['--format' => 'json']);
         $report = json_decode((string) Artisan::output(), true);
 
         if (! is_array($report)) {
@@ -412,17 +424,182 @@ final class InstallCommand extends Command
                 'ok' => $code === self::SUCCESS,
                 'failed' => $code === self::SUCCESS ? 0 : 1,
                 'warn' => 0,
+                'warn_effective' => 0,
+                'blocker' => $code === self::SUCCESS ? 0 : 1,
+                'warning' => 0,
+                'warning_effective' => 0,
             ];
         }
 
         $checks = is_array($report['checks'] ?? null) ? $report['checks'] : [];
         $failed = count(array_filter($checks, static fn (mixed $check): bool => is_array($check) && ($check['status'] ?? null) === 'fail'));
         $warn = count(array_filter($checks, static fn (mixed $check): bool => is_array($check) && ($check['status'] ?? null) === 'warn'));
+        $warnEffective = count(array_filter($checks, fn (mixed $check): bool => is_array($check)
+            && ($check['status'] ?? null) === 'warn'
+            && ! $this->isAdvisoryWarningForReadiness($check)));
+        $blocker = count(array_filter($checks, static fn (mixed $check): bool => is_array($check) && (($check['severity'] ?? null) === 'blocker')));
+        $warning = count(array_filter($checks, static fn (mixed $check): bool => is_array($check) && (($check['severity'] ?? null) === 'warning')));
+        $warningEffective = count(array_filter($checks, fn (mixed $check): bool => is_array($check)
+            && (($check['severity'] ?? null) === 'warning')
+            && ! $this->isAdvisoryWarningForReadiness($check)));
 
         return [
             'ok' => $failed === 0,
             'failed' => $failed,
             'warn' => $warn,
+            'warn_effective' => $warnEffective,
+            'blocker' => $blocker,
+            'warning' => $warning,
+            'warning_effective' => $warningEffective,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $check
+     */
+    private function isAdvisoryWarningForReadiness(array $check): bool
+    {
+        $environment = app()->environment();
+
+        if (! in_array($environment, ['local', 'testing'], true)) {
+            return false;
+        }
+
+        $code = (string) ($check['code'] ?? '');
+
+        return in_array($code, [
+            'queue.worker_visibility',
+            'restore.post_verification',
+            'backup.last_known_good',
+            'backup.duration_anomaly',
+            'backup_drill.latest_run',
+            'backup_drill.pass_rate',
+            'backup_drill.trend',
+            'backup_drill.playbook',
+            'verification.runs',
+        ], true);
+    }
+
+    /**
+     * @param  array{ok:bool|null,failed:int,warn:int,warn_effective:int,blocker:int,warning:int,warning_effective:int}  $doctor
+     * @param  array{executed:bool,ok:bool|null,label:string,should_fail:bool}  $smoke
+     * @return array{label:string,should_fail:bool}
+     */
+    private function readinessAssessment(string $preset, array $doctor, array $smoke): array
+    {
+        if ($smoke['should_fail']) {
+            return [
+                'label' => 'not-ready (smoke backup failed)',
+                'should_fail' => true,
+            ];
+        }
+
+        if ($doctor['ok'] === null) {
+            return [
+                'label' => 'unknown (doctor skipped)',
+                'should_fail' => false,
+            ];
+        }
+
+        if ($preset === 'minimal') {
+            return [
+                'label' => 'dev-only',
+                'should_fail' => $doctor['failed'] > 0,
+            ];
+        }
+
+        if ($doctor['blocker'] > 0) {
+            return [
+                'label' => sprintf('not-ready (%d blocker, %d warning)', $doctor['blocker'], $doctor['warning']),
+                'should_fail' => true,
+            ];
+        }
+
+        if ($doctor['warning_effective'] > 0) {
+            return [
+                'label' => sprintf('staging-ready (%d warning)', $doctor['warning_effective']),
+                'should_fail' => false,
+            ];
+        }
+
+        return [
+            'label' => 'prod-ready',
+            'should_fail' => false,
+        ];
+    }
+
+    /**
+     * @return array{executed:bool,ok:bool|null,label:string,should_fail:bool}
+     */
+    private function runSmokeBackup(bool $skipMigrate): array
+    {
+        if ($skipMigrate) {
+            return [
+                'executed' => true,
+                'ok' => false,
+                'label' => 'failed (requires migrated command run tables; remove --skip-migrate)',
+                'should_fail' => true,
+            ];
+        }
+
+        $enqueueCode = Artisan::call('checkpoint:enqueue-backup');
+
+        if ($enqueueCode !== self::SUCCESS) {
+            $output = trim((string) Artisan::output());
+
+            return [
+                'executed' => true,
+                'ok' => false,
+                'label' => 'failed (could not enqueue backup'.($output !== '' ? ': '.mb_substr($output, 0, 140) : '').')',
+                'should_fail' => true,
+            ];
+        }
+
+        $queueName = (string) config('checkpoint.queue.name', 'db-ops');
+        $timeout = max(1, (int) config('checkpoint.queue.timeout', 3600));
+
+        Artisan::call('queue:work', [
+            '--queue' => $queueName,
+            '--once' => true,
+            '--timeout' => $timeout,
+            '--tries' => 1,
+        ]);
+
+        $latestRun = CommandRun::query()->latest('id')->first();
+
+        if (! $latestRun instanceof CommandRun) {
+            return [
+                'executed' => true,
+                'ok' => false,
+                'label' => 'failed (no smoke run was recorded)',
+                'should_fail' => true,
+            ];
+        }
+
+        if ((string) $latestRun->status->value === 'succeeded') {
+            return [
+                'executed' => true,
+                'ok' => true,
+                'label' => sprintf('passed (run #%d succeeded)', (int) $latestRun->getKey()),
+                'should_fail' => false,
+            ];
+        }
+
+        $reason = trim((string) (strtok((string) ($latestRun->command_output ?? ''), "\n") ?: ''));
+
+        if ($reason === '' && $latestRun->exit_code !== null) {
+            $reason = sprintf('exit code %d', $latestRun->exit_code);
+        }
+
+        if ($reason === '') {
+            $reason = 'unknown failure';
+        }
+
+        return [
+            'executed' => true,
+            'ok' => false,
+            'label' => sprintf('failed (run #%d: %s)', (int) $latestRun->getKey(), mb_substr($reason, 0, 140)),
+            'should_fail' => true,
         ];
     }
 
@@ -474,18 +651,20 @@ final class InstallCommand extends Command
     }
 
     /**
-     * @param  array{ok:bool|null,failed:int,warn:int}  $doctor
+     * @param  array{ok:bool|null,failed:int,warn:int,warn_effective:int,blocker:int,warning:int,warning_effective:int}  $doctor
+     * @param  array{label:string,should_fail:bool}  $readiness
+     * @param  array{executed:bool,ok:bool|null,label:string,should_fail:bool}  $smoke
      */
-    private function renderSummary(string $preset, bool $envWritten, array $doctor): void
+    private function renderSummary(string $preset, bool $envWritten, array $doctor, array $readiness, array $smoke): void
     {
         $queueName = (string) config('checkpoint.queue.name', 'db-ops');
         $timeout = (int) config('checkpoint.queue.timeout', 3600);
         $doctorResult = $doctor['ok'] === null
             ? 'skipped'
             : ($doctor['failed'] > 0
-                ? sprintf('failed (%d fail, %d warn)', $doctor['failed'], $doctor['warn'])
-                : ($doctor['warn'] > 0
-                    ? sprintf('warn (%d fail, %d warn)', $doctor['failed'], $doctor['warn'])
+                ? sprintf('failed (%d fail, %d warn)', $doctor['failed'], $doctor['warn_effective'])
+                : ($doctor['warn_effective'] > 0
+                    ? sprintf('warn (%d fail, %d warn)', $doctor['failed'], $doctor['warn_effective'])
                     : 'passed'));
 
         $this->promptTable(['Step', 'Result'], [
@@ -493,6 +672,8 @@ final class InstallCommand extends Command
             ['Driver', (string) config('checkpoint.driver', 'shell')],
             ['Environment file', $envWritten ? 'updated' : 'unchanged'],
             ['Doctor', $doctorResult],
+            ['Smoke backup', $smoke['label']],
+            ['Readiness', $readiness['label']],
         ]);
 
         note(sprintf('Queue worker: php artisan queue:work --queue=%s --timeout=%d', $queueName, $timeout));
@@ -502,5 +683,4 @@ final class InstallCommand extends Command
             outro('Laravel Checkpoint installation completed.');
         }
     }
-
 }

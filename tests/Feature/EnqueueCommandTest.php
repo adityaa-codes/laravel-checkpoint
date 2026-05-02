@@ -12,7 +12,7 @@ it('queues the provided operation from the generic command', function (): void {
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    checkpoint_artisan('db-ops:enqueue pgbackrest_info')
+    checkpoint_artisan('checkpoint:enqueue pgbackrest_info')
         ->expectsOutput('Queued pgBackRest Info run #1.')
         ->assertSuccessful();
 
@@ -29,7 +29,7 @@ it('prompts for the operation and argument when needed', function (): void {
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    checkpoint_artisan('db-ops:enqueue')
+    checkpoint_artisan('checkpoint:enqueue')
         ->expectsChoice(
             'Which operation would you like to queue?',
             'logical_restore_file',
@@ -57,4 +57,29 @@ it('prompts for the operation and argument when needed', function (): void {
 
     expect($run->operation)->toBe('logical_restore_file')
         ->and($run->argument_text)->toBe('nightly.sql');
+});
+
+it('fails in non-interactive mode when operation is missing', function (): void {
+    Bus::fake();
+
+    checkpoint_artisan('checkpoint:enqueue', ['--no-interaction' => true])
+        ->expectsOutput('Operation is required in non-interactive mode. Pass it as checkpoint:enqueue <operation>.')
+        ->assertFailed();
+
+    expect(CommandRun::query()->count())->toBe(0);
+    Bus::assertNothingDispatched();
+});
+
+it('fails in non-interactive mode when required operation argument is missing', function (): void {
+    Bus::fake();
+
+    checkpoint_artisan('checkpoint:enqueue', [
+        'operation' => 'logical_restore_file',
+        '--no-interaction' => true,
+    ])
+        ->expectsOutput('Operation [logical_restore_file] requires --argument in non-interactive mode.')
+        ->assertFailed();
+
+    expect(CommandRun::query()->count())->toBe(0);
+    Bus::assertNothingDispatched();
 });

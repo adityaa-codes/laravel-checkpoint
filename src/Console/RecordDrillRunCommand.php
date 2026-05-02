@@ -22,7 +22,7 @@ final class RecordDrillRunCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'db-ops:record-drill
+    protected $signature = 'checkpoint:record-drill
         {--run-uuid= : Unique drill run UUID}
         {--marker-uuid= : Marker UUID}
         {--marker-email= : Marker email}
@@ -40,7 +40,7 @@ final class RecordDrillRunCommand extends Command
 
     protected $description = 'Record a backup drill result.';
 
-    protected $aliases = ['db-ops:admin:record-drill'];
+    protected $aliases = ['checkpoint:admin:record-drill'];
 
     public function __construct(
         private readonly Factory $validator,
@@ -57,7 +57,7 @@ final class RecordDrillRunCommand extends Command
                 intro('Record Backup Drill Run');
                 note('What: persist externally executed drill outcomes into checkpoint history.');
                 note('When: drills are executed outside queue automation.');
-                note('Next: run db-ops:check:report to verify drill evidence is reflected.');
+                note('Next: run checkpoint:check:report to verify drill evidence is reflected.');
             }
 
             $attributes = $this->validatedAttributes();
@@ -145,5 +145,4 @@ final class RecordDrillRunCommand extends Command
 
         return (string) $message;
     }
-
 }

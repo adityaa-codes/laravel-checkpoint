@@ -20,11 +20,11 @@ final class HealthCheckCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'db-ops:health-check';
+    protected $signature = 'checkpoint:health-check';
 
     protected $description = 'Mark timed-out running command runs as failed.';
 
-    protected $aliases = ['db-ops:check:health'];
+    protected $aliases = ['checkpoint:check:health'];
 
     public function __construct(
         private readonly Repository $config,
@@ -40,7 +40,7 @@ final class HealthCheckCommand extends Command
             intro('Health Check: Running Command Timeout Sweep');
             note('What: detect and fail stale running runs based on heartbeat/timeout.');
             note('When: scheduled maintenance or investigating stuck running jobs.');
-            note('Next: run db-ops:admin:recover-orphans if jobs were marked stale.');
+            note('Next: run checkpoint:admin:recover-orphans if jobs were marked stale.');
         }
 
         $timeoutSeconds = max(1, (int) $this->config->get('checkpoint.queue.timeout', 3600));
@@ -121,5 +121,4 @@ final class HealthCheckCommand extends Command
             ...$extra,
         ], static fn (mixed $value): bool => $value !== null);
     }
-
 }

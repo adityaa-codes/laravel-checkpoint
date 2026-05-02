@@ -38,7 +38,7 @@ it('reports ready pitr posture in json when baseline and binlog chain are valid'
         'last_known_good_at' => now()->subHour(),
     ]);
 
-    Artisan::call('db-ops:pitr-readiness', ['2026-03-11 11:30:00', '--format' => 'json']);
+    Artisan::call('checkpoint:pitr-readiness', ['2026-03-11 11:30:00', '--format' => 'json']);
 
     $payload = json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR);
 
@@ -61,7 +61,7 @@ it('reports not-ready pitr posture with actionable failures in agent mode', func
     OperatorCommandTestSupport::freezeTime();
     config()->set('checkpoint.drivers.mysql.pitr.binlog_files', []);
 
-    Artisan::call('db-ops:pitr-readiness', ['2026-03-11 13:30:00', '--agent' => true]);
+    Artisan::call('checkpoint:pitr-readiness', ['2026-03-11 13:30:00', '--agent' => true]);
 
     $payload = json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR);
 
@@ -76,11 +76,11 @@ it('reports not-ready pitr posture with actionable failures in agent mode', func
 });
 
 it('fails for invalid pitr readiness format and invalid target timestamps', function (): void {
-    checkpoint_artisan('db-ops:pitr-readiness --format=xml')
+    checkpoint_artisan('checkpoint:pitr-readiness --format=xml')
         ->expectsOutput('The --format option must be table or json.')
         ->assertFailed();
 
-    checkpoint_artisan('db-ops:pitr-readiness invalid-target --format=json')
+    checkpoint_artisan('checkpoint:pitr-readiness invalid-target --format=json')
         ->expectsOutputToContain('PITR target must be a valid datetime string.')
         ->assertFailed();
 });

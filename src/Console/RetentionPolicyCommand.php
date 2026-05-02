@@ -11,13 +11,14 @@ use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
+
 use function Laravel\Prompts\note;
 
 final class RetentionPolicyCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'db-ops:retention-policy
+    protected $signature = 'checkpoint:retention-policy
         {--format=table : Output format: table or json.}
         {--limit=100 : Maximum number of candidate rows to evaluate.}
         {--dry-run : Preview retention decisions without deleting records.}
@@ -25,7 +26,7 @@ final class RetentionPolicyCommand extends Command
 
     protected $description = 'Evaluate and optionally apply policy-based retention for checkpoint command runs.';
 
-    protected $aliases = ['db-ops:admin:retention'];
+    protected $aliases = ['checkpoint:admin:retention'];
 
     public function __construct(
         private readonly ConfigValidator $validator,
@@ -41,7 +42,7 @@ final class RetentionPolicyCommand extends Command
         if ($this->enhancedInteractiveMode()) {
             note('What: preview/apply policy-based retention windows per run category.');
             note('When: controlled cleanup with visibility before deletion.');
-            note('Next: run db-ops:check:report to review post-retention health.');
+            note('Next: run checkpoint:check:report to review post-retention health.');
         }
 
         $format = $this->stringOption('format') ?? 'table';

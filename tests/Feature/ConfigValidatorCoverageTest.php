@@ -401,6 +401,21 @@ it('rejects a reporting recent run cap that is too large', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.reporting.max_recent_runs must not exceed 1000.');
 });
 
+it('rejects unknown gate override profiles', function (): void {
+    config()->set('checkpoint.gates.override_profile', 'missing-profile');
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())
+        ->toThrow(ConfigurationException::class, 'checkpoint.gates.override_profile references unknown profile [missing-profile].');
+});
+
+it('normalizes empty gate override profile to null', function (): void {
+    config()->set('checkpoint.gates.override_profile', '  ');
+
+    resolve(ConfigValidator::class)->validate();
+
+    expect(config('checkpoint.gates.override_profile'))->toBeNull();
+});
+
 it('rejects a non-positive output capture limit', function (): void {
     config()->set('checkpoint.output.max_persisted_bytes', 0);
 

@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 final class CheckDoctorCommand extends Command
 {
-    protected $signature = 'db-ops:check:doctor {--format=table} {--agent : Emit compact AI-agent friendly JSON output.}';
+    protected $signature = 'checkpoint:check:doctor {--format=table} {--agent : Emit compact AI-agent friendly JSON output.}';
 
     protected $description = 'Journey command: run checkpoint health diagnostics.';
 
@@ -19,6 +19,6 @@ final class CheckDoctorCommand extends Command
             '--agent' => (bool) $this->option('agent') ? true : null,
         ], static fn (mixed $value): bool => $value !== null);
 
-        return $this->call('db-ops:doctor', $parameters);
+        return $this->call('checkpoint:doctor', $parameters);
     }
 }

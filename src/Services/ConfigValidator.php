@@ -34,6 +34,7 @@ final readonly class ConfigValidator
         $this->validateRetentionSettings();
         $this->validateObservabilitySettings();
         $this->validateReportingSettings();
+        $this->validateGateSettings();
         $this->validateNotificationSettings();
         $this->validateOutputSettings();
         $this->validateReplicationSettings();
@@ -673,6 +674,166 @@ final readonly class ConfigValidator
 
         if ($maxRecentRuns > 1000) {
             throw new ConfigurationException('checkpoint.reporting.max_recent_runs must not exceed 1000.');
+        }
+    }
+
+    private function validateGateSettings(): void
+    {
+        $config = $this->config->get('checkpoint.gates', []);
+
+        if (! is_array($config)) {
+            throw new ConfigurationException('checkpoint.gates must be an array.');
+        }
+
+        $defaultProfile = $config['default_profile'] ?? 'production';
+
+        if (! is_string($defaultProfile)) {
+            throw new ConfigurationException('checkpoint.gates.default_profile must be a non-empty string.');
+        }
+
+        $defaultProfile = trim($defaultProfile);
+
+        if ($defaultProfile === '') {
+            $defaultProfile = 'production';
+            config()->set('checkpoint.gates.default_profile', $defaultProfile);
+        }
+
+        $profiles = $config['profiles'] ?? null;
+
+        if (! is_array($profiles) || $profiles === []) {
+            throw new ConfigurationException('checkpoint.gates.profiles must be a non-empty array.');
+        }
+
+        if (! array_key_exists($defaultProfile, $profiles)) {
+            throw new ConfigurationException(sprintf('checkpoint.gates.default_profile [%s] must exist in checkpoint.gates.profiles.', $defaultProfile));
+        }
+
+        $overrideProfile = $config['override_profile'] ?? null;
+
+        if (! is_null($overrideProfile) && ! is_string($overrideProfile)) {
+            throw new ConfigurationException('checkpoint.gates.override_profile must be null or a non-empty string.');
+        }
+
+        if (is_string($overrideProfile)) {
+            $overrideProfile = trim($overrideProfile);
+
+            if ($overrideProfile === '') {
+                config()->set('checkpoint.gates.override_profile', null);
+            } elseif (! array_key_exists($overrideProfile, $profiles)) {
+                throw new ConfigurationException(sprintf(
+                    'checkpoint.gates.override_profile references unknown profile [%s].',
+                    $overrideProfile,
+                ));
+            } else {
+                config()->set('checkpoint.gates.override_profile', $overrideProfile);
+            }
+        }
+
+        $environmentProfileMap = $config['environment_profile_map'] ?? [];
+
+        if (! is_array($environmentProfileMap)) {
+            throw new ConfigurationException('checkpoint.gates.environment_profile_map must be an array.');
+        }
+
+        foreach ($environmentProfileMap as $environment => $profile) {
+            if (! is_string($environment) || trim($environment) === '') {
+                throw new ConfigurationException('checkpoint.gates.environment_profile_map keys must be non-empty strings.');
+            }
+
+            if (! is_string($profile)) {
+                throw new ConfigurationException('checkpoint.gates.environment_profile_map values must be non-empty strings.');
+            }
+
+            $profile = trim($profile);
+
+            if ($profile === '') {
+                $profile = $defaultProfile;
+                config()->set(sprintf('checkpoint.gates.environment_profile_map.%s', $environment), $profile);
+            }
+
+            if (! array_key_exists($profile, $profiles)) {
+                throw new ConfigurationException(sprintf(
+                    'checkpoint.gates.environment_profile_map[%s] references unknown profile [%s].',
+                    $environment,
+                    $profile,
+                ));
+            }
+        }
+
+        $codeMap = $config['code_map'] ?? [];
+
+        if (! is_array($codeMap)) {
+            throw new ConfigurationException('checkpoint.gates.code_map must be an array.');
+        }
+
+        foreach (['pass', 'warn', 'safety_fail', 'evidence_fail', 'policy_error'] as $code) {
+            if (! array_key_exists($code, $codeMap) || ! is_int($codeMap[$code]) || $codeMap[$code] < 0) {
+                throw new ConfigurationException(sprintf('checkpoint.gates.code_map.%s must be an integer greater than or equal to zero.', $code));
+            }
+        }
+
+        foreach ($profiles as $name => $profile) {
+            if (! is_array($profile)) {
+                throw new ConfigurationException(sprintf('checkpoint.gates.profiles.%s must be an array.', $name));
+            }
+
+            if (! is_bool($profile['exit_on_warn'] ?? null)) {
+                throw new ConfigurationException(sprintf('checkpoint.gates.profiles.%s.exit_on_warn must be a boolean.', $name));
+            }
+
+            $safety = $profile['safety'] ?? null;
+
+            if (! is_array($safety)) {
+                throw new ConfigurationException(sprintf('checkpoint.gates.profiles.%s.safety must be an array.', $name));
+            }
+
+            $failOnStatuses = $safety['fail_on_statuses'] ?? null;
+            if (! is_array($failOnStatuses) || $failOnStatuses === []) {
+                throw new ConfigurationException(sprintf('checkpoint.gates.profiles.%s.safety.fail_on_statuses must be a non-empty array.', $name));
+            }
+
+            foreach ($failOnStatuses as $status) {
+                if (! is_string($status) || trim($status) === '') {
+                    throw new ConfigurationException(sprintf('checkpoint.gates.profiles.%s.safety.fail_on_statuses must contain non-empty strings.', $name));
+                }
+            }
+
+            $failOnWarningCodes = $safety['fail_on_warning_codes'] ?? [];
+            if (! is_array($failOnWarningCodes)) {
+                throw new ConfigurationException(sprintf('checkpoint.gates.profiles.%s.safety.fail_on_warning_codes must be an array.', $name));
+            }
+
+            foreach ($failOnWarningCodes as $code) {
+                if (! is_string($code) || trim($code) === '') {
+                    throw new ConfigurationException(sprintf('checkpoint.gates.profiles.%s.safety.fail_on_warning_codes must contain non-empty strings.', $name));
+                }
+            }
+
+            $evidence = $profile['evidence'] ?? null;
+
+            if (! is_array($evidence)) {
+                throw new ConfigurationException(sprintf('checkpoint.gates.profiles.%s.evidence must be an array.', $name));
+            }
+
+            if (! is_bool($evidence['enabled'] ?? null)) {
+                throw new ConfigurationException(sprintf('checkpoint.gates.profiles.%s.evidence.enabled must be a boolean.', $name));
+            }
+
+            $failOnCodes = $evidence['fail_on_codes'] ?? [];
+            if (! is_array($failOnCodes)) {
+                throw new ConfigurationException(sprintf('checkpoint.gates.profiles.%s.evidence.fail_on_codes must be an array.', $name));
+            }
+
+            foreach ($failOnCodes as $code) {
+                if (! is_string($code) || trim($code) === '') {
+                    throw new ConfigurationException(sprintf('checkpoint.gates.profiles.%s.evidence.fail_on_codes must contain non-empty strings.', $name));
+                }
+            }
+
+            $maxAge = $evidence['max_restore_verification_age_days'] ?? null;
+            if (! is_int($maxAge) || $maxAge < 0) {
+                throw new ConfigurationException(sprintf('checkpoint.gates.profiles.%s.evidence.max_restore_verification_age_days must be an integer greater than or equal to zero.', $name));
+            }
         }
     }
 

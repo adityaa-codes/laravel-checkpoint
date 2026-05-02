@@ -6,13 +6,11 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
 use Illuminate\Console\Command;
 use Throwable;
 
-use function Laravel\Prompts\intro;
-use function Laravel\Prompts\note;
-use function Laravel\Prompts\outro;
 use function Laravel\Prompts\select;
 use function Laravel\Prompts\text;
 
@@ -20,25 +18,17 @@ final class EnqueueCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'db-ops:enqueue {operation?} {--argument=}';
+    protected $signature = 'checkpoint:enqueue {operation?} {--argument=}';
 
     protected $description = 'Queue a checkpoint command run for any supported operation.';
 
-    protected $aliases = ['db-ops:do:enqueue'];
+    protected $aliases = ['checkpoint:do:enqueue'];
 
     public function handle(
         EnqueueCommandRunAction $enqueueCommandRun,
         CommandRunCatalog $catalog,
     ): int {
         try {
-            if ($this->enhancedInteractiveMode()) {
-                intro('Checkpoint Operation Queue');
-                note('Choose an operation, then optionally provide its argument.');
-                note('What: enqueue any supported operation (backup/restore/PITR/replication).');
-                note('When: advanced or recovery workflows beyond standard backup.');
-                note('Next: run db-ops:do:status to monitor progress and result.');
-            }
-
             $operation = $this->resolveOperation($catalog);
             $argument = $this->resolveArgument($catalog, $operation);
 
@@ -47,7 +37,8 @@ final class EnqueueCommand extends Command
             $message = $this->queuedMessage($operation, (int) $run->getKey());
 
             if ($this->enhancedInteractiveMode()) {
-                outro($message);
+                \Laravel\Prompts\info($message);
+                \Laravel\Prompts\note('Monitor progress: php artisan checkpoint:do:status');
             } else {
                 $this->promptInfo($message);
             }
@@ -69,6 +60,12 @@ final class EnqueueCommand extends Command
         }
 
         $choices = array_keys($catalog->all());
+
+        if ($this->input !== null && ! $this->input->isInteractive()) {
+            throw new InvalidArgumentException(
+                'Operation is required in non-interactive mode. Pass it as checkpoint:enqueue <operation>.',
+            );
+        }
 
         if (app()->runningUnitTests()) {
             /** @var string $selected */
@@ -103,6 +100,13 @@ final class EnqueueCommand extends Command
 
         if (! $requiresArgument) {
             return null;
+        }
+
+        if ($this->input !== null && ! $this->input->isInteractive()) {
+            throw new InvalidArgumentException(sprintf(
+                'Operation [%s] requires --argument in non-interactive mode.',
+                $operation,
+            ));
         }
 
         /** @var string $value */
@@ -151,5 +155,4 @@ final class EnqueueCommand extends Command
                 ->toString(),
         };
     }
-
 }

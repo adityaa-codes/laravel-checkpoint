@@ -8,13 +8,12 @@ use Illuminate\Console\Command;
 
 final class DoBackupDiffCommand extends Command
 {
-    protected $signature = 'db-ops:do:backup:diff';
+    protected $signature = 'checkpoint:do:backup:diff';
 
     protected $description = 'Journey command: queue pgBackRest differential backup.';
 
     public function handle(): int
     {
-        return $this->call('db-ops:enqueue', ['operation' => 'pgbackrest_backup_diff']);
+        return $this->call('checkpoint:enqueue', ['operation' => 'pgbackrest_backup_diff']);
     }
 }
-

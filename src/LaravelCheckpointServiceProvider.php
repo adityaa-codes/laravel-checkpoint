@@ -8,17 +8,18 @@ use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use AdityaaCodes\LaravelCheckpoint\Console\AdminCatalogExportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\AdminPruneCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\AdminRecoverOrphansCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\AdminRetentionCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\CatalogExportCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\CheckHealthCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\CheckDoctorCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\CheckHealthCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\CheckPitrCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\CheckReportCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DoBackupCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DoBackupDiffCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DoBackupFullCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DoBackupIncrCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DoBackupLogicalCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DoDrillCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DoInstallCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DoReplicateCommand;
@@ -31,14 +32,14 @@ use AdityaaCodes\LaravelCheckpoint\Console\EnqueueCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueLogicalBackupCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\HealthCheckCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\AdminRetentionCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\MigrateFromSpatieCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PitrReadinessCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecordDrillRunCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecoverOrphansCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ReplicateCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\RetentionPolicyCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ReportCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\RetentionPolicyCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\StatusCommand;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Contracts\ReplicationEndpointParser;
@@ -105,7 +106,6 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-checkpoint')
             ->hasConfigFile()
-            ->hasTranslations()
             ->hasViews()
             ->hasMigration('create_checkpoint_command_runs_table')
             ->hasMigration('add_checkpoint_metadata_to_command_runs_table')
@@ -150,6 +150,7 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             ->hasCommand(RecordDrillRunCommand::class)
             ->hasCommand(EnqueueBackupDrillCommand::class)
             ->hasCommand(EnqueueLogicalBackupCommand::class)
+            ->hasCommand(MigrateFromSpatieCommand::class)
             ->hasCommand(ReplicateCommand::class);
     }
 
@@ -169,33 +170,33 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
             if ((bool) config('checkpoint.schedule.logical_backup_enabled', true)) {
                 $this->configureScheduledCommand($schedule
-                    ->command('db-ops:enqueue-backup')
+                    ->command('checkpoint:enqueue-backup')
                     ->dailyAt((string) config('checkpoint.schedule.logical_backup_daily_at', '16:00'))
                     ->timezone((string) config('checkpoint.schedule.logical_backup_timezone', 'UTC')));
             }
 
             if ((bool) config('checkpoint.schedule.backup_drill_enabled', false)) {
                 $this->configureScheduledCommand($schedule
-                    ->command('db-ops:enqueue-drill')
+                    ->command('checkpoint:enqueue-drill')
                     ->dailyAt((string) config('checkpoint.schedule.backup_drill_daily_at', '03:00'))
                     ->timezone((string) config('checkpoint.schedule.backup_drill_timezone', 'UTC')));
             }
 
             if ((bool) config('checkpoint.schedule.health_check_enabled', true)) {
                 $this->configureScheduledCommand(
-                    $schedule->command('db-ops:health-check')->everyFiveMinutes(),
+                    $schedule->command('checkpoint:health-check')->everyFiveMinutes(),
                 );
             }
 
             if ((bool) config('checkpoint.schedule.recover_orphans_enabled', true)) {
                 $this->configureScheduledCommand(
-                    $schedule->command('db-ops:recover-orphans')->everyTenMinutes(),
+                    $schedule->command('checkpoint:recover-orphans')->everyTenMinutes(),
                 );
             }
 
             if ((bool) config('checkpoint.schedule.prune_enabled', true)) {
                 $this->configureScheduledCommand(
-                    $schedule->command('db-ops:prune')->weekly(),
+                    $schedule->command('checkpoint:prune')->weekly(),
                 );
             }
         });

@@ -2,24 +2,36 @@
 
 declare(strict_types=1);
 
+use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
+
 it('applies the minimal preset to runtime config', function (): void {
-    checkpoint_artisan('db-ops:install --preset=minimal --skip-publish --skip-migrate --skip-doctor')
+    checkpoint_artisan('checkpoint:install --preset=minimal --skip-publish --skip-migrate --skip-doctor')
         ->expectsOutputToContain('Preset applied')
         ->assertSuccessful();
 
     expect(config('checkpoint.driver'))->toBe('shell')
+        ->and(config('checkpoint.drivers.shell.commands.logical_backup'))->toBe('php -r if(!is_dir($argv[1]))mkdir($argv[1],0777,true);touch($argv[2]); {backup_dir} {output}')
         ->and(config('checkpoint.restore.require_verified_backup'))->toBeFalse()
         ->and(config('checkpoint.restore.allow_in_ci'))->toBeTrue();
 });
 
 it('completes install when doctor has no hard failures', function (): void {
-    checkpoint_artisan('db-ops:install --preset=minimal --skip-publish --skip-migrate')
+    checkpoint_artisan('checkpoint:install --preset=minimal --skip-publish --skip-migrate')
         ->expectsOutputToContain('Doctor')
+        ->expectsOutputToContain('Readiness')
+        ->assertSuccessful();
+});
+
+it('renders install summary in non-interactive mode', function (): void {
+    checkpoint_artisan('checkpoint:install --preset=minimal --skip-publish --skip-migrate --skip-doctor --no-interaction')
+        ->expectsOutputToContain('Preset applied')
+        ->expectsOutputToContain('Driver')
+        ->expectsOutputToContain('Smoke backup')
         ->assertSuccessful();
 });
 
 it('supports the do install command alias', function (): void {
-    checkpoint_artisan('db-ops:do:install --preset=minimal --skip-publish --skip-migrate --skip-doctor')
+    checkpoint_artisan('checkpoint:do:install --preset=minimal --skip-publish --skip-migrate --skip-doctor')
         ->expectsOutputToContain('Preset applied')
         ->assertSuccessful();
 });
@@ -27,7 +39,7 @@ it('supports the do install command alias', function (): void {
 it('fails fast when active driver binaries are missing', function (): void {
     config()->set('checkpoint.drivers.pgbackrest.binary', 'missing-pgbackrest-binary');
 
-    checkpoint_artisan('db-ops:install --preset=postgres-prod --skip-publish --skip-migrate --skip-doctor')
+    checkpoint_artisan('checkpoint:install --preset=postgres-prod --skip-publish --skip-migrate --skip-doctor')
         ->expectsOutputToContain('Active driver preflight failed')
         ->expectsOutputToContain('command -v missing-pgbackrest-binary')
         ->expectsOutputToContain('DB_OPS_PGBACKREST_BINARY')
@@ -35,7 +47,7 @@ it('fails fast when active driver binaries are missing', function (): void {
 });
 
 it('fails when an unknown install preset is requested', function (): void {
-    checkpoint_artisan('db-ops:install --preset=unknown-preset --skip-publish --skip-migrate --skip-doctor')
+    checkpoint_artisan('checkpoint:install --preset=unknown-preset --skip-publish --skip-migrate --skip-doctor')
         ->expectsOutputToContain('Unsupported preset')
         ->assertFailed();
 });
@@ -57,7 +69,7 @@ it('writes preset values into the configured environment file', function (): voi
         config()->set('checkpoint.drivers.mysql.mysql_binary', PHP_BINARY);
         config()->set('checkpoint.drivers.mysql.mysqlbinlog_binary', PHP_BINARY);
 
-        checkpoint_artisan('db-ops:install --preset=mysql-prod --skip-publish --skip-migrate --skip-doctor --write-env')
+        checkpoint_artisan('checkpoint:install --preset=mysql-prod --skip-publish --skip-migrate --skip-doctor --write-env')
             ->assertSuccessful();
 
         $contents = (string) file_get_contents($envPath);
@@ -73,4 +85,33 @@ it('writes preset values into the configured environment file', function (): voi
         @unlink($envPath);
         @rmdir($tempDirectory);
     }
+});
+
+it('fails non-local readiness when blocker checks exist', function (): void {
+    config()->set('checkpoint.drivers.pgbackrest.binary', PHP_BINARY);
+    config()->set('checkpoint.drivers.pgdump.dump_binary', PHP_BINARY);
+    config()->set('checkpoint.drivers.pgdump.restore_binary', PHP_BINARY);
+
+    checkpoint_artisan('checkpoint:install --preset=postgres-prod --skip-publish --skip-migrate')
+        ->expectsOutputToContain('Readiness')
+        ->assertFailed();
+});
+
+it('fails smoke backup when migrations are skipped', function (): void {
+    checkpoint_artisan('checkpoint:install --preset=minimal --skip-publish --skip-migrate --skip-doctor --smoke-backup')
+        ->expectsOutputToContain('Smoke backup')
+        ->expectsOutputToContain('not-ready (smoke backup failed)')
+        ->assertFailed();
+});
+
+it('builds publish parameters using checkpoint package tags', function (): void {
+    $command = app(InstallCommand::class);
+    $method = new ReflectionMethod($command, 'publishParameters');
+    $method->setAccessible(true);
+
+    $config = $method->invoke($command, 'checkpoint-config', false);
+    $migrations = $method->invoke($command, 'checkpoint-migrations', true);
+
+    expect($config)->toBe(['--tag' => 'checkpoint-config'])
+        ->and($migrations)->toBe(['--tag' => 'checkpoint-migrations', '--force' => true]);
 });

@@ -150,8 +150,8 @@ final class NotificationEventPayloadBuilder
             'title' => $title,
             'summary' => $summary,
             'recommended_commands' => [
-                'php artisan db-ops:enqueue-drill',
-                'php artisan db-ops:doctor --format=json',
+                'php artisan checkpoint:enqueue-drill',
+                'php artisan checkpoint:doctor --format=json',
             ],
             'evidence' => [
                 'reason' => $event->reason,
@@ -182,9 +182,9 @@ final class NotificationEventPayloadBuilder
                     $event->thresholdPercent,
                 ),
             'recommended_commands' => [
-                'php artisan db-ops:enqueue-drill',
-                'php artisan db-ops:status --summary --format=json',
-                'php artisan db-ops:report --format=json',
+                'php artisan checkpoint:enqueue-drill',
+                'php artisan checkpoint:status --summary --format=json',
+                'php artisan checkpoint:report --format=json',
             ],
             'evidence' => [
                 'window_days' => $event->windowDays,

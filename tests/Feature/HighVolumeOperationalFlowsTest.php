@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
+use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Events\OrphanRunRedispatched;
 use AdityaaCodes\LaravelCheckpoint\Events\QueueLagDetected;
-use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Artisan;
@@ -55,7 +55,7 @@ it('computes status summary correctly with high command-run volume', function ()
         'exit_code' => 0,
     ]);
 
-    Artisan::call('db-ops:status', ['--summary' => true, '--format' => 'json']);
+    Artisan::call('checkpoint:status', ['--summary' => true, '--format' => 'json']);
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
@@ -80,7 +80,7 @@ it('returns bounded recent report results for high command-run volume', function
         'updated_at' => now()->subHours(6),
     ]);
 
-    Artisan::call('db-ops:report', ['--limit' => 50, '--format' => 'json']);
+    Artisan::call('checkpoint:report', ['--limit' => 50, '--format' => 'json']);
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
@@ -108,7 +108,7 @@ it('counts stale orphaned runs correctly at high volume', function (): void {
         'updated_at' => now()->subMinutes(5),
     ]);
 
-    Artisan::call('db-ops:doctor', ['--format' => 'json']);
+    Artisan::call('checkpoint:doctor', ['--format' => 'json']);
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
@@ -139,7 +139,7 @@ it('re-dispatches stale orphan batches with correct aggregate metadata at scale'
         'updated_at' => now()->subMinutes(35),
     ]);
 
-    checkpoint_artisan('db-ops:recover-orphans')->assertSuccessful();
+    checkpoint_artisan('checkpoint:recover-orphans')->assertSuccessful();
 
     Bus::assertDispatchedTimes(ProcessCommandRunJob::class, 120);
     Event::assertDispatchedTimes(OrphanRunRedispatched::class, 120);

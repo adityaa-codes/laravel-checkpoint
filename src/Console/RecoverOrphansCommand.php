@@ -24,11 +24,11 @@ final class RecoverOrphansCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'db-ops:recover-orphans';
+    protected $signature = 'checkpoint:recover-orphans {--batch= : Maximum stale runs to mark per execution.}';
 
     protected $description = 'Re-dispatch stale pending checkpoint command runs.';
 
-    protected $aliases = ['db-ops:admin:recover-orphans'];
+    protected $aliases = ['checkpoint:admin:recover-orphans'];
 
     public function __construct(
         private readonly Repository $config,
@@ -45,7 +45,7 @@ final class RecoverOrphansCommand extends Command
             intro('Recover Orphaned Queue Runs');
             note('What: reclaim stale pending runs and re-dispatch processing jobs.');
             note('When: queue lag, worker crashes, or stale pending growth.');
-            note('Next: run db-ops:do:status to confirm backlog recovery.');
+            note('Next: run checkpoint:do:status to confirm backlog recovery.');
         }
 
         $thresholdMinutes = max(1, (int) $this->config->get('checkpoint.queue.orphan_threshold', 10));
@@ -53,7 +53,7 @@ final class RecoverOrphansCommand extends Command
         $claimTimeoutMinutes = max(1, (int) $this->config->get('checkpoint.queue.orphan_claim_timeout', 1));
         $claimExpiresBefore = now()->subMinutes($claimTimeoutMinutes);
         $claimedAt = now();
-        $batchSize = max(1, (int) $this->config->get('checkpoint.queue.orphan_batch_size', 100));
+        $batchSize = $this->batchSize();
         $eventMaxIds = max(1, (int) $this->config->get('checkpoint.queue.orphan_event_max_ids', 50));
         $queue = (string) $this->config->get('checkpoint.queue.name', 'db-ops');
         $claimedRunIds = [];
@@ -185,6 +185,27 @@ final class RecoverOrphansCommand extends Command
         return max(0, (int) $run->updated_at->diffInMinutes(now()));
     }
 
+    private function batchSize(): int
+    {
+        $configured = max(1, (int) $this->config->get('checkpoint.queue.orphan_batch_size', 100));
+
+        if ($this->input === null) {
+            return $configured;
+        }
+
+        $override = $this->option('batch');
+
+        if (! is_string($override) || trim($override) === '') {
+            return $configured;
+        }
+
+        if (! preg_match('/^\d+$/', $override)) {
+            throw new \InvalidArgumentException('The --batch option must be a positive integer.');
+        }
+
+        return max(1, (int) $override);
+    }
+
     /**
      * @param  array<string, mixed>  $extra
      * @return array<string, mixed>
@@ -203,5 +224,4 @@ final class RecoverOrphansCommand extends Command
             ...$extra,
         ], static fn (mixed $value): bool => $value !== null);
     }
-
 }

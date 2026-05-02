@@ -89,12 +89,12 @@ final class NotificationMessageFormatter
     private function actions(string $eventKey, string $level, array $eventData): array
     {
         $base = [
-            'php artisan db-ops:status --limit=5 --format=json',
-            'php artisan db-ops:doctor --format=json',
+            'php artisan checkpoint:status --limit=5 --format=json',
+            'php artisan checkpoint:doctor --format=json',
         ];
 
         if (in_array($eventKey, ['backup.failed', 'backup.freshness_alarm', 'queue.lag_detected'], true) || $level === 'CRITICAL') {
-            $base[] = 'php artisan db-ops:report --limit=10 --format=json';
+            $base[] = 'php artisan checkpoint:report --limit=10 --format=json';
         }
 
         foreach ($this->remediationCommands($eventData) as $command) {

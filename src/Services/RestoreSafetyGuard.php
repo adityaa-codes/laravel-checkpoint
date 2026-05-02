@@ -8,7 +8,9 @@ use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
 use Illuminate\Contracts\Config\Repository;
-use Illuminate\Support\Carbon;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Date;
 
 /** @internal */
 final readonly class RestoreSafetyGuard
@@ -192,7 +194,7 @@ final readonly class RestoreSafetyGuard
         }
 
         try {
-            \Illuminate\Support\Facades\Date::parse($target);
+            Date::parse($target);
         } catch (\Throwable) {
             throw new ConfigurationException(
                 sprintf('pitr_restore target [%s] must be a valid datetime string.', $target),
@@ -280,9 +282,9 @@ final readonly class RestoreSafetyGuard
     }
 
     /**
-     * @param  \Illuminate\Database\Eloquent\Builder<CommandRun>  $query
+     * @param  Builder<CommandRun>  $query
      */
-    private function requireExplicitPgBackRestBackupLabel(string $restoreTarget, \Illuminate\Database\Eloquent\Builder $query): void
+    private function requireExplicitPgBackRestBackupLabel(string $restoreTarget, Builder $query): void
     {
         if ($restoreTarget === '') {
             throw new ConfigurationException(
@@ -294,11 +296,11 @@ final readonly class RestoreSafetyGuard
     }
 
     /**
-     * @param  \Illuminate\Database\Eloquent\Builder<CommandRun>  $query
+     * @param  Builder<CommandRun>  $query
      * @param  array<string, mixed>  $context
      */
     private function matchingLogicalRestoreVerification(
-        \Illuminate\Database\Eloquent\Builder $query,
+        Builder $query,
         string $restoreTarget,
         array $context,
     ): ?CommandRun {
@@ -314,7 +316,7 @@ final readonly class RestoreSafetyGuard
             return $query->first();
         }
 
-        /** @var \Illuminate\Support\Collection<int, CommandRun> $candidates */
+        /** @var Collection<int, CommandRun> $candidates */
         $candidates = $query->limit(10)->get();
 
         return $candidates->first(
@@ -324,11 +326,11 @@ final readonly class RestoreSafetyGuard
     }
 
     /**
-     * @param  \Illuminate\Database\Eloquent\Builder<CommandRun>  $query
+     * @param  Builder<CommandRun>  $query
      * @param  array<string, mixed>  $context
      */
     private function matchingPgBackRestRestoreVerification(
-        \Illuminate\Database\Eloquent\Builder $query,
+        Builder $query,
         string $restoreTarget,
         array $context,
     ): ?CommandRun {
@@ -348,7 +350,7 @@ final readonly class RestoreSafetyGuard
             $query->where('stanza', trim($context['stanza']));
         }
 
-        /** @var \Illuminate\Support\Collection<int, CommandRun> $candidates */
+        /** @var Collection<int, CommandRun> $candidates */
         $candidates = $query->limit(10)->get();
 
         return $candidates->first(
@@ -357,11 +359,11 @@ final readonly class RestoreSafetyGuard
     }
 
     /**
-     * @param  \Illuminate\Database\Eloquent\Builder<CommandRun>  $query
+     * @param  Builder<CommandRun>  $query
      * @param  array<string, mixed>  $context
      */
     private function matchingPitrRestoreVerification(
-        \Illuminate\Database\Eloquent\Builder $query,
+        Builder $query,
         array $context,
     ): ?CommandRun {
         $baseTarget = $this->pitrBaseTarget($context);
@@ -383,7 +385,7 @@ final readonly class RestoreSafetyGuard
             ->where('operation', 'logical_backup')
             ->where('artifact_path', $baseTarget);
 
-        /** @var \Illuminate\Support\Collection<int, CommandRun> $candidates */
+        /** @var Collection<int, CommandRun> $candidates */
         $candidates = $query->limit(10)->get();
 
         return $candidates->first(

@@ -15,6 +15,7 @@ use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
 use AdityaaCodes\LaravelCheckpoint\Services\PostRestoreVerificationBuilder;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
@@ -592,7 +593,7 @@ final class PgBackRestDriver implements BackupDriver
         return $completed;
     }
 
-    private function timestampToCarbon(mixed $timestamp): ?\Illuminate\Support\Carbon
+    private function timestampToCarbon(mixed $timestamp): ?Carbon
     {
         if (! is_int($timestamp) || $timestamp < 1) {
             return null;
@@ -813,5 +814,4 @@ final class PgBackRestDriver implements BackupDriver
             ->where('command_run_id', (int) $run->getKey())
             ->count();
     }
-
 }

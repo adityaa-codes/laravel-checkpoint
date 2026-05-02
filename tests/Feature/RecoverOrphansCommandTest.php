@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Console\RecoverOrphansCommand;
+use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Events\OrphanRunRedispatched;
 use AdityaaCodes\LaravelCheckpoint\Events\QueueLagDetected;
-use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Contracts\Bus\Dispatcher;
@@ -49,7 +49,7 @@ it('re-dispatches stale pending runs and leaves recent pending runs untouched', 
         'updated_at' => Date::now()->subMinutes(5),
     ]);
 
-    checkpoint_artisan('db-ops:recover-orphans')
+    checkpoint_artisan('checkpoint:recover-orphans')
         ->expectsOutput('Re-dispatched orphaned run #1.')
         ->assertSuccessful();
 
@@ -98,7 +98,7 @@ it('re-dispatches large stale batches with aggregate lag details', function (): 
         'updated_at' => Date::now()->subMinutes(5),
     ]);
 
-    checkpoint_artisan('db-ops:recover-orphans')->assertSuccessful();
+    checkpoint_artisan('checkpoint:recover-orphans')->assertSuccessful();
 
     Bus::assertDispatchedTimes(ProcessCommandRunJob::class, 25);
     $lagEvents = Event::dispatched(QueueLagDetected::class);
@@ -135,11 +135,11 @@ it('does not redispatch the same orphan twice across overlapping recover runs', 
         'updated_at' => Date::now()->subMinutes(20),
     ]);
 
-    checkpoint_artisan('db-ops:recover-orphans')
+    checkpoint_artisan('checkpoint:recover-orphans')
         ->expectsOutput(sprintf('Re-dispatched orphaned run #%d.', $run->id))
         ->assertSuccessful();
 
-    checkpoint_artisan('db-ops:recover-orphans')
+    checkpoint_artisan('checkpoint:recover-orphans')
         ->doesntExpectOutput(sprintf('Re-dispatched orphaned run #%d.', $run->id))
         ->assertSuccessful();
 
@@ -174,12 +174,12 @@ it('releases orphan claims when redispatch throws so the run stays recoverable',
     $dispatcher = Mockery::mock(Dispatcher::class);
     $dispatcher->shouldReceive('dispatch')
         ->once()
-        ->andThrow(new \RuntimeException('queue offline'));
+        ->andThrow(new RuntimeException('queue offline'));
 
     app()->instance(Dispatcher::class, $dispatcher);
 
     expect(fn () => resolve(RecoverOrphansCommand::class)->handle())
-        ->toThrow(\RuntimeException::class, 'queue offline');
+        ->toThrow(RuntimeException::class, 'queue offline');
 
     $run->refresh();
 
@@ -252,7 +252,7 @@ it('suppresses duplicate redispatch when a nested recover command sees the same 
 
     app()->instance(Dispatcher::class, $dispatcher);
 
-    checkpoint_artisan('db-ops:recover-orphans')
+    checkpoint_artisan('checkpoint:recover-orphans')
         ->expectsOutput(sprintf('Re-dispatched orphaned run #%d.', $run->id))
         ->assertSuccessful();
 

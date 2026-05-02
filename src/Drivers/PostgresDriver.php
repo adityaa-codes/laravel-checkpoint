@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Drivers;
 
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 

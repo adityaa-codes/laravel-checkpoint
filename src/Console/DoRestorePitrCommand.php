@@ -8,7 +8,7 @@ use Illuminate\Console\Command;
 
 final class DoRestorePitrCommand extends Command
 {
-    protected $signature = 'db-ops:do:restore:pitr {target : PITR restore target timestamp}';
+    protected $signature = 'checkpoint:do:restore:pitr {target : PITR restore target timestamp}';
 
     protected $description = 'Journey command: run point-in-time restore operation.';
 
@@ -22,7 +22,7 @@ final class DoRestorePitrCommand extends Command
             return self::INVALID;
         }
 
-        return $this->call('db-ops:enqueue', [
+        return $this->call('checkpoint:enqueue', [
             'operation' => 'pitr_restore',
             '--argument' => $target,
         ]);

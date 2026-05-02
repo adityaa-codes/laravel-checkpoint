@@ -14,7 +14,7 @@ it('queues a logical backup from the artisan command', function (): void {
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    checkpoint_artisan('db-ops:enqueue-backup')
+    checkpoint_artisan('checkpoint:enqueue-backup')
         ->expectsOutput('Queued Logical Backup run #1.')
         ->assertSuccessful();
 
@@ -37,7 +37,7 @@ it('prints an error and exits with failure when enqueueing fails', function (): 
 
     app()->instance(EnqueueCommandRunAction::class, $action);
 
-    checkpoint_artisan('db-ops:enqueue-backup')
+    checkpoint_artisan('checkpoint:enqueue-backup')
         ->expectsOutputToContain('Queue broker unavailable.')
         ->assertFailed();
 

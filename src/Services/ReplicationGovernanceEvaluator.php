@@ -9,7 +9,7 @@ use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationEndpoint;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationEndpointKind;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationRequest;
 use Illuminate\Contracts\Config\Repository;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 
 /** @internal */
 final readonly class ReplicationGovernanceEvaluator
@@ -180,7 +180,7 @@ final readonly class ReplicationGovernanceEvaluator
         $start = (string) $this->config->get('checkpoint.replication.change_window_start', '00:00');
         $end = (string) $this->config->get('checkpoint.replication.change_window_end', '23:59');
         $enforced = (bool) $this->config->get('checkpoint.replication.enforce_change_window', false);
-        $now = \Illuminate\Support\Facades\Date::now($timezone);
+        $now = Date::now($timezone);
         $currentDay = strtolower($now->format('D'));
         $currentTime = $now->format('H:i');
 

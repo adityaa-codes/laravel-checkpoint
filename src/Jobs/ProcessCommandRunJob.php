@@ -10,6 +10,7 @@ use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
+use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
@@ -43,7 +44,7 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
     {
         $run = $this->run->fresh() ?? $this->run;
 
-        if ($run->status !== \AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus::Pending) {
+        if ($run->status !== CommandRunStatus::Pending) {
             Log::channel(config('checkpoint.log_channel', 'stack'))
                 ->warning('ProcessCommandRunJob skipped duplicate delivery', $this->logContext($run, [
                     'status' => $run->status->value,
@@ -185,5 +186,4 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
             ->where('command_run_id', (int) $run->getKey())
             ->count();
     }
-
 }

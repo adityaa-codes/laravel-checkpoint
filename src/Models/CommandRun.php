@@ -32,9 +32,9 @@ use Illuminate\Support\Carbon;
  * @property string|null $verification_state
  * @property string|null $restore_target
  * @property string|null $restore_confirmation_satisfied_via
-     * @property int|null $restore_verified_signal_run_id
+ * @property int|null $restore_verified_signal_run_id
  * @property string|null $restore_post_verification_result
-     * @property string|null $artifact_path
+ * @property string|null $artifact_path
  * @property int|null $backup_size_bytes
  * @property int|null $duration_seconds
  * @property int|null $throughput_bytes_per_second
@@ -342,7 +342,7 @@ class CommandRun extends Model
     {
         $heartbeatAt ??= now();
 
-        $updated = static::withoutTimestamps(fn(): int => static::query()
+        $updated = static::withoutTimestamps(fn (): int => static::query()
             ->whereKey($this->getKey())
             ->where('status', CommandRunStatus::Running)
             ->update([
@@ -363,7 +363,7 @@ class CommandRun extends Model
         $intervalSeconds = max(1, $intervalSeconds ?? (int) config('checkpoint.queue.heartbeat_interval_seconds', 30));
         $cutoff = $heartbeatAt->copy()->subSeconds($intervalSeconds);
 
-        $updated = static::withoutTimestamps(fn(): int => static::query()
+        $updated = static::withoutTimestamps(fn (): int => static::query()
             ->whereKey($this->getKey())
             ->where('status', CommandRunStatus::Running)
             ->where(function (Builder $query) use ($cutoff): void {
@@ -387,7 +387,7 @@ class CommandRun extends Model
     {
         $claimedAt ??= now();
 
-        $updated = static::withoutTimestamps(fn(): int => static::query()
+        $updated = static::withoutTimestamps(fn (): int => static::query()
             ->whereKey($this->getKey())
             ->where('status', CommandRunStatus::Pending)
             ->where('updated_at', '<', $threshold)
@@ -409,7 +409,7 @@ class CommandRun extends Model
 
     public function releaseOrphanRecoveryClaim(Carbon $claimedAt, bool $refresh = true): bool
     {
-        $updated = static::withoutTimestamps(fn(): int => static::query()
+        $updated = static::withoutTimestamps(fn (): int => static::query()
             ->whereKey($this->getKey())
             ->where('status', CommandRunStatus::Pending)
             ->where('orphan_recovery_claimed_at', $claimedAt)

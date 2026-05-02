@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
-use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillPassRateAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupCompleted;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillPassRateAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
@@ -124,7 +124,7 @@ it('includes drill remediation playbook metadata in webhook notifications', func
 
         return ($remediation['signature'] ?? null) === 'drill.pass_rate_below_threshold'
             && ($remediation['severity'] ?? null) === 'warn'
-            && in_array('php artisan db-ops:enqueue-drill', $actions, true)
+            && in_array('php artisan checkpoint:enqueue-drill', $actions, true)
             && ($context['playbook_signature'] ?? null) === 'drill.pass_rate_below_threshold';
     });
 });
