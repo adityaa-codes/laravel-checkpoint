@@ -9,16 +9,13 @@
 
 ## Local Development
 
-This repository uses DDEV for PHP and Composer commands.
-
 Common commands:
 
 ```bash
-ddev start
-ddev exec composer install
-ddev exec vendor/bin/pest
-ddev exec vendor/bin/phpstan analyse
-ddev exec vendor/bin/pint
+composer install
+vendor/bin/pest
+vendor/bin/phpstan analyse
+vendor/bin/pint
 ```
 
 ## Pull Requests
@@ -33,9 +30,9 @@ ddev exec vendor/bin/pint
 Before opening a PR, run the narrowest relevant checks and then the broader package checks when appropriate:
 
 ```bash
-ddev exec vendor/bin/pest
-ddev exec vendor/bin/phpstan analyse
-ddev exec vendor/bin/pint
+vendor/bin/pest
+vendor/bin/phpstan analyse
+vendor/bin/pint
 ```
 
 ## Adding Operations
