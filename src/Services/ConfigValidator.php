@@ -83,10 +83,6 @@ final readonly class ConfigValidator
                 sprintf('Driver class %s must implement %s.', $class, BackupDriver::class),
             );
         }
-
-        if (($drivers[$driver]['class'] ?? null) !== $class) {
-            config()->set("checkpoint.drivers.{$driver}.class", $class);
-        }
     }
 
     private function defaultDriverClass(string $driver): ?string
@@ -709,7 +705,6 @@ final readonly class ConfigValidator
 
         if ($defaultProfile === '') {
             $defaultProfile = 'production';
-            config()->set('checkpoint.gates.default_profile', $defaultProfile);
         }
 
         $profiles = $config['profiles'] ?? null;
@@ -732,14 +727,14 @@ final readonly class ConfigValidator
             $overrideProfile = trim($overrideProfile);
 
             if ($overrideProfile === '') {
-                config()->set('checkpoint.gates.override_profile', null);
+                $overrideProfile = null;
             } elseif (! array_key_exists($overrideProfile, $profiles)) {
                 throw new ConfigurationException(sprintf(
                     'checkpoint.gates.override_profile references unknown profile [%s].',
                     $overrideProfile,
                 ));
             } else {
-                config()->set('checkpoint.gates.override_profile', $overrideProfile);
+                $overrideProfile = $overrideProfile;
             }
         }
 
@@ -762,7 +757,6 @@ final readonly class ConfigValidator
 
             if ($profile === '') {
                 $profile = $defaultProfile;
-                config()->set(sprintf('checkpoint.gates.environment_profile_map.%s', $environment), $profile);
             }
 
             if (! array_key_exists($profile, $profiles)) {

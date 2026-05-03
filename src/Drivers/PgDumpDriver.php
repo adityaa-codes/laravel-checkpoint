@@ -159,6 +159,10 @@ final class PgDumpDriver implements BackupDriver
                 $this->replicationDryRunCommand($plannedMetadata),
                 timeout: $this->commandTimeout(),
             ),
+            'backup_drill' => new Process(
+                $this->drillCommand($run, $plannedMetadata),
+                timeout: $this->commandTimeout(),
+            ),
             default => throw new ConfigurationException(
                 sprintf('Unsupported pg_dump operation [%s].', $run->operation),
             ),
@@ -578,6 +582,45 @@ final class PgDumpDriver implements BackupDriver
     }
 
     /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return list<string>
+     */
+    private function drillCommand(CommandRun $run, array $plannedMetadata): array
+    {
+        $template = trim((string) config('checkpoint.drivers.pgdump.drill_command', ''));
+
+        if ($template !== '') {
+            $argv = preg_split('/\s+/', $template);
+
+            if ($argv === false) {
+                throw new ConfigurationException('checkpoint.drivers.pgdump.drill_command must contain a valid executable token.');
+            }
+
+            $replacements = [
+                '{db}' => $this->databaseName(),
+                '{target}' => $plannedMetadata['drill_artifact_path'] ?? '',
+            ];
+
+            return array_map(
+                static fn (string $token): string => str_replace(
+                    array_keys($replacements),
+                    array_values($replacements),
+                    $token,
+                ),
+                $argv,
+            );
+        }
+
+        $target = $plannedMetadata['drill_artifact_path'] ?? $this->latestBackupTarget($this->format());
+
+        return [
+            $this->restoreBinary(),
+            '--list',
+            $target,
+        ];
+    }
+
+    /**
      * @return list<string>
      */
     private function extraArgs(string $key): array
@@ -616,6 +659,9 @@ final class PgDumpDriver implements BackupDriver
     private function displayCommandLine(CommandRun $run, array $plannedMetadata): string
     {
         return match ($run->operation) {
+            'backup_drill' => trim((string) config('checkpoint.drivers.pgdump.drill_command', '')) !== ''
+                ? $this->buildProcess($run, $plannedMetadata)->getCommandLine()
+                : sprintf('pg_restore -l %s', $plannedMetadata['drill_artifact_path'] ?? ''),
             'replication_sync' => implode(' ; ', array_filter([
                 (new Process($this->replicationDryRunCommand($plannedMetadata), timeout: $this->commandTimeout()))->getCommandLine(),
                 (bool) ($plannedMetadata['metadata']['replication']['apply_requested'] ?? false)
@@ -649,6 +695,12 @@ final class PgDumpDriver implements BackupDriver
                     'driver' => 'pgdump',
                     'format' => $this->format(),
                     'jobs' => $this->jobs(),
+                ],
+            ],
+            'backup_drill' => [
+                'drill_artifact_path' => $this->latestBackupTarget($this->format()),
+                'metadata' => [
+                    'driver' => 'pgdump',
                 ],
             ],
             'replication_sync' => [
@@ -1033,7 +1085,7 @@ final class PgDumpDriver implements BackupDriver
         $dryRunExitCode = $dryRunProcess->getExitCode() ?? -1;
 
         if ($dryRunExitCode !== 0) {
-            @unlink($artifactPath);
+            is_file($artifactPath) && unlink($artifactPath);
             $analysis = $this->failureAnalysis(
                 stage: 'dry_run_export',
                 failureOutput: $dryRun['output'],
@@ -1067,7 +1119,7 @@ final class PgDumpDriver implements BackupDriver
         $overwriteAllowed = (bool) ($replication['overwrite_destination'] ?? false) || (bool) ($replication['force_requested'] ?? false);
 
         if (! $applyRequested || $dryRunRequested) {
-            @unlink($artifactPath);
+            is_file($artifactPath) && unlink($artifactPath);
 
             return [
                 'output' => "[replication_sync:dry_run]\n".$dryRun['output'],
@@ -1089,7 +1141,7 @@ final class PgDumpDriver implements BackupDriver
         }
 
         if (! $overwriteAllowed) {
-            @unlink($artifactPath);
+            is_file($artifactPath) && unlink($artifactPath);
             $analysis = $this->failureAnalysis(
                 stage: 'apply_gate',
                 failureOutput: 'Destination overwrite denied by policy.',
@@ -1132,7 +1184,7 @@ final class PgDumpDriver implements BackupDriver
             fn (string $chunk, string $type): null => $this->tapCapturedOutput($run, null, $chunk),
         );
         $applyExitCode = $applyProcess->getExitCode() ?? -1;
-        @unlink($artifactPath);
+        is_file($artifactPath) && unlink($artifactPath);
 
         $sanity = [
             'source_snapshot' => $sourceSnapshot,
@@ -1252,7 +1304,7 @@ final class PgDumpDriver implements BackupDriver
         return [
             'path' => $path,
             'size' => $size === false ? null : $size,
-            'sha1' => @sha1_file($path) ?: null,
+            'sha1' => is_file($path) ? sha1_file($path) : null,
         ];
     }
 }

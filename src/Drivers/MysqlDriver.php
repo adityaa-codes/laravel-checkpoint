@@ -18,6 +18,7 @@ use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
 use AdityaaCodes\LaravelCheckpoint\Services\PostRestoreVerificationBuilder;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Process\Process;
@@ -131,11 +132,138 @@ final class MysqlDriver implements BackupDriver
             'logical_restore_file', 'logical_restore_latest' => $this->executeLogicalRestore($run, $plannedMetadata),
             'pitr_restore' => $this->executePitrRestore($run, $plannedMetadata),
             'replication_sync' => $this->executeReplicationSync($run, $plannedMetadata),
-            'backup_drill' => $this->executeSingleProcess($this->buildProcess($run, $plannedMetadata)),
+            'backup_drill' => $this->executeDrillOperation($run, $plannedMetadata),
             default => throw new ConfigurationException(
                 sprintf('Unsupported mysql operation [%s].', $run->operation),
             ),
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return array{output:string,exit_code:int,metadata:array<string,mixed>}
+     */
+    private function executeDrillOperation(CommandRun $run, array $plannedMetadata): array
+    {
+        $drillCommand = trim((string) config('checkpoint.drivers.mysql.drill_command', ''));
+
+        if ($drillCommand !== '') {
+            return $this->executeSingleProcess($this->buildProcess($run, $plannedMetadata));
+        }
+
+        return $this->executeInlineDrillValidation();
+    }
+
+    /**
+     * @return array{output:string,exit_code:int,metadata:array<string,mixed>}
+     */
+    private function executeInlineDrillValidation(): array
+    {
+        try {
+            $target = $this->latestBackupTarget();
+            $size = filesize($target);
+
+            if ($size === false || $size === 0) {
+                return [
+                    'output' => 'Default drill: latest backup artifact is empty or unreadable.',
+                    'exit_code' => 1,
+                    'metadata' => [
+                        'drill' => [
+                            'method' => 'inline_structure_check',
+                            'artifact_path' => $target,
+                            'result' => 'artifact_empty',
+                        ],
+                    ],
+                ];
+            }
+
+            $handle = fopen($target, 'r');
+
+            if ($handle === false) {
+                return [
+                    'output' => 'Default drill: cannot open latest backup artifact.',
+                    'exit_code' => 1,
+                    'metadata' => [
+                        'drill' => [
+                            'method' => 'inline_structure_check',
+                            'artifact_path' => $target,
+                            'result' => 'unreadable',
+                        ],
+                    ],
+                ];
+            }
+
+            $head = fread($handle, 5242880);
+            fclose($handle);
+
+            if ($head === false || $head === '') {
+                return [
+                    'output' => 'Default drill: latest backup artifact is empty.',
+                    'exit_code' => 1,
+                    'metadata' => [
+                        'drill' => [
+                            'method' => 'inline_structure_check',
+                            'artifact_path' => $target,
+                            'result' => 'head_empty',
+                        ],
+                    ],
+                ];
+            }
+
+            $createTableCount = substr_count(strtoupper($head), 'CREATE TABLE');
+            $insertCount = substr_count(strtoupper($head), 'INSERT INTO');
+
+            if ($createTableCount === 0 && $insertCount === 0) {
+                return [
+                    'output' => sprintf(
+                        'Default drill: artifact [%s] (%d bytes) does not contain recognizable SQL structure markers.',
+                        basename($target),
+                        $size,
+                    ),
+                    'exit_code' => 1,
+                    'metadata' => [
+                        'drill' => [
+                            'method' => 'inline_structure_check',
+                            'artifact_path' => $target,
+                            'result' => 'no_structure_markers',
+                            'artifact_size_bytes' => $size,
+                        ],
+                    ],
+                ];
+            }
+
+            return [
+                'output' => sprintf(
+                    'Default drill: artifact [%s] (%d bytes) contains CREATE TABLE=%d INSERT INTO=%d — structure valid.',
+                    basename($target),
+                    $size,
+                    $createTableCount,
+                    $insertCount,
+                ),
+                'exit_code' => 0,
+                'metadata' => [
+                    'drill' => [
+                        'method' => 'inline_structure_check',
+                        'artifact_path' => $target,
+                        'result' => 'structure_valid',
+                        'artifact_size_bytes' => $size,
+                        'create_table_count' => $createTableCount,
+                        'insert_into_count' => $insertCount,
+                    ],
+                ],
+            ];
+        } catch (ConfigurationException $e) {
+            return [
+                'output' => sprintf('Default drill: cannot resolve latest backup artifact — %s', $e->getMessage()),
+                'exit_code' => 1,
+                'metadata' => [
+                    'drill' => [
+                        'method' => 'inline_structure_check',
+                        'result' => 'no_artifact_found',
+                    ],
+                ],
+            ];
+        }
     }
 
     /**
@@ -150,7 +278,7 @@ final class MysqlDriver implements BackupDriver
             throw new ConfigurationException('Unable to resolve mysql restore target.');
         }
 
-        $contents = @file_get_contents($restoreTarget);
+        $contents = is_file($restoreTarget) ? file_get_contents($restoreTarget) : false;
 
         if (! is_string($contents)) {
             throw new ConfigurationException(sprintf('Unable to read mysql restore target [%s].', $restoreTarget));
@@ -179,7 +307,7 @@ final class MysqlDriver implements BackupDriver
             throw new ConfigurationException('pitr_restore requires a valid restore target timestamp.');
         }
 
-        $baseContents = @file_get_contents($baseTarget);
+        $baseContents = is_file($baseTarget) ? file_get_contents($baseTarget) : false;
 
         if (! is_string($baseContents)) {
             throw new ConfigurationException(sprintf('Unable to read mysql PITR baseline [%s].', $baseTarget));
@@ -215,7 +343,7 @@ final class MysqlDriver implements BackupDriver
         );
 
         if ($binlogReplay['exit_code'] !== 0) {
-            @unlink($binlogOutputPath);
+            is_file($binlogOutputPath) && File::delete($binlogOutputPath);
 
             return [
                 'output' => "[pitr_restore:baseline]\n".$restoreBaseline['output']
@@ -234,8 +362,8 @@ final class MysqlDriver implements BackupDriver
             ];
         }
 
-        $binlogSql = @file_get_contents($binlogOutputPath);
-        @unlink($binlogOutputPath);
+        $binlogSql = is_file($binlogOutputPath) ? file_get_contents($binlogOutputPath) : false;
+        is_file($binlogOutputPath) && File::delete($binlogOutputPath);
 
         if (! is_string($binlogSql)) {
             throw new ConfigurationException('Unable to read extracted mysql PITR binlog SQL.');
@@ -525,7 +653,7 @@ final class MysqlDriver implements BackupDriver
             );
         }
 
-        if (! is_dir($configured) && ! @mkdir($configured, 0700, true) && ! is_dir($configured)) {
+        if (! is_dir($configured) && ! File::makeDirectory($configured, 0700, true, true) && ! is_dir($configured)) {
             throw new ConfigurationException(
                 sprintf('Unable to create checkpoint temp directory [%s].', $configured),
             );
@@ -687,6 +815,9 @@ final class MysqlDriver implements BackupDriver
                 $this->mysqlBinlogProcess((string) ($plannedMetadata['restore_target'] ?? $run->argument_text ?? ''))->getCommandLine(),
                 $this->mysqlPitrReplayProcess()->getCommandLine(),
             ]),
+            'backup_drill' => trim((string) config('checkpoint.drivers.mysql.drill_command', '')) !== ''
+                ? $this->buildProcess($run, $plannedMetadata)->getCommandLine()
+                : '(inline structure validation)',
             'replication_sync' => implode(' ; ', array_filter([
                 $this->mysqlReplicationDryRunProcess($plannedMetadata)->getCommandLine(),
                 (bool) ($plannedMetadata['metadata']['replication']['apply_requested'] ?? false)
@@ -866,7 +997,7 @@ final class MysqlDriver implements BackupDriver
      */
     private function executeApplyReplication(string $artifactPath, CommandRun $run): array
     {
-        $contents = @file_get_contents($artifactPath);
+        $contents = is_file($artifactPath) ? file_get_contents($artifactPath) : false;
 
         if (! is_string($contents)) {
             throw new ConfigurationException(sprintf('Unable to read mysql replication staging artifact [%s].', $artifactPath));
@@ -985,12 +1116,12 @@ final class MysqlDriver implements BackupDriver
         }
 
         $size = filesize($path);
-        $contents = @file_get_contents($path);
+        $contents = file_get_contents($path);
 
         return [
             'path' => $path,
             'size' => $size === false ? null : $size,
-            'sha1' => @sha1_file($path) ?: null,
+            'sha1' => is_file($path) ? sha1_file($path) : null,
             'line_count' => is_string($contents) ? substr_count($contents, "\n") + 1 : null,
             'statement_count' => is_string($contents) ? substr_count(strtoupper($contents), ';') : null,
         ];
@@ -1070,7 +1201,7 @@ final class MysqlDriver implements BackupDriver
             'inode' => (int) $stats['ino'],
             'mtime' => (int) $stats['mtime'],
             'size' => (int) $stats['size'],
-            'content_signature' => @sha1_file($realTargetPath) ?: null,
+            'content_signature' => is_file($realTargetPath) ? sha1_file($realTargetPath) : null,
         ];
     }
 

@@ -208,7 +208,7 @@ trait ExecutesReplicationSync
 
     protected function cleanupReplicationArtifact(string $artifactPath): void
     {
-        @unlink($artifactPath);
+        is_file($artifactPath) && unlink($artifactPath);
     }
 
     /**

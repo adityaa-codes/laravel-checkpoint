@@ -117,7 +117,7 @@ final class InstallCommand extends Command
                 intro('Laravel Checkpoint Install Wizard');
                 note('What: bootstrap config, migrations, baseline safety defaults, and health checks.');
                 note('When: first-time setup or after major config resets.');
-                note('Next: run checkpoint:do:backup, then checkpoint:do:status and checkpoint:check:doctor.');
+                note('Next: run checkpoint:enqueue-backup, then checkpoint:status and checkpoint:doctor.');
             }
 
             $recommendation = $this->presetRecommendation();
@@ -167,6 +167,8 @@ final class InstallCommand extends Command
 
             return $readiness['should_fail'] ? self::FAILURE : self::SUCCESS;
         } catch (Throwable $exception) {
+            report($exception);
+
             foreach (preg_split('/\r\n|\r|\n/', $exception->getMessage()) ?: [] as $line) {
                 if (trim((string) $line) !== '') {
                     $this->promptError((string) $line);

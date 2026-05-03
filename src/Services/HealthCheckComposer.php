@@ -118,9 +118,9 @@ final readonly class HealthCheckComposer
                 includeRemediation: false,
             ),
             ...$this->activeDriverBinaryChecks(),
-            $this->tableRow('command_runs', (new CommandRun)->getTable()),
-            $this->tableRow('backup_drill_runs', (new BackupDrillRun)->getTable()),
-            $this->tableRow('verification_runs', (new VerificationRun)->getTable()),
+            $this->tableRow('command_runs', app()->make(CommandRun::class)->getTable()),
+            $this->tableRow('backup_drill_runs', app()->make(BackupDrillRun::class)->getTable()),
+            $this->tableRow('verification_runs', app()->make(VerificationRun::class)->getTable()),
             $this->checkRow(
                 'queue.worker_visibility',
                 'Queue: '.$this->queueName,

@@ -110,6 +110,8 @@ final class RecoverOrphansCommand extends Command
                         try {
                             $this->dispatcher->dispatch($job);
                         } catch (Throwable $exception) {
+                            report($exception);
+
                             $claimedRunCount--;
                             if (($arrayKey = array_search((int) $run->getKey(), $claimedRunIds, true)) !== false) {
                                 unset($claimedRunIds[$arrayKey]);
