@@ -164,7 +164,7 @@ final readonly class NotificationRouter
         } catch (Throwable $e) {
             Log::channel((string) $this->config->get('checkpoint.log_channel', 'stack'))
                 ->error('Checkpoint webhook delivery failed', [
-                    'url' => $url,
+                    'url' => $this->redactWebhookUrl($url),
                     'provider' => $provider,
                     'error' => $e->getMessage(),
                 ]);
@@ -191,5 +191,35 @@ final readonly class NotificationRouter
             ],
             default => $payload,
         };
+    }
+
+    private function redactWebhookUrl(string $url): string
+    {
+        $parsed = parse_url($url);
+
+        if (! is_array($parsed)) {
+            return '[invalid-url]';
+        }
+
+        if (($parsed['user'] ?? '') !== '' || ($parsed['pass'] ?? '') !== '') {
+            $parsed['user'] = '[REDACTED]';
+            $parsed['pass'] = '[REDACTED]';
+        }
+
+        $query = isset($parsed['query']) ? '?'.preg_replace(
+            '/(token|key|secret|auth|api_key|apikey|password|pass)=[^&]+/i',
+            '$1=[REDACTED]',
+            $parsed['query'],
+        ) : '';
+
+        return sprintf(
+            '%s://%s%s%s%s%s',
+            $parsed['scheme'] ?? 'https',
+            isset($parsed['user']) ? $parsed['user'].':'.$parsed['pass'].'@' : '',
+            $parsed['host'] ?? 'unknown',
+            isset($parsed['port']) ? ':'.$parsed['port'] : '',
+            $parsed['path'] ?? '/',
+            $query,
+        );
     }
 }
