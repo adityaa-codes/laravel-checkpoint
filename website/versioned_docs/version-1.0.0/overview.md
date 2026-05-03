@@ -26,20 +26,20 @@ This docs site is generated from the package's current code and configuration su
 
 The package currently registers these commands:
 
-- `db-ops:enqueue`
-- `db-ops:enqueue-backup`
-- `db-ops:enqueue-drill`
-- `db-ops:status`
-- `db-ops:doctor`
-- `db-ops:report`
-- `db-ops:catalog-export`
-- `db-ops:pitr-readiness`
-- `db-ops:retention-policy`
-- `db-ops:record-drill`
-- `db-ops:replicate`
-- `db-ops:health-check`
-- `db-ops:recover-orphans`
-- `db-ops:prune`
+- `checkpoint:enqueue`
+- `checkpoint:enqueue-backup`
+- `checkpoint:enqueue-drill`
+- `checkpoint:status`
+- `checkpoint:doctor`
+- `checkpoint:report`
+- `checkpoint:catalog-export`
+- `checkpoint:pitr-readiness`
+- `checkpoint:retention-policy`
+- `checkpoint:record-drill`
+- `checkpoint:replicate`
+- `checkpoint:health-check`
+- `checkpoint:recover-orphans`
+- `checkpoint:prune`
 
 ## Built-in operations
 

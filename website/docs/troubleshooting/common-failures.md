@@ -28,7 +28,7 @@ DB_OPS_CMD_TIMEOUT=7200
 
 Fix it by making the command timeout less than or equal to the queue timeout.
 
-## Queue worker kills long-running commands
+## Queue worker kills long-running operations
 
 Symptoms:
 
@@ -68,7 +68,65 @@ Common causes:
 Use:
 
 ```bash
-php artisan db-ops:pitr-readiness --format=json
+php artisan checkpoint:pitr-readiness --format=json
 ```
 
 to inspect the failing checks directly.
+
+## Drill fails but backup succeeds
+
+Symptoms:
+
+- `checkpoint:status` shows backup runs as `succeeded`
+- drill runs show `failed` or partial completion
+
+Common causes:
+
+- restore command template is missing or misconfigured
+- restore target environment is not in `allowed_environments`
+- blast radius analysis blocks the drill restore
+- disk space insufficient for restore artifact
+
+Check:
+
+```bash
+php artisan checkpoint:doctor
+php artisan checkpoint:report --limit=10
+```
+
+## Gate blocks restore
+
+Symptoms:
+
+- restore job fails before any command executes
+- failure reason references "safety gate" or "evidence gate"
+
+Check:
+
+- `checkpoint:doctor` output for gate verdicts
+- `DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS` includes your current environment
+- `DB_OPS_RESTORE_REQUIRE_CONFIRMATION` is set appropriately for your profile
+- blast radius score exceeds configured thresholds
+
+See [Restore Guardrails](../safety/restore-guardrails.md) for gate configuration.
+
+## Verification check fails
+
+Symptoms:
+
+- `checkpoint:doctor` shows verification or evidence checks as failed
+- report output shows missing drill evidence
+
+Common causes:
+
+- no drills have been run in the current retention window
+- last drill failed and evidence is stale
+- required verification markers are not configured
+
+Fix:
+
+```bash
+php artisan checkpoint:enqueue-drill
+```
+
+Run a drill and check the results to restore verification health.

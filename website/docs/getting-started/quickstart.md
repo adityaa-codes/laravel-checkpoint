@@ -6,22 +6,22 @@ sidebar_position: 2
 
 This is the simplest path for a first working setup.
 
-Command groups:
+## Command groups
 
-- `db-ops:do:*` → day-to-day operator actions
-- `db-ops:check:*` → health/readiness checks
-- `db-ops:admin:*` → maintenance/governance
+- `checkpoint:enqueue*, checkpoint:status` → day-to-day operator actions
+- `checkpoint:doctor, checkpoint:report` → health/readiness checks
+- `checkpoint:prune, checkpoint:retention-policy` → maintenance/governance
 
 ## 1. Run guided install
 
 ```bash
-php artisan db-ops:do:install --preset=minimal
+php artisan checkpoint:install --preset=minimal
 ```
 
 For PostgreSQL production, prefer:
 
 ```bash
-php artisan db-ops:do:install --preset=postgres-prod --write-env
+php artisan checkpoint:install --preset=postgres-prod --write-env
 ```
 
 This uses the unified `postgres` facade driver.
@@ -41,15 +41,15 @@ php artisan schedule:work
 ## 4. Queue your first backup
 
 ```bash
-php artisan db-ops:do:backup
+php artisan checkpoint:enqueue-backup
 ```
 
 ## 5. Check that it worked
 
 ```bash
-php artisan db-ops:do:status --limit=10
-php artisan db-ops:do:status --summary
-php artisan db-ops:check:doctor
+php artisan checkpoint:status --limit=10
+php artisan checkpoint:status --summary
+php artisan checkpoint:doctor
 ```
 
 ## 6. Replace placeholder backup command (minimal preset)
@@ -64,18 +64,16 @@ Replace it with your real backup command once queue wiring is validated.
 
 ## What success looks like
 
-- the backup job appears in `db-ops:status`
+- the backup job appears in `checkpoint:status`
 - the summary page shows no obvious failure
-- `db-ops:doctor` does not report config problems
+- `checkpoint:doctor` does not report config problems
 
-## Do not do this first
+## Next: prove your recovery path
 
-Do not start with:
+Get one backup working, then immediately set up a drill to prove your recovery path:
 
-- restore
-- replication
-- PITR
-- drills
-- deep safety tuning
+```bash
+php artisan checkpoint:enqueue-drill
+```
 
-Get one backup working first.
+Read [Run A Drill](../common-tasks/run-a-drill.md) for the full workflow.

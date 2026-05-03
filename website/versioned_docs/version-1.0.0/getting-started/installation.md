@@ -13,7 +13,7 @@ composer require adityaa-codes/laravel-checkpoint
 Run guided install (recommended):
 
 ```bash
-php artisan db-ops:install --preset=minimal
+php artisan checkpoint:install --preset=minimal
 ```
 
 Available presets:

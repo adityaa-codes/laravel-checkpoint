@@ -13,7 +13,7 @@ composer require adityaa-codes/laravel-checkpoint
 Run guided install (recommended):
 
 ```bash
-php artisan db-ops:install --preset=minimal
+php artisan checkpoint:install --preset=minimal
 ```
 
 Available presets:
@@ -44,7 +44,7 @@ php artisan migrate
 
 ## Baseline application requirements
 
-Before the package can run jobs, your Laravel app needs:
+Before the package can run reliability operations, your Laravel app needs:
 
 - a working queue connection for long-running jobs
 - a queue worker
@@ -55,7 +55,7 @@ For production, you will also want:
 - a shared cache backend such as Redis
 - a scheduler process running `php artisan schedule:run`
 
-## Local package development
+## For contributors
 
 Common package checks are:
 

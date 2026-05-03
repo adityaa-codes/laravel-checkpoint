@@ -4,9 +4,20 @@ sidebar_position: 1
 
 # Choose A Driver
 
-Start with the simplest driver that matches your real backup tool.
+Start with the simplest driver that matches your database engine and reliability requirements.
 
-## `postgres`
+## Feature matrix
+
+| Driver | Backup | PITR | Verification | Drills | Replication |
+|---|---|---|---|---|---|
+| `shell` | Yes | — | — | — | — |
+| `mysql` | Yes | Yes (binlog) | Yes | Yes | — |
+| `pgdump` | Yes | — | Yes | Yes | — |
+| `pgbackrest` | Yes | Yes (WAL) | Yes | Yes | — |
+| `postgres` (facade) | Yes | via pgbackrest | Yes | Yes | — |
+| `fake` | Test only | — | — | — | — |
+
+## `postgres` (facade)
 
 Use this as the default PostgreSQL choice. It is a unified facade:
 
@@ -15,8 +26,8 @@ Use this as the default PostgreSQL choice. It is a unified facade:
 
 Best for:
 
-- consumer-friendly PostgreSQL setups with one driver key
-- production PostgreSQL where you need both DR and logical workflows
+- production PostgreSQL setups with one driver key
+- environments where you need both disaster recovery and logical workflows
 
 ## `shell`
 
@@ -55,6 +66,15 @@ Best for:
 - `mysqldump`
 - MySQL PITR-style workflows
 
+## `fake`
+
+Use this for testing. Returns controlled output without touching any real binary.
+
+Best for:
+
+- CI pipelines
+- package development and test suites
+
 ## Recommendation
 
 If you are unsure:
@@ -62,3 +82,4 @@ If you are unsure:
 - PostgreSQL: start with `postgres`
 - MySQL: start with `mysql`
 - custom/legacy commands: use `shell`
+- testing/CI: use `fake`

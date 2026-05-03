@@ -6,65 +6,36 @@ sidebar_position: 1
 
 This page documents the command surface currently registered by `LaravelCheckpointServiceProvider`.
 
-## Command taxonomy (recommended)
-
-- `db-ops:do:*` → operator workflow commands
-- `db-ops:check:*` → validation and diagnostics
-- `db-ops:admin:*` → governance and maintenance
-
 Golden path:
 
 ```bash
-php artisan db-ops:do:install --preset=postgres-prod --write-env
-php artisan db-ops:do:backup
-php artisan db-ops:do:status --summary
-php artisan db-ops:check:doctor
-php artisan db-ops:check:report
+php artisan checkpoint:install --preset=postgres-prod --write-env
+php artisan checkpoint:enqueue-backup
+php artisan checkpoint:status --summary
+php artisan checkpoint:doctor
+php artisan checkpoint:report
 ```
 
-Journey command map:
-
-| Journey command | Base command | Purpose |
-| --- | --- | --- |
-| `db-ops:do:install` | `db-ops:install` | Guided install/preset setup |
-| `db-ops:do:backup` | `db-ops:enqueue-backup` | Default logical backup |
-| `db-ops:do:backup:logical` | `db-ops:enqueue logical_backup` | Explicit logical backup |
-| `db-ops:do:backup:full` | `db-ops:enqueue pgbackrest_backup_full` | pgBackRest full backup |
-| `db-ops:do:backup:diff` | `db-ops:enqueue pgbackrest_backup_diff` | pgBackRest differential backup |
-| `db-ops:do:backup:incr` | `db-ops:enqueue pgbackrest_backup_incr` | pgBackRest incremental backup |
-| `db-ops:do:restore:latest` | `db-ops:enqueue logical_restore_latest` | Restore latest backup |
-| `db-ops:do:restore:file {file}` | `db-ops:enqueue logical_restore_file --argument=...` | Restore selected backup file |
-| `db-ops:do:restore:pitr {target}` | `db-ops:enqueue pitr_restore --argument=...` | Restore to point-in-time target |
-| `db-ops:do:replicate` | `db-ops:replicate` | Replication dry-run/apply workflow |
-| `db-ops:do:drill` | `db-ops:enqueue-drill` | Backup drill execution |
-| `db-ops:do:status` | `db-ops:status` | Operator status/summary |
-| `db-ops:check:doctor` | `db-ops:doctor` | Health/config diagnostics |
-| `db-ops:check:report` | `db-ops:report` | Operational reporting |
-| `db-ops:check:pitr` | `db-ops:pitr-readiness` | PITR readiness validation |
-| `db-ops:check:health` | `db-ops:health-check` | Stale-running health sweep |
-| `db-ops:admin:retention` | `db-ops:retention-policy` | Retention preview/apply |
-| `db-ops:admin:prune` | `db-ops:prune` | History pruning |
-| `db-ops:admin:recover-orphans` | `db-ops:recover-orphans` | Recover stale queue items |
-| `db-ops:admin:catalog-export` | `db-ops:catalog-export` | Export backup catalog data |
+Command surface:
 
 ## Queueing commands
 
-`db-ops:enqueue {operation?} {--argument=}`
+`checkpoint:enqueue {operation?} {--argument=}`
 
 - generic entrypoint for catalog-backed operations
 - prompts interactively when no operation is provided
 - validates required arguments through `CommandRunCatalog`
 - in non-interactive mode, missing operation/required argument fails immediately
 
-`db-ops:enqueue-backup`
+`checkpoint:enqueue-backup`
 
 - queues `logical_backup`
 
-`db-ops:enqueue-drill`
+`checkpoint:enqueue-drill`
 
 - queues `backup_drill`
 
-`db-ops:replicate {source?} {destination?} {--source=} {--destination=} {--apply} {--force-overwrite} {--critical-table=*}`
+`checkpoint:replicate {source?} {destination?} {--source=} {--destination=} {--apply} {--force-overwrite} {--critical-table=*}`
 
 - queues `replication_sync`
 - defaults to dry-run mode
@@ -76,14 +47,14 @@ Journey command map:
 
 ## Status and reporting
 
-`db-ops:status {--limit=10} {--summary} {--brief} {--format=table} {--agent} {--policy-profile=}`
+`checkpoint:status {--limit=10} {--summary} {--brief} {--format=table} {--agent} {--policy-profile=}`
 
 - recent runs or operator summary
 - `--brief` renders triage-first cause/action output
 - `table`, `json`, and `agent` output modes
 - `--policy-profile` overrides gate policy profile selection for CI/automation runs
 
-`db-ops:doctor {--brief} {--format=table} {--agent} {--policy-profile=}`
+`checkpoint:doctor {--brief} {--format=table} {--agent} {--policy-profile=}`
 
 - health checks and config validation
 - checks are severity-labeled as `blocker`, `warning`, or `info`
@@ -91,7 +62,7 @@ Journey command map:
 - `--policy-profile` overrides gate policy profile selection for CI/automation runs
 - default table output prioritizes P0/P1 checks and suppresses passing checks unless run with `-v`
 
-`db-ops:report {--limit=10} {--brief} {--format=table} {--agent} {--policy-profile=}`
+`checkpoint:report {--limit=10} {--brief} {--format=table} {--agent} {--policy-profile=}`
 
 - recent runs, summary, verification, and health payload
 - includes explicit `last_failed_run` in JSON/agent payloads
@@ -122,36 +93,36 @@ Policy profile resolution order:
 3. `checkpoint.gates.environment_profile_map[APP_ENV]`
 4. `checkpoint.gates.default_profile`
 
-`db-ops:catalog-export {--format=json} {--driver=} {--repository=} {--stanza=} {--window=} {--limit=100}`
+`checkpoint:catalog-export {--format=json} {--driver=} {--repository=} {--stanza=} {--window=} {--limit=100}`
 
 - machine-friendly backup catalog export
 - `json` or `csv`
 
-`db-ops:pitr-readiness {target?} {--format=table} {--agent}`
+`checkpoint:pitr-readiness {target?} {--format=table} {--agent}`
 
 - evaluates restore readiness for a target timestamp
 
 ## Maintenance commands
 
-`db-ops:health-check`
+`checkpoint:health-check`
 
 - marks timed-out running runs as failed based on package health logic
 
-`db-ops:recover-orphans`
+`checkpoint:recover-orphans`
 
 - claims and recovers stale queue work
 
-`db-ops:prune`
+`checkpoint:prune`
 
 - prunes old command-run and backup-drill records
 
-`db-ops:retention-policy {--format=table} {--limit=100} {--dry-run} {--apply}`
+`checkpoint:retention-policy {--format=table} {--limit=100} {--dry-run} {--apply}`
 
 - previews or applies policy-based retention
 
 ## Drill recording
 
-`db-ops:record-drill`
+`checkpoint:record-drill`
 
 Required flags:
 

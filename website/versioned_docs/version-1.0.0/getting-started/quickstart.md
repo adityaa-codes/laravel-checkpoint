@@ -9,22 +9,16 @@ This package boots a config validator during service-provider startup, so a work
 1. run guided install
 2. run worker and scheduler
 
-Command groups:
-
-- `db-ops:do:*` → operator workflow
-- `db-ops:check:*` → diagnostics/readiness
-- `db-ops:admin:*` → maintenance/governance
-
 ## 1. Run guided install
 
 ```bash
-php artisan db-ops:do:install --preset=minimal
+php artisan checkpoint:install --preset=minimal
 ```
 
 For PostgreSQL production, prefer:
 
 ```bash
-php artisan db-ops:do:install --preset=postgres-prod --write-env
+php artisan checkpoint:install --preset=postgres-prod --write-env
 ```
 
 This uses the unified `postgres` facade driver.
@@ -41,11 +35,11 @@ php artisan schedule:work
 Queue and inspect:
 
 ```bash
-php artisan db-ops:do:backup
-php artisan db-ops:do:status --limit=10
-php artisan db-ops:do:status --summary
-php artisan db-ops:check:doctor
-php artisan db-ops:check:report --limit=10
+php artisan checkpoint:enqueue-backup
+php artisan checkpoint:status --limit=10
+php artisan checkpoint:status --summary
+php artisan checkpoint:doctor
+php artisan checkpoint:report --limit=10
 ```
 
 ## 3. Replace placeholder backup command (minimal preset)

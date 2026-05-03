@@ -6,10 +6,12 @@ sidebar_position: 2
 
 These are the 4 command views you will use most often after setup.
 
-## `db-ops:status`
+A healthy status shows backups AND drill results AND gate verdicts — not just backup success. Health in Checkpoint means the full reliability chain is working.
+
+## `checkpoint:status`
 
 ```bash
-php artisan db-ops:status --limit=10
+php artisan checkpoint:status --limit=10
 ```
 
 Use it when:
@@ -17,10 +19,10 @@ Use it when:
 - you want to see recent runs
 - you want to know whether a backup is still running
 
-## `db-ops:status --summary`
+## `checkpoint:status --summary`
 
 ```bash
-php artisan db-ops:status --summary
+php artisan checkpoint:status --summary
 ```
 
 Use it when:
@@ -29,11 +31,11 @@ Use it when:
 - you do not need full per-run details
 - you want the latest failure reason and immediate next action without opening logs
 
-## `db-ops:doctor`
+## `checkpoint:doctor`
 
 ```bash
-php artisan db-ops:doctor
-php artisan db-ops:doctor --format=json
+php artisan checkpoint:doctor
+php artisan checkpoint:doctor --format=json
 ```
 
 Use it when:
@@ -42,14 +44,15 @@ Use it when:
 - you want config validation feedback
 - you want machine-readable health output
 
-## `db-ops:report`
+## `checkpoint:report`
 
 ```bash
-php artisan db-ops:report --limit=10
-php artisan db-ops:report --limit=10 --format=json
+php artisan checkpoint:report --limit=10
+php artisan checkpoint:report --limit=10 --format=json
 ```
 
 Use it when:
 
 - you want a fuller operational report
 - you want recent runs plus summary plus health details
+- you need drill success/failure rates alongside backup metrics

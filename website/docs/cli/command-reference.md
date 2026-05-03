@@ -6,50 +6,26 @@ sidebar_position: 1
 
 This page explains what each command does, when to use it, and what the parameters mean.
 
-## Command taxonomy (recommended)
+## Command groups
 
-- `db-ops:do:*` → operator workflow commands
-- `db-ops:check:*` → validation, diagnostics, and readiness checks
-- `db-ops:admin:*` → governance and maintenance operations
+- **Operator commands** — `checkpoint:enqueue-backup`, `checkpoint:enqueue-drill`, `checkpoint:enqueue`, `checkpoint:replicate`, `checkpoint:status`
+- **Health & diagnostics** — `checkpoint:doctor`, `checkpoint:report`, `checkpoint:pitr-readiness`, `checkpoint:health-check`
+- **Maintenance & governance** — `checkpoint:prune`, `checkpoint:retention-policy`, `checkpoint:recover-orphans`, `checkpoint:catalog-export`
+- **Drills** — `checkpoint:enqueue-drill`, `checkpoint:record-drill`
 
 Primary golden path:
 
 ```bash
-php artisan db-ops:do:install --preset=postgres-prod --write-env
-php artisan db-ops:do:backup
-php artisan db-ops:do:status --summary
-php artisan db-ops:check:doctor
-php artisan db-ops:check:report
+php artisan checkpoint:install --preset=postgres-prod --write-env
+php artisan checkpoint:enqueue-backup
+php artisan checkpoint:status --summary
+php artisan checkpoint:doctor
+php artisan checkpoint:report
 ```
-
-Journey command map:
-
-| Journey command | Base command | Purpose |
-| --- | --- | --- |
-| `db-ops:do:install` | `db-ops:install` | Guided install/preset setup |
-| `db-ops:do:backup` | `db-ops:enqueue-backup` | Default logical backup |
-| `db-ops:do:backup:logical` | `db-ops:enqueue logical_backup` | Explicit logical backup |
-| `db-ops:do:backup:full` | `db-ops:enqueue pgbackrest_backup_full` | pgBackRest full backup |
-| `db-ops:do:backup:diff` | `db-ops:enqueue pgbackrest_backup_diff` | pgBackRest differential backup |
-| `db-ops:do:backup:incr` | `db-ops:enqueue pgbackrest_backup_incr` | pgBackRest incremental backup |
-| `db-ops:do:restore:latest` | `db-ops:enqueue logical_restore_latest` | Restore latest backup |
-| `db-ops:do:restore:file {file}` | `db-ops:enqueue logical_restore_file --argument=...` | Restore selected backup file |
-| `db-ops:do:restore:pitr {target}` | `db-ops:enqueue pitr_restore --argument=...` | Restore to point-in-time target |
-| `db-ops:do:replicate` | `db-ops:replicate` | Replication dry-run/apply workflow |
-| `db-ops:do:drill` | `db-ops:enqueue-drill` | Backup drill execution |
-| `db-ops:do:status` | `db-ops:status` | Operator status/summary |
-| `db-ops:check:doctor` | `db-ops:doctor` | Health/config diagnostics |
-| `db-ops:check:report` | `db-ops:report` | Operational reporting |
-| `db-ops:check:pitr` | `db-ops:pitr-readiness` | PITR readiness validation |
-| `db-ops:check:health` | `db-ops:health-check` | Stale-running health sweep |
-| `db-ops:admin:retention` | `db-ops:retention-policy` | Retention preview/apply |
-| `db-ops:admin:prune` | `db-ops:prune` | History pruning |
-| `db-ops:admin:recover-orphans` | `db-ops:recover-orphans` | Recover stale queue items |
-| `db-ops:admin:catalog-export` | `db-ops:catalog-export` | Export backup catalog data |
 
 ## Installation command
 
-`db-ops:install {--preset=} {--skip-publish} {--skip-migrate} {--skip-doctor} {--smoke-backup} {--write-env} {--force}`
+`checkpoint:install {--preset=} {--skip-publish} {--skip-migrate} {--skip-doctor} {--smoke-backup} {--write-env} {--force}`
 
 What it does:
 
@@ -67,13 +43,13 @@ Common presets:
 Examples:
 
 ```bash
-php artisan db-ops:install --preset=minimal
-php artisan db-ops:install --preset=postgres-prod --write-env
+php artisan checkpoint:install --preset=minimal
+php artisan checkpoint:install --preset=postgres-prod --write-env
 ```
 
 ## Backup commands
 
-`db-ops:enqueue {operation?} {--argument=}`
+`checkpoint:enqueue {operation?} {--argument=}`
 
 What it does:
 
@@ -82,7 +58,7 @@ What it does:
 
 When to use it:
 
-- use it when you need something more specific than `db-ops:enqueue-backup`
+- use it when you need something more specific than `checkpoint:enqueue-backup`
 - use it for restore, PITR, and any operation that needs an argument
 
 Rule for `--argument`:
@@ -112,12 +88,12 @@ Non-interactive note:
 Examples:
 
 ```bash
-php artisan db-ops:enqueue logical_backup
-php artisan db-ops:enqueue logical_restore_file --argument="nightly-backup.sql"
-php artisan db-ops:enqueue pitr_restore --argument="2026-03-11 11:30:00"
+php artisan checkpoint:enqueue logical_backup
+php artisan checkpoint:enqueue logical_restore_file --argument="nightly-backup.sql"
+php artisan checkpoint:enqueue pitr_restore --argument="2026-03-11 11:30:00"
 ```
 
-`db-ops:enqueue-backup`
+`checkpoint:enqueue-backup`
 
 What it does:
 
@@ -131,10 +107,10 @@ When to use it:
 Example:
 
 ```bash
-php artisan db-ops:enqueue-backup
+php artisan checkpoint:enqueue-backup
 ```
 
-`db-ops:enqueue-drill`
+`checkpoint:enqueue-drill`
 
 What it does:
 
@@ -147,12 +123,12 @@ When to use it:
 Example:
 
 ```bash
-php artisan db-ops:enqueue-drill
+php artisan checkpoint:enqueue-drill
 ```
 
 ## Status and health commands
 
-`db-ops:status {--limit=10} {--summary} {--brief} {--format=table} {--agent} {--policy-profile=}`
+`checkpoint:status {--limit=10} {--summary} {--brief} {--format=table} {--agent} {--policy-profile=}`
 
 What it does:
 
@@ -188,15 +164,15 @@ Parameters:
 Examples:
 
 ```bash
-php artisan db-ops:status
-php artisan db-ops:status --limit=25
-php artisan db-ops:status --summary
-php artisan db-ops:status --brief
-php artisan db-ops:status --format=json
-php artisan db-ops:status --agent
+php artisan checkpoint:status
+php artisan checkpoint:status --limit=25
+php artisan checkpoint:status --summary
+php artisan checkpoint:status --brief
+php artisan checkpoint:status --format=json
+php artisan checkpoint:status --agent
 ```
 
-`db-ops:doctor {--brief} {--format=table} {--agent} {--policy-profile=}`
+`checkpoint:doctor {--brief} {--format=table} {--agent} {--policy-profile=}`
 
 What it does:
 
@@ -226,13 +202,13 @@ Parameters:
 Examples:
 
 ```bash
-php artisan db-ops:doctor
-php artisan db-ops:doctor --brief
-php artisan db-ops:doctor --format=json
-php artisan db-ops:doctor --agent
+php artisan checkpoint:doctor
+php artisan checkpoint:doctor --brief
+php artisan checkpoint:doctor --format=json
+php artisan checkpoint:doctor --agent
 ```
 
-`db-ops:report {--limit=10} {--brief} {--format=table} {--agent} {--policy-profile=}`
+`checkpoint:report {--limit=10} {--brief} {--format=table} {--agent} {--policy-profile=}`
 
 What it does:
 
@@ -264,10 +240,10 @@ Parameters:
 Examples:
 
 ```bash
-php artisan db-ops:report --limit=10
-php artisan db-ops:report --limit=10 --brief
-php artisan db-ops:report --limit=10 --format=json
-php artisan db-ops:report --limit=10 --agent
+php artisan checkpoint:report --limit=10
+php artisan checkpoint:report --limit=10 --brief
+php artisan checkpoint:report --limit=10 --format=json
+php artisan checkpoint:report --limit=10 --agent
 ```
 
 Agent-friendly output tips:
@@ -296,7 +272,7 @@ Policy profile resolution order:
 
 ## Drill and PITR commands
 
-`db-ops:record-drill`
+`checkpoint:record-drill`
 
 What it does:
 
@@ -340,14 +316,14 @@ Optional parameters:
 Example:
 
 ```bash
-php artisan db-ops:record-drill \
+php artisan checkpoint:record-drill \
   --run-uuid="00000000-0000-0000-0000-000000000000" \
   --overall-result=pass \
   --executed-by="ops-bot" \
   --executed-at="2026-03-11T10:30:00+00:00"
 ```
 
-`db-ops:pitr-readiness {target?} {--format=table} {--agent}`
+`checkpoint:pitr-readiness {target?} {--format=table} {--agent}`
 
 What it does:
 
@@ -374,14 +350,14 @@ Parameters:
 Examples:
 
 ```bash
-php artisan db-ops:pitr-readiness
-php artisan db-ops:pitr-readiness "2026-03-11 11:30:00"
-php artisan db-ops:pitr-readiness "2026-03-11 11:30:00" --format=json
+php artisan checkpoint:pitr-readiness
+php artisan checkpoint:pitr-readiness "2026-03-11 11:30:00"
+php artisan checkpoint:pitr-readiness "2026-03-11 11:30:00" --format=json
 ```
 
 ## Maintenance commands
 
-`db-ops:health-check`
+`checkpoint:health-check`
 
 What it does:
 
@@ -395,10 +371,10 @@ When to use it:
 Example:
 
 ```bash
-php artisan db-ops:health-check
+php artisan checkpoint:health-check
 ```
 
-`db-ops:recover-orphans`
+`checkpoint:recover-orphans`
 
 What it does:
 
@@ -412,10 +388,10 @@ When to use it:
 Example:
 
 ```bash
-php artisan db-ops:recover-orphans
+php artisan checkpoint:recover-orphans
 ```
 
-`db-ops:prune`
+`checkpoint:prune`
 
 What it does:
 
@@ -429,10 +405,10 @@ When to use it:
 Example:
 
 ```bash
-php artisan db-ops:prune
+php artisan checkpoint:prune
 ```
 
-`db-ops:retention-policy {--format=table} {--limit=100} {--dry-run} {--apply}`
+`checkpoint:retention-policy {--format=table} {--limit=100} {--dry-run} {--apply}`
 
 What it does:
 
@@ -462,13 +438,13 @@ Parameters:
 Examples:
 
 ```bash
-php artisan db-ops:retention-policy --dry-run
-php artisan db-ops:retention-policy --apply --format=json
+php artisan checkpoint:retention-policy --dry-run
+php artisan checkpoint:retention-policy --apply --format=json
 ```
 
 ## Catalog and replication commands
 
-`db-ops:catalog-export {--format=json} {--driver=} {--repository=} {--stanza=} {--window=} {--limit=100}`
+`checkpoint:catalog-export {--format=json} {--driver=} {--repository=} {--stanza=} {--window=} {--limit=100}`
 
 What it does:
 
@@ -511,11 +487,11 @@ Parameters:
 Examples:
 
 ```bash
-php artisan db-ops:catalog-export --format=json
-php artisan db-ops:catalog-export --format=csv --driver=pgbackrest --repository=1 --stanza=main --window=24 --limit=50
+php artisan checkpoint:catalog-export --format=json
+php artisan checkpoint:catalog-export --format=csv --driver=pgbackrest --repository=1 --stanza=main --window=24 --limit=50
 ```
 
-`db-ops:replicate {source?} {destination?} {--source=} {--destination=} {--apply} {--force-overwrite} {--critical-table=*}`
+`checkpoint:replicate {source?} {destination?} {--source=} {--destination=} {--apply} {--force-overwrite} {--critical-table=*}`
 
 What it does:
 
@@ -540,6 +516,24 @@ Replication semantics (current behavior):
 - apply mode re-checks governance preflight at execution time
 - in non-interactive runs (`--no-interaction`), missing source/destination fails immediately instead of prompting
 
+## Migration from spatie/laravel-backup
+
+`checkpoint:migrate-from-spatie`
+
+What it does:
+
+- imports backup history from an existing spatie/laravel-backup installation
+
+When to use it:
+
+- use it when migrating to Checkpoint from spatie/laravel-backup
+
+Example:
+
+```bash
+php artisan checkpoint:migrate-from-spatie
+```
+
 ## Restore operations explained
 
 `logical_restore_latest`
@@ -550,7 +544,7 @@ Replication semantics (current behavior):
 Example:
 
 ```bash
-php artisan db-ops:enqueue logical_restore_latest
+php artisan checkpoint:enqueue logical_restore_latest
 ```
 
 `logical_restore_file`
@@ -561,7 +555,7 @@ php artisan db-ops:enqueue logical_restore_latest
 Example:
 
 ```bash
-php artisan db-ops:enqueue logical_restore_file --argument="nightly-backup.sql"
+php artisan checkpoint:enqueue logical_restore_file --argument="nightly-backup.sql"
 ```
 
 `pitr_restore`
@@ -572,7 +566,7 @@ php artisan db-ops:enqueue logical_restore_file --argument="nightly-backup.sql"
 Example:
 
 ```bash
-php artisan db-ops:enqueue pitr_restore --argument="2026-03-11 11:30:00"
+php artisan checkpoint:enqueue pitr_restore --argument="2026-03-11 11:30:00"
 ```
 
 Parameters:
@@ -604,6 +598,6 @@ Parameters:
 Examples:
 
 ```bash
-php artisan db-ops:replicate profile:pg-source profile:pg-destination
-php artisan db-ops:replicate --source=profile:pg-source --destination=profile:pg-destination --apply --force-overwrite --critical-table=users --critical-table=orders
+php artisan checkpoint:replicate profile:pg-source profile:pg-destination
+php artisan checkpoint:replicate --source=profile:pg-source --destination=profile:pg-destination --apply --force-overwrite --critical-table=users --critical-table=orders
 ```

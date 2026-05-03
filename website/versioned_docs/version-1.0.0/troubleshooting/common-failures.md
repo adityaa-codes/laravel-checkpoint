@@ -59,7 +59,7 @@ Common causes:
 Use:
 
 ```bash
-php artisan db-ops:pitr-readiness --format=json
+php artisan checkpoint:pitr-readiness --format=json
 ```
 
 to inspect the failing checks directly.

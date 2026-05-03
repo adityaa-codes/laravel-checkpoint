@@ -4,7 +4,9 @@ sidebar_position: 3
 
 # Restore A Backup
 
-Do this only after you already have working backups.
+Restore is where reliability proves itself. Backups are easy — restoring safely under pressure is what matters.
+
+Do this only after you already have working backups. Run a drill before your first real restore (see [Run A Drill](./run-a-drill.md)).
 
 ## Two restore styles
 
@@ -26,7 +28,7 @@ Simple difference:
 ## Restore the latest backup
 
 ```bash
-php artisan db-ops:enqueue logical_restore_latest
+php artisan checkpoint:enqueue logical_restore_latest
 ```
 
 Use this when:
@@ -37,7 +39,7 @@ Use this when:
 ## Restore a specific backup
 
 ```bash
-php artisan db-ops:enqueue logical_restore_file --argument="nightly-backup.sql"
+php artisan checkpoint:enqueue logical_restore_file --argument="nightly-backup.sql"
 ```
 
 Use this when:
@@ -60,11 +62,13 @@ Make sure you have set:
 
 If your environment requires verified backups, make sure that is working too.
 
+See [Restore Guardrails](../safety/restore-guardrails.md) for the full safety configuration.
+
 ## After you queue the restore
 
 Check progress with:
 
 ```bash
-php artisan db-ops:status --limit=10
-php artisan db-ops:report --limit=10
+php artisan checkpoint:status --limit=10
+php artisan checkpoint:report --limit=10
 ```
