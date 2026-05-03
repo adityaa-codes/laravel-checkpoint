@@ -408,12 +408,14 @@ it('rejects unknown gate override profiles', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.gates.override_profile references unknown profile [missing-profile].');
 });
 
-it('normalizes empty gate override profile to null', function (): void {
+it('accepts empty gate override profile without mutating config', function (): void {
     config()->set('checkpoint.gates.override_profile', '  ');
 
-    resolve(ConfigValidator::class)->validate();
+    $valueBefore = config('checkpoint.gates.override_profile');
 
-    expect(config('checkpoint.gates.override_profile'))->toBeNull();
+    expect(fn () => resolve(ConfigValidator::class)->validate())->not->toThrow(\Throwable::class);
+
+    expect($valueBefore)->toEqual(config('checkpoint.gates.override_profile'));
 });
 
 it('rejects a non-positive output capture limit', function (): void {

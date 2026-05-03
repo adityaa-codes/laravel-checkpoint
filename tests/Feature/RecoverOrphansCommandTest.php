@@ -160,6 +160,8 @@ it('releases orphan claims when redispatch throws so the run stays recoverable',
 
     Event::fake([QueueLagDetected::class, OrphanRunRedispatched::class]);
     Log::shouldReceive('channel->warning')->never();
+    Log::shouldReceive('error')->zeroOrMoreTimes()->andReturnNull();
+    Log::shouldReceive('driver->error')->zeroOrMoreTimes()->andReturnNull();
 
     config()->set('checkpoint.queue.orphan_threshold', 10);
 

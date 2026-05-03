@@ -10,6 +10,9 @@ parameters:
         - tests
     ignoreErrors:
         -
+            message: '#Called .env. outside of the config directory#'
+            path: config/checkpoint.php
+        -
             message: '#Call to an undefined method Pest\\PendingCalls\\TestCall::expect\(\)\.#'
             path: tests/ArchTest.php
         -
