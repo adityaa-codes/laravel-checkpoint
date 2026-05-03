@@ -72,7 +72,7 @@ it('writes preset values into the configured environment file', function (): voi
     $tempDirectory = sys_get_temp_dir().'/checkpoint-install-'.bin2hex(random_bytes(6));
     mkdir($tempDirectory, 0777, true);
     $envPath = $tempDirectory.'/.env';
-    file_put_contents($envPath, "APP_NAME=Checkpoint\nDB_OPS_DRIVER=shell\n");
+    file_put_contents($envPath, "APP_NAME=Checkpoint\nCP_DRIVER=shell\n");
 
     $originalEnvironmentPath = app()->environmentPath();
     $originalEnvironmentFile = app()->environmentFile();
@@ -90,10 +90,10 @@ it('writes preset values into the configured environment file', function (): voi
 
         $contents = (string) file_get_contents($envPath);
 
-        expect($contents)->toContain('DB_OPS_DRIVER=mysql')
-            ->toContain('DB_OPS_QUEUE_LOCK_STORE=redis')
-            ->toContain('DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS=staging')
-            ->toContain('DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=true');
+        expect($contents)->toContain('CP_DRIVER=mysql')
+            ->toContain('CP_QUEUE_LOCK_STORE=redis')
+            ->toContain('CP_RESTORE_ALLOWED_ENVIRONMENTS=staging')
+            ->toContain('CP_RESTORE_REQUIRE_VERIFIED_BACKUP=true');
     } finally {
         app()->useEnvironmentPath($originalEnvironmentPath);
         app()->loadEnvironmentFrom($originalEnvironmentFile);

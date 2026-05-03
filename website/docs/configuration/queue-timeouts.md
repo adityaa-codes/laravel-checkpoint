@@ -13,10 +13,10 @@ Your command timeout must never be longer than your queue timeout.
 Good example:
 
 ```env
-DB_OPS_QUEUE_TIMEOUT=3600
-DB_OPS_QUEUE_RETRY_AFTER=3660
-DB_OPS_QUEUE_UNIQUE_FOR=3660
-DB_OPS_CMD_TIMEOUT=3600
+CP_QUEUE_TIMEOUT=3600
+CP_QUEUE_RETRY_AFTER=3660
+CP_QUEUE_UNIQUE_FOR=3660
+CP_CMD_TIMEOUT=3600
 ```
 
 ## Worker example
@@ -32,8 +32,8 @@ php artisan queue:work --queue=db-ops --timeout=3600
 Bad example:
 
 ```env
-DB_OPS_QUEUE_TIMEOUT=3600
-DB_OPS_CMD_TIMEOUT=7200
+CP_QUEUE_TIMEOUT=3600
+CP_CMD_TIMEOUT=7200
 ```
 
 That can make `composer update`, `package:discover`, or app boot fail because the package blocks unsafe settings.

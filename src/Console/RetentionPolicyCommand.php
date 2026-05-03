@@ -14,6 +14,7 @@ use Illuminate\Contracts\Config\Repository;
 
 use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\note;
+use Laravel\Prompts\Prompt;
 
 final class RetentionPolicyCommand extends Command
 {
@@ -39,6 +40,8 @@ final class RetentionPolicyCommand extends Command
 
     public function handle(): int
     {
+        Prompt::interactive($this->enhancedInteractiveMode());
+
         if ($this->enhancedInteractiveMode()) {
             note('What: preview/apply policy-based retention windows per run category.');
             note('When: controlled cleanup with visibility before deletion.');

@@ -36,7 +36,7 @@ class EnqueueCommandRunAction
     public function execute(string $operation, ?string $argument = null, ?Model $requestedBy = null): CommandRun
     {
         if (! (bool) $this->config->get('checkpoint.operations_enabled', true)) {
-            throw new ConfigurationException('Checkpoint operations are disabled (checkpoint.operations_enabled or DB_OPS_OPERATIONS_ENABLED).');
+            throw new ConfigurationException('Checkpoint operations are disabled (checkpoint.operations_enabled or CP_OPERATIONS_ENABLED).');
         }
 
         $this->validateOperationBinaries->validate($operation);

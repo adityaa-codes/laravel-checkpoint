@@ -9,9 +9,9 @@ use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Foundation\Auth\User;
 
 it('defaults restore verification requirement outside local and testing environments', function (): void {
-    putenv('DB_OPS_REPLICATION_CHANGE_WINDOW_DAYS');
+    putenv('CP_REPLICATION_CHANGE_WINDOW_DAYS');
     putenv('APP_ENV=production');
-    putenv('DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP');
+    putenv('CP_RESTORE_REQUIRE_VERIFIED_BACKUP');
 
     $config = require __DIR__.'/../../config/checkpoint.php';
 
@@ -21,9 +21,9 @@ it('defaults restore verification requirement outside local and testing environm
 });
 
 it('defaults restore verification requirement off in testing environment', function (): void {
-    putenv('DB_OPS_REPLICATION_CHANGE_WINDOW_DAYS');
+    putenv('CP_REPLICATION_CHANGE_WINDOW_DAYS');
     putenv('APP_ENV=testing');
-    putenv('DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP');
+    putenv('CP_RESTORE_REQUIRE_VERIFIED_BACKUP');
 
     $config = require __DIR__.'/../../config/checkpoint.php';
 
@@ -33,7 +33,7 @@ it('defaults restore verification requirement off in testing environment', funct
 });
 
 it('disables ci restore bypass by default', function (): void {
-    putenv('DB_OPS_RESTORE_ALLOW_IN_CI');
+    putenv('CP_RESTORE_ALLOW_IN_CI');
 
     $config = require __DIR__.'/../../config/checkpoint.php';
 

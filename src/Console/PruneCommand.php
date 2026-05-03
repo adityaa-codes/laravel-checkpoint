@@ -14,6 +14,7 @@ use function Laravel\Prompts\intro;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 use function Laravel\Prompts\warning;
+use Laravel\Prompts\Prompt;
 
 final class PruneCommand extends Command
 {
@@ -38,6 +39,8 @@ final class PruneCommand extends Command
 
     public function handle(): int
     {
+        Prompt::interactive($this->enhancedInteractiveMode());
+
         $dryRun = (bool) $this->option('dry-run');
 
         if ($this->enhancedInteractiveMode()) {

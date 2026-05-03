@@ -13,7 +13,15 @@ trait UsesLaravelPrompts
 {
     protected function enhancedInteractiveMode(): bool
     {
-        return $this->input !== null && $this->input->isInteractive() && ! $this->runningUnitTests();
+        if ($this->input === null) {
+            return false;
+        }
+
+        if ($this->input->hasOption('no-interaction') && $this->input->getOption('no-interaction')) {
+            return false;
+        }
+
+        return $this->input->isInteractive() && ! $this->runningUnitTests();
     }
 
     /**

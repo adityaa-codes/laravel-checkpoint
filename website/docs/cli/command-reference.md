@@ -37,7 +37,7 @@ What it does:
 Common presets:
 
 - `minimal`
-- `postgres-prod` (sets `DB_OPS_DRIVER=postgres`)
+- `postgres-prod` (sets `CP_DRIVER=postgres`)
 - `mysql-prod`
 
 Examples:
@@ -266,7 +266,7 @@ Operational commands evaluate safety/evidence gates and return deterministic exi
 Policy profile resolution order:
 
 1. `--policy-profile=<name>` (highest priority)
-2. `DB_OPS_GATE_PROFILE` / `checkpoint.gates.override_profile`
+2. `CP_GATE_PROFILE` / `checkpoint.gates.override_profile`
 3. `checkpoint.gates.environment_profile_map[APP_ENV]`
 4. `checkpoint.gates.default_profile`
 

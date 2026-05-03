@@ -17,6 +17,7 @@ use function Laravel\Prompts\intro;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 use function Laravel\Prompts\select;
+use Laravel\Prompts\Prompt;
 
 final class InstallCommand extends Command
 {
@@ -48,13 +49,13 @@ final class InstallCommand extends Command
         'minimal' => [
             'description' => 'Local/testing shell baseline with relaxed restore verification.',
             'env' => [
-                'DB_OPS_DRIVER' => 'shell',
-                'DB_OPS_QUEUE_NAME' => 'db-ops',
-                'DB_OPS_CMD_LOGICAL_BACKUP' => self::MINIMAL_LOGICAL_BACKUP_PLACEHOLDER,
-                'DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS' => 'local,testing',
-                'DB_OPS_RESTORE_REQUIRE_CONFIRMATION' => 'false',
-                'DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP' => 'false',
-                'DB_OPS_RESTORE_ALLOW_IN_CI' => 'true',
+                'CP_DRIVER' => 'shell',
+                'CP_QUEUE_NAME' => 'db-ops',
+                'CP_CMD_LOGICAL_BACKUP' => self::MINIMAL_LOGICAL_BACKUP_PLACEHOLDER,
+                'CP_RESTORE_ALLOWED_ENVIRONMENTS' => 'local,testing',
+                'CP_RESTORE_REQUIRE_CONFIRMATION' => 'false',
+                'CP_RESTORE_REQUIRE_VERIFIED_BACKUP' => 'false',
+                'CP_RESTORE_ALLOW_IN_CI' => 'true',
             ],
             'config' => [
                 'checkpoint.driver' => 'shell',
@@ -69,13 +70,13 @@ final class InstallCommand extends Command
         'postgres-prod' => [
             'description' => 'Production-oriented PostgreSQL preset using pgBackRest.',
             'env' => [
-                'DB_OPS_DRIVER' => 'postgres',
-                'DB_OPS_QUEUE_NAME' => 'db-ops',
-                'DB_OPS_QUEUE_LOCK_STORE' => 'redis',
-                'DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS' => 'staging',
-                'DB_OPS_RESTORE_REQUIRE_CONFIRMATION' => 'true',
-                'DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP' => 'true',
-                'DB_OPS_RESTORE_ALLOW_IN_CI' => 'false',
+                'CP_DRIVER' => 'postgres',
+                'CP_QUEUE_NAME' => 'db-ops',
+                'CP_QUEUE_LOCK_STORE' => 'redis',
+                'CP_RESTORE_ALLOWED_ENVIRONMENTS' => 'staging',
+                'CP_RESTORE_REQUIRE_CONFIRMATION' => 'true',
+                'CP_RESTORE_REQUIRE_VERIFIED_BACKUP' => 'true',
+                'CP_RESTORE_ALLOW_IN_CI' => 'false',
             ],
             'config' => [
                 'checkpoint.driver' => 'postgres',
@@ -90,13 +91,13 @@ final class InstallCommand extends Command
         'mysql-prod' => [
             'description' => 'Production-oriented MySQL preset using logical export and replay.',
             'env' => [
-                'DB_OPS_DRIVER' => 'mysql',
-                'DB_OPS_QUEUE_NAME' => 'db-ops',
-                'DB_OPS_QUEUE_LOCK_STORE' => 'redis',
-                'DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS' => 'staging',
-                'DB_OPS_RESTORE_REQUIRE_CONFIRMATION' => 'true',
-                'DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP' => 'true',
-                'DB_OPS_RESTORE_ALLOW_IN_CI' => 'false',
+                'CP_DRIVER' => 'mysql',
+                'CP_QUEUE_NAME' => 'db-ops',
+                'CP_QUEUE_LOCK_STORE' => 'redis',
+                'CP_RESTORE_ALLOWED_ENVIRONMENTS' => 'staging',
+                'CP_RESTORE_REQUIRE_CONFIRMATION' => 'true',
+                'CP_RESTORE_REQUIRE_VERIFIED_BACKUP' => 'true',
+                'CP_RESTORE_ALLOW_IN_CI' => 'false',
             ],
             'config' => [
                 'checkpoint.driver' => 'mysql',
@@ -113,6 +114,8 @@ final class InstallCommand extends Command
     public function handle(): int
     {
         try {
+            Prompt::interactive($this->enhancedInteractiveMode());
+
             if ($this->enhancedInteractiveMode()) {
                 intro('Laravel Checkpoint Install Wizard');
                 note('What: bootstrap config, migrations, baseline safety defaults, and health checks.');
@@ -312,19 +315,19 @@ final class InstallCommand extends Command
             'postgres' => [
                 [
                     'binary' => (string) config('checkpoint.drivers.pgbackrest.binary', 'pgbackrest'),
-                    'env_key' => 'DB_OPS_PGBACKREST_BINARY',
+                    'env_key' => 'CP_PGBACKREST_BINARY',
                     'config_path' => 'checkpoint.drivers.pgbackrest.binary',
                     'required' => false,
                 ],
                 [
                     'binary' => (string) config('checkpoint.drivers.pgdump.dump_binary', 'pg_dump'),
-                    'env_key' => 'DB_OPS_PGDUMP_BINARY',
+                    'env_key' => 'CP_PGDUMP_BINARY',
                     'config_path' => 'checkpoint.drivers.pgdump.dump_binary',
                     'required' => true,
                 ],
                 [
                     'binary' => (string) config('checkpoint.drivers.pgdump.restore_binary', 'pg_restore'),
-                    'env_key' => 'DB_OPS_PGRESTORE_BINARY',
+                    'env_key' => 'CP_PGRESTORE_BINARY',
                     'config_path' => 'checkpoint.drivers.pgdump.restore_binary',
                     'required' => true,
                 ],
@@ -332,36 +335,36 @@ final class InstallCommand extends Command
             'pgbackrest' => [
                 [
                     'binary' => (string) config('checkpoint.drivers.pgbackrest.binary', 'pgbackrest'),
-                    'env_key' => 'DB_OPS_PGBACKREST_BINARY',
+                    'env_key' => 'CP_PGBACKREST_BINARY',
                     'config_path' => 'checkpoint.drivers.pgbackrest.binary',
                 ],
             ],
             'pgdump' => [
                 [
                     'binary' => (string) config('checkpoint.drivers.pgdump.dump_binary', 'pg_dump'),
-                    'env_key' => 'DB_OPS_PGDUMP_BINARY',
+                    'env_key' => 'CP_PGDUMP_BINARY',
                     'config_path' => 'checkpoint.drivers.pgdump.dump_binary',
                 ],
                 [
                     'binary' => (string) config('checkpoint.drivers.pgdump.restore_binary', 'pg_restore'),
-                    'env_key' => 'DB_OPS_PGRESTORE_BINARY',
+                    'env_key' => 'CP_PGRESTORE_BINARY',
                     'config_path' => 'checkpoint.drivers.pgdump.restore_binary',
                 ],
             ],
             'mysql' => [
                 [
                     'binary' => (string) config('checkpoint.drivers.mysql.dump_binary', 'mysqldump'),
-                    'env_key' => 'DB_OPS_MYSQL_DUMP_BINARY',
+                    'env_key' => 'CP_MYSQL_DUMP_BINARY',
                     'config_path' => 'checkpoint.drivers.mysql.dump_binary',
                 ],
                 [
                     'binary' => (string) config('checkpoint.drivers.mysql.mysql_binary', 'mysql'),
-                    'env_key' => 'DB_OPS_MYSQL_BINARY',
+                    'env_key' => 'CP_MYSQL_BINARY',
                     'config_path' => 'checkpoint.drivers.mysql.mysql_binary',
                 ],
                 [
                     'binary' => (string) config('checkpoint.drivers.mysql.mysqlbinlog_binary', 'mysqlbinlog'),
-                    'env_key' => 'DB_OPS_MYSQL_BINLOG_BINARY',
+                    'env_key' => 'CP_MYSQL_BINLOG_BINARY',
                     'config_path' => 'checkpoint.drivers.mysql.mysqlbinlog_binary',
                 ],
             ],

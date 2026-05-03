@@ -55,13 +55,13 @@ final class MigrateFromSpatieCommand extends Command
      * @var array<string, array{env_key:string, default:string, label:string}>
      */
     private const array ENV_MAP = [
-        'database_driver' => ['env_key' => 'DB_OPS_DRIVER', 'default' => '', 'label' => 'Checkpoint driver'],
-        'backup_disk' => ['env_key' => 'DB_OPS_OUTPUT_FILESYSTEM_DISK', 'default' => '', 'label' => 'Output filesystem disk'],
-        'backup_dir' => ['env_key' => 'DB_OPS_BACKUP_DIR', 'default' => '', 'label' => 'Backup destination directory'],
-        'schedule_time' => ['env_key' => 'DB_OPS_BACKUP_DAILY_AT', 'default' => '', 'label' => 'Scheduled backup time (UTC)'],
-        'notification_mail_to' => ['env_key' => 'DB_OPS_NOTIFICATIONS_MAIL_TO', 'default' => '', 'label' => 'Notification mail recipients'],
-        'retention_hot_days' => ['env_key' => 'DB_OPS_RETENTION_TIER_HOT_DAYS', 'default' => '', 'label' => 'Hot retention tier (days)'],
-        'retention_default_days' => ['env_key' => 'DB_OPS_RETENTION_DEFAULT_DAYS', 'default' => '', 'label' => 'Default retention (days)'],
+        'database_driver' => ['env_key' => 'CP_DRIVER', 'default' => '', 'label' => 'Checkpoint driver'],
+        'backup_disk' => ['env_key' => 'CP_OUTPUT_FILESYSTEM_DISK', 'default' => '', 'label' => 'Output filesystem disk'],
+        'backup_dir' => ['env_key' => 'CP_BACKUP_DIR', 'default' => '', 'label' => 'Backup destination directory'],
+        'schedule_time' => ['env_key' => 'CP_BACKUP_DAILY_AT', 'default' => '', 'label' => 'Scheduled backup time (UTC)'],
+        'notification_mail_to' => ['env_key' => 'CP_NOTIFICATIONS_MAIL_TO', 'default' => '', 'label' => 'Notification mail recipients'],
+        'retention_hot_days' => ['env_key' => 'CP_RETENTION_TIER_HOT_DAYS', 'default' => '', 'label' => 'Hot retention tier (days)'],
+        'retention_default_days' => ['env_key' => 'CP_RETENTION_DEFAULT_DAYS', 'default' => '', 'label' => 'Default retention (days)'],
     ];
 
     /**
@@ -190,7 +190,7 @@ final class MigrateFromSpatieCommand extends Command
 
         $databaseDriver = $this->detectDatabaseDriver() ?: 'shell';
         $mapped['database_driver'] = [
-            'env_key' => 'DB_OPS_DRIVER',
+            'env_key' => 'CP_DRIVER',
             'value' => $databaseDriver,
             'label' => self::ENV_MAP['database_driver']['label'],
         ];
@@ -199,7 +199,7 @@ final class MigrateFromSpatieCommand extends Command
         $firstDisk = is_array($disks) && $disks !== [] ? (string) reset($disks) : '';
         if ($firstDisk !== '') {
             $mapped['backup_disk'] = [
-                'env_key' => 'DB_OPS_OUTPUT_FILESYSTEM_DISK',
+                'env_key' => 'CP_OUTPUT_FILESYSTEM_DISK',
                 'value' => $firstDisk,
                 'label' => self::ENV_MAP['backup_disk']['label'],
             ];
@@ -208,7 +208,7 @@ final class MigrateFromSpatieCommand extends Command
         $backupFileNamePrefix = $spatieConfig['backup']['destination']['filename_prefix'] ?? '';
         if (is_string($backupFileNamePrefix) && $backupFileNamePrefix !== '') {
             $mapped['backup_prefix'] = [
-                'env_key' => 'DB_OPS_BACKUP_PREFIX',
+                'env_key' => 'CP_BACKUP_PREFIX',
                 'value' => $backupFileNamePrefix,
                 'label' => 'Backup file prefix',
             ];
@@ -220,13 +220,13 @@ final class MigrateFromSpatieCommand extends Command
 
         if (is_array($mailTo)) {
             $mapped['notification_mail_to'] = [
-                'env_key' => 'DB_OPS_NOTIFICATIONS_MAIL_TO',
+                'env_key' => 'CP_NOTIFICATIONS_MAIL_TO',
                 'value' => implode(',', $mailTo),
                 'label' => self::ENV_MAP['notification_mail_to']['label'],
             ];
 
             $mapped['notification_enabled'] = [
-                'env_key' => 'DB_OPS_NOTIFICATIONS_ENABLED',
+                'env_key' => 'CP_NOTIFICATIONS_ENABLED',
                 'value' => 'true',
                 'label' => 'Notifications enabled',
             ];
@@ -234,7 +234,7 @@ final class MigrateFromSpatieCommand extends Command
 
         if (isset($spatieConfig['backup']['notifications'])) {
             $mapped['notification_enabled'] = [
-                'env_key' => 'DB_OPS_NOTIFICATIONS_ENABLED',
+                'env_key' => 'CP_NOTIFICATIONS_ENABLED',
                 'value' => 'true',
                 'label' => 'Notifications enabled',
             ];
@@ -246,7 +246,7 @@ final class MigrateFromSpatieCommand extends Command
 
         if (is_int($retentionDays) && $retentionDays > 0) {
             $mapped['retention_hot_days'] = [
-                'env_key' => 'DB_OPS_RETENTION_TIER_HOT_DAYS',
+                'env_key' => 'CP_RETENTION_TIER_HOT_DAYS',
                 'value' => (string) $retentionDays,
                 'label' => self::ENV_MAP['retention_hot_days']['label'],
             ];
@@ -267,7 +267,7 @@ final class MigrateFromSpatieCommand extends Command
 
         if ($longestRetention > 0) {
             $mapped['retention_default_days'] = [
-                'env_key' => 'DB_OPS_RETENTION_DEFAULT_DAYS',
+                'env_key' => 'CP_RETENTION_DEFAULT_DAYS',
                 'value' => (string) $longestRetention,
                 'label' => self::ENV_MAP['retention_default_days']['label'],
             ];
@@ -312,7 +312,7 @@ final class MigrateFromSpatieCommand extends Command
                 }
 
                 if (! $skipNotifications) {
-                    $entries['DB_OPS_NOTIFICATIONS_ENABLED'] = 'true';
+                    $entries['CP_NOTIFICATIONS_ENABLED'] = 'true';
                 }
 
                 $this->writeEnvEntries($entries);
@@ -448,14 +448,14 @@ final class MigrateFromSpatieCommand extends Command
         $dbDriver = $this->detectDatabaseDriver();
         $steps[] = [
             'step' => '2. Set driver',
-            'action' => sprintf('DB_OPS_DRIVER=%s (detected from database.default).', $dbDriver),
+            'action' => sprintf('CP_DRIVER=%s (detected from database.default).', $dbDriver),
         ];
 
         $disks = $spatieConfig['backup']['destination']['disks'] ?? [];
         if (is_array($disks) && $disks !== []) {
             $steps[] = [
                 'step' => '3. Map storage disk',
-                'action' => sprintf('DB_OPS_OUTPUT_FILESYSTEM_DISK=%s (from Spatie destination disks).', implode(', ', array_map('strval', $disks))),
+                'action' => sprintf('CP_OUTPUT_FILESYSTEM_DISK=%s (from Spatie destination disks).', implode(', ', array_map('strval', $disks))),
             ];
         }
 
@@ -467,7 +467,7 @@ final class MigrateFromSpatieCommand extends Command
             $to = is_array($mailTo) ? implode(', ', array_map('strval', $mailTo)) : (string) $mailTo;
             $steps[] = [
                 'step' => '4. Map notifications',
-                'action' => sprintf('DB_OPS_NOTIFICATIONS_ENABLED=true, DB_OPS_NOTIFICATIONS_MAIL_TO=%s.', $to),
+                'action' => sprintf('CP_NOTIFICATIONS_ENABLED=true, CP_NOTIFICATIONS_MAIL_TO=%s.', $to),
             ];
         }
 

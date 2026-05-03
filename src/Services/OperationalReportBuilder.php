@@ -387,7 +387,7 @@ final readonly class OperationalReportBuilder
             && is_string($reason)
             && str_contains($reason, 'No shell command configured')
         ) {
-            return 'Set DB_OPS_CMD_LOGICAL_BACKUP, then run php artisan checkpoint:enqueue-backup.';
+            return 'Set CP_CMD_LOGICAL_BACKUP, then run php artisan checkpoint:enqueue-backup.';
         }
 
         return 'Run php artisan checkpoint:report --limit=10 --format=json for full failure context.';

@@ -24,7 +24,7 @@ Available presets:
 
 Minimal preset note:
 
-- `DB_OPS_CMD_LOGICAL_BACKUP` is seeded with a local bootstrap placeholder command that creates the backup directory and a marker file.
+- `CP_CMD_LOGICAL_BACKUP` is seeded with a local bootstrap placeholder command that creates the backup directory and a marker file.
 - Replace it with your real backup command before relying on backup artifacts.
 
 Install summary readiness labels:

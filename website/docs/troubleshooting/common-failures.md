@@ -22,8 +22,8 @@ Check:
 Most common example:
 
 ```env
-DB_OPS_QUEUE_TIMEOUT=3600
-DB_OPS_CMD_TIMEOUT=7200
+CP_QUEUE_TIMEOUT=3600
+CP_CMD_TIMEOUT=7200
 ```
 
 Fix it by making the command timeout less than or equal to the queue timeout.
@@ -104,8 +104,8 @@ Symptoms:
 Check:
 
 - `checkpoint:doctor` output for gate verdicts
-- `DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS` includes your current environment
-- `DB_OPS_RESTORE_REQUIRE_CONFIRMATION` is set appropriately for your profile
+- `CP_RESTORE_ALLOWED_ENVIRONMENTS` includes your current environment
+- `CP_RESTORE_REQUIRE_CONFIRMATION` is set appropriately for your profile
 - blast radius score exceeds configured thresholds
 
 See [Restore Guardrails](../safety/restore-guardrails.md) for gate configuration.

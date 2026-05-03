@@ -57,7 +57,7 @@ php artisan checkpoint:doctor
 If you installed with `--preset=minimal`, the seeded shell command is:
 
 ```env
-DB_OPS_CMD_LOGICAL_BACKUP="php -r if(!is_dir($argv[1]))mkdir($argv[1],0777,true);touch($argv[2]); {backup_dir} {output}"
+CP_CMD_LOGICAL_BACKUP="php -r if(!is_dir($argv[1]))mkdir($argv[1],0777,true);touch($argv[2]); {backup_dir} {output}"
 ```
 
 Replace it with your real backup command once queue wiring is validated.

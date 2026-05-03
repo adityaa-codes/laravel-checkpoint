@@ -56,9 +56,9 @@ Example values for `--argument`:
 
 Make sure you have set:
 
-- `DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS`
-- `DB_OPS_RESTORE_ALLOWED_DATABASES`
-- `DB_OPS_RESTORE_REQUIRE_CONFIRMATION`
+- `CP_RESTORE_ALLOWED_ENVIRONMENTS`
+- `CP_RESTORE_ALLOWED_DATABASES`
+- `CP_RESTORE_REQUIRE_CONFIRMATION`
 
 If your environment requires verified backups, make sure that is working too.
 
