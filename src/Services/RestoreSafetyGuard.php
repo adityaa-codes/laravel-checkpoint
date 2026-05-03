@@ -511,10 +511,8 @@ final readonly class RestoreSafetyGuard
             [
                 'name' => 'environment',
                 'weight' => $weights['environment'],
-                'contributes' => in_array($environment, ['production', 'prod'], true),
-                'note' => in_array($environment, ['production', 'prod'], true)
-                    ? sprintf('restore running in %s environment', $environment)
-                    : sprintf('restore running in %s environment', $environment),
+                'contributes' => str_starts_with(strtolower($environment), 'prod') || strtolower($environment) === 'live',
+                'note' => sprintf('restore running in %s environment', $environment),
             ],
             [
                 'name' => 'database',
@@ -525,7 +523,7 @@ final readonly class RestoreSafetyGuard
             [
                 'name' => 'target',
                 'weight' => $weights['target'],
-                'contributes' => $operation === 'logical_restore_latest' || str_contains(strtolower($restoreTarget), 'latest'),
+                'contributes' => $operation === 'logical_restore_latest',
                 'note' => $restoreTarget !== '' ? sprintf('restore target %s', $restoreTarget) : 'restore target unresolved',
             ],
             [

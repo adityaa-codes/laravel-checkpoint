@@ -11,12 +11,14 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
 use AdityaaCodes\LaravelCheckpoint\Services\PostRestoreVerificationBuilder;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Process\Process;
@@ -32,16 +34,16 @@ final class PgBackRestDriver implements BackupDriver
         $outputSession = null;
 
         try {
+            if (! $run->claimPendingExecution()) {
+                return;
+            }
+
             $process = $this->buildProcess($run);
             $tempConfigPath = $this->tempConfigPath($process);
             $plannedMetadata = $this->plannedMetadata($run);
             $restoreAudit = $this->restoreSafetyGuard()->ensureSafe($run, $plannedMetadata);
             $plannedMetadata = $this->mergeRestoreAuditMetadata($plannedMetadata, $restoreAudit);
             $displayCommandLine = $this->redactCommandLine($process->getCommandLine());
-
-            if (! $run->claimPendingExecution()) {
-                return;
-            }
 
             $run->forceFill([
                 'command_line' => $displayCommandLine,
@@ -634,9 +636,12 @@ final class PgBackRestDriver implements BackupDriver
 
     private function redactCommandLine(string $commandLine): string
     {
-        $pattern = '/(--\S*(?:-key|-secret|-pass(?:word)?)=)[^\s]+/';
+        return $this->commandLineRedactor()->redact($commandLine);
+    }
 
-        return (string) preg_replace($pattern, '$1[REDACTED]', $commandLine);
+    private function commandLineRedactor(): CommandLineRedactor
+    {
+        return resolve(CommandLineRedactor::class);
     }
 
     /**
@@ -679,16 +684,16 @@ final class PgBackRestDriver implements BackupDriver
         $contents = "[global]\n".implode("\n", $lines)."\n";
 
         if (file_put_contents($path, $contents) === false) {
-            @unlink($path);
+            is_file($path) && unlink($path);
 
             throw new ConfigurationException('Unable to write a temporary pgBackRest config file.');
         }
 
-        @chmod($path, 0600);
+        chmod($path, 0600);
 
         register_shutdown_function(function () use ($path): void {
             if (is_file($path)) {
-                @unlink($path);
+                unlink($path);
             }
         });
 
@@ -708,7 +713,7 @@ final class PgBackRestDriver implements BackupDriver
             return;
         }
 
-        @unlink($path);
+        unlink($path);
     }
 
     private function selectedRepositoryId(): int
@@ -730,7 +735,7 @@ final class PgBackRestDriver implements BackupDriver
             );
         }
 
-        if (! is_dir($configured) && ! @mkdir($configured, 0700, true) && ! is_dir($configured)) {
+        if (! is_dir($configured) && ! File::makeDirectory($configured, 0700, true, true) && ! is_dir($configured)) {
             throw new ConfigurationException(
                 sprintf('Unable to create checkpoint temp directory [%s].', $configured),
             );

@@ -61,15 +61,15 @@ final class ShellCommandDriver implements BackupDriver
         $outputSession = null;
 
         try {
+            if (! $run->claimPendingExecution()) {
+                return;
+            }
+
             $process = $this->buildProcess($run);
             $plannedMetadata = $this->plannedMetadata($run);
             $restoreAudit = $this->restoreSafetyGuard()->ensureSafe($run, $plannedMetadata);
             $plannedMetadata = $this->mergeRestoreAuditMetadata($plannedMetadata, $restoreAudit);
             $displayCommandLine = $this->redactCommandLine($process->getCommandLine());
-
-            if (! $run->claimPendingExecution()) {
-                return;
-            }
 
             $run->forceFill([
                 'command_line' => $displayCommandLine,

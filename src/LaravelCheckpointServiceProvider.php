@@ -206,12 +206,18 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
         try {
             return Schema::hasTable((string) config('checkpoint.table_prefix', 'db_ops_').'command_runs');
         } catch (Throwable) {
+            logger()->warning('Could not verify Checkpoint table existence; assuming existing installation.');
+
             return true;
         }
     }
 
     private function registerSchedules(): void
     {
+        if (! (bool) config('checkpoint.operations_enabled', true)) {
+            return;
+        }
+
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
             if ((bool) config('checkpoint.schedule.logical_backup_enabled', true)) {
                 $this->configureScheduledCommand($schedule

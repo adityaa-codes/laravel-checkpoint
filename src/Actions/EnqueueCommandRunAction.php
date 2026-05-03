@@ -11,6 +11,7 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationGovernanceEvaluator;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationRequestFactory;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationSecretRedactor;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Config\Repository;
@@ -34,6 +35,10 @@ class EnqueueCommandRunAction
 
     public function execute(string $operation, ?string $argument = null, ?Model $requestedBy = null): CommandRun
     {
+        if (! (bool) $this->config->get('checkpoint.operations_enabled', true)) {
+            throw new ConfigurationException('Checkpoint operations are disabled (checkpoint.operations_enabled or DB_OPS_OPERATIONS_ENABLED).');
+        }
+
         $this->validateOperationBinaries->validate($operation);
 
         $prepared = $this->preparedOperation($operation, $argument);
