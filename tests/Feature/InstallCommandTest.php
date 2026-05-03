@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Artisan;
 use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
 
 it('applies the minimal preset to runtime config', function (): void {
@@ -36,13 +37,28 @@ it('supports the do install command alias', function (): void {
         ->assertSuccessful();
 });
 
-it('fails fast when active driver binaries are missing', function (): void {
+it('warns when optional binaries are missing but installs successfully', function (): void {
     config()->set('checkpoint.drivers.pgbackrest.binary', 'missing-pgbackrest-binary');
+    config()->set('checkpoint.drivers.pgdump.dump_binary', PHP_BINARY);
+    config()->set('checkpoint.drivers.pgdump.restore_binary', PHP_BINARY);
+
+    $exitCode = Artisan::call('checkpoint:install', [
+        '--preset' => 'postgres-prod',
+        '--skip-publish' => true,
+        '--skip-migrate' => true,
+        '--skip-doctor' => true,
+    ]);
+
+    $output = Artisan::output();
+    $this->assertStringContainsString('pgbackrest', $output);
+    $this->assertEquals(0, $exitCode);
+});
+
+it('fails fast when required active driver binaries are missing', function (): void {
+    config()->set('checkpoint.drivers.pgdump.dump_binary', 'missing-pg-dump-binary');
 
     checkpoint_artisan('checkpoint:install --preset=postgres-prod --skip-publish --skip-migrate --skip-doctor')
         ->expectsOutputToContain('Active driver preflight failed')
-        ->expectsOutputToContain('command -v missing-pgbackrest-binary')
-        ->expectsOutputToContain('DB_OPS_PGBACKREST_BINARY')
         ->assertFailed();
 });
 

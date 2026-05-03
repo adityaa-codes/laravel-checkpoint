@@ -314,16 +314,19 @@ final class InstallCommand extends Command
                     'binary' => (string) config('checkpoint.drivers.pgbackrest.binary', 'pgbackrest'),
                     'env_key' => 'DB_OPS_PGBACKREST_BINARY',
                     'config_path' => 'checkpoint.drivers.pgbackrest.binary',
+                    'required' => false,
                 ],
                 [
                     'binary' => (string) config('checkpoint.drivers.pgdump.dump_binary', 'pg_dump'),
                     'env_key' => 'DB_OPS_PGDUMP_BINARY',
                     'config_path' => 'checkpoint.drivers.pgdump.dump_binary',
+                    'required' => true,
                 ],
                 [
                     'binary' => (string) config('checkpoint.drivers.pgdump.restore_binary', 'pg_restore'),
                     'env_key' => 'DB_OPS_PGRESTORE_BINARY',
                     'config_path' => 'checkpoint.drivers.pgdump.restore_binary',
+                    'required' => true,
                 ],
             ],
             'pgbackrest' => [
@@ -370,16 +373,23 @@ final class InstallCommand extends Command
         }
 
         $missing = [];
+        $missingOptional = [];
         $finder = new ExecutableFinder;
 
         foreach ($requirements as $requirement) {
             $binary = trim((string) $requirement['binary']);
 
             if ($binary === '') {
-                $missing[] = [
+                $entry = [
                     ...$requirement,
                     'reason' => 'empty',
                 ];
+
+                if (($requirement['required'] ?? true)) {
+                    $missing[] = $entry;
+                } else {
+                    $missingOptional[] = $entry;
+                }
 
                 continue;
             }
@@ -387,10 +397,28 @@ final class InstallCommand extends Command
             $resolved = is_executable($binary) ? $binary : $finder->find($binary);
 
             if ($resolved === null) {
-                $missing[] = [
+                $entry = [
                     ...$requirement,
                     'reason' => 'not_found',
                 ];
+
+                if (($requirement['required'] ?? true)) {
+                    $missing[] = $entry;
+                } else {
+                    $missingOptional[] = $entry;
+                }
+            }
+        }
+
+        if ($missingOptional !== []) {
+            foreach ($missingOptional as $entry) {
+                $binary = (string) $entry['binary'];
+
+                $this->line(sprintf(
+                    'Optional binary [%s] not found. Install it and set %s for pgBackRest features.',
+                    $binary !== '' ? $binary : '<empty>',
+                    (string) $entry['env_key'],
+                ));
             }
         }
 
