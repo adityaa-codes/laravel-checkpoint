@@ -494,6 +494,7 @@ final class StatusCommand extends Command
 
     private function pollUntilComplete(int $intervalSeconds): int
     {
+        $startTime = time();
         $maxIterations = 120;
 
         for ($i = 0; $i < $maxIterations; $i++) {
@@ -502,19 +503,26 @@ final class StatusCommand extends Command
                 ->count();
 
             if ($runningCount === 0) {
-                $this->promptInfo('All jobs completed.');
+                $elapsed = time() - $startTime;
+                $this->promptInfo(sprintf('All jobs completed after %ds.', $elapsed));
 
                 return self::SUCCESS;
             }
 
+            $elapsed = time() - $startTime;
+
             if ($i === 0) {
                 $this->promptInfo(sprintf('Waiting for %d running/pending job(s). Polling every %ds.', $runningCount, $intervalSeconds));
+            } elseif ($i % 5 === 0) {
+                $this->promptInfo(sprintf('Still waiting... %d job(s) remaining (elapsed: %ds, iteration: %d/%d).', $runningCount, $elapsed, $i, $maxIterations));
             }
 
             sleep($intervalSeconds);
         }
 
-        $this->promptWarning(sprintf('Polling timed out after %d iterations. Jobs may still be running.', $maxIterations));
+        $elapsed = time() - $startTime;
+        $remainingJobs = CommandRun::query()->whereIn('status', ['pending', 'running'])->count();
+        $this->promptWarning(sprintf('Polling timed out after %ds (%d iterations). %d job(s) still running.', $elapsed, $maxIterations, $remainingJobs));
 
         return self::FAILURE;
     }

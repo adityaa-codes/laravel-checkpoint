@@ -12,6 +12,7 @@ use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
 
+use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\note;
 
 final class RetentionPolicyCommand extends Command
@@ -22,7 +23,8 @@ final class RetentionPolicyCommand extends Command
         {--format=table : Output format: table or json.}
         {--limit=100 : Maximum number of candidate rows to evaluate.}
         {--dry-run : Preview retention decisions without deleting records.}
-        {--apply : Apply retention decisions immediately.}';
+        {--apply : Apply retention decisions immediately.}
+        {--force : Skip confirmation prompt when applying.}';
 
     protected $description = 'Evaluate and optionally apply policy-based retention for checkpoint command runs.';
 
@@ -98,7 +100,17 @@ final class RetentionPolicyCommand extends Command
         $deleted = 0;
 
         if ($apply && $retentionEnabled) {
-            $deleted = (new CommandRun)->pruneAll();
+            if ($this->enhancedInteractiveMode() && ! (bool) $this->option('force')) {
+                $confirmed = confirm('Apply retention policy? This will delete eligible records permanently.');
+
+                if (! $confirmed) {
+                    $this->promptWarning('Retention apply cancelled.');
+
+                    return self::SUCCESS;
+                }
+            }
+
+            $deleted = app()->make(CommandRun::class)->pruneAll();
         }
 
         $payload = $this->jsonContract->envelope('retention_policy', [

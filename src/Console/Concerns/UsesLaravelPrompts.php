@@ -187,6 +187,11 @@ trait UsesLaravelPrompts
         table(headers: $headers, rows: $rows);
     }
 
+    protected function interactiveNote(string $message): void
+    {
+        note($message);
+    }
+
     protected function interactiveInfo(string $message): void
     {
         info($message);

@@ -19,7 +19,7 @@ final class DoctorCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'checkpoint:doctor {--brief : Show triage-first health output with top issues and next action.} {--format=table} {--agent : Emit compact AI-agent friendly JSON output.} {--policy-profile= : Override gate policy profile for CI/automation.}';
+    protected $signature = 'checkpoint:doctor {--brief : Show triage-first health output with top issues and next action.} {--format=table : Output format: table, json, compact-json, or agent.} {--agent : Emit compact AI-agent friendly JSON output.} {--policy-profile= : Override gate policy profile for CI/automation.}';
 
     protected $description = 'Show checkpoint package health checks.';
 
