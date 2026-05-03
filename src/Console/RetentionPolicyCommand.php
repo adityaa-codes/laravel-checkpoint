@@ -26,8 +26,6 @@ final class RetentionPolicyCommand extends Command
 
     protected $description = 'Evaluate and optionally apply policy-based retention for checkpoint command runs.';
 
-    protected $aliases = ['checkpoint:admin:retention'];
-
     public function __construct(
         private readonly ConfigValidator $validator,
         private readonly EvaluateRetentionPolicyAction $evaluateRetentionPolicy,
@@ -42,7 +40,7 @@ final class RetentionPolicyCommand extends Command
         if ($this->enhancedInteractiveMode()) {
             note('What: preview/apply policy-based retention windows per run category.');
             note('When: controlled cleanup with visibility before deletion.');
-            note('Next: run checkpoint:check:report to review post-retention health.');
+            note('Next: run checkpoint:report to review post-retention health.');
         }
 
         $format = $this->stringOption('format') ?? 'table';
@@ -67,6 +65,8 @@ final class RetentionPolicyCommand extends Command
         try {
             $this->validator->validate();
         } catch (\Throwable $exception) {
+            report($exception);
+
             if ($format === 'json') {
                 $this->line(json_encode($this->jsonContract->envelope('retention_policy', [
                     'generated_at' => now()->toIso8601String(),
@@ -165,12 +165,5 @@ final class RetentionPolicyCommand extends Command
         );
 
         return self::SUCCESS;
-    }
-
-    private function stringOption(string $key): ?string
-    {
-        $value = $this->option($key);
-
-        return is_string($value) ? $value : null;
     }
 }

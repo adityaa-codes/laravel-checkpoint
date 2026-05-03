@@ -23,8 +23,6 @@ final class DoctorCommand extends Command
 
     protected $description = 'Show checkpoint package health checks.';
 
-    protected $aliases = ['checkpoint:check:doctor'];
-
     public function __construct(
         private readonly ConfigValidator $validator,
         private readonly Repository $config,
@@ -41,13 +39,13 @@ final class DoctorCommand extends Command
         $agentMode = (bool) $this->option('agent');
         $briefMode = (bool) $this->option('brief');
         $policyProfile = $this->policyProfileOverride();
-        $outputMode = $agentMode ? 'agent' : (in_array($format, ['table', 'json'], true) ? $format : 'table');
+        $outputMode = $agentMode ? 'agent' : (in_array($format, ['table', 'json', 'compact-json'], true) ? $format : 'table');
 
         if ($this->enhancedInteractiveMode() && $outputMode === 'table') {
             intro('Checkpoint Doctor: Health Checks');
             note('What: validate config posture, binaries, storage, queue, and safety signals.');
             note('When: during setup, after config edits, or while debugging failures.');
-            note('Next: if healthy, continue with checkpoint:do:backup and checkpoint:do:status.');
+            note('Next: if healthy, continue with checkpoint:enqueue-backup and checkpoint:status.');
         }
 
         try {
@@ -56,6 +54,8 @@ final class DoctorCommand extends Command
             $gateDecision = $this->gatePolicyEvaluator->evaluate($checks, $this->reportBuilder->summary(), $policyProfile);
             $exitCode = $gateDecision['exit_code'];
         } catch (\Throwable $exception) {
+            report($exception);
+
             $checks = [[
                 'code' => 'config.validation',
                 'check' => 'Config validation',
@@ -68,8 +68,8 @@ final class DoctorCommand extends Command
             ]];
             $gateDecision = $this->gatePolicyEvaluator->evaluate($checks, [], $policyProfile);
 
-            if ($outputMode === 'json') {
-                $this->line($this->jsonReport($checks, $briefMode, $gateDecision));
+            if ($outputMode === 'json' || $outputMode === 'compact-json') {
+                $this->line($this->jsonReport($checks, $briefMode, $gateDecision, $outputMode === 'compact-json'));
 
                 return $gateDecision['exit_code'];
             }
@@ -85,8 +85,8 @@ final class DoctorCommand extends Command
             return $gateDecision['exit_code'];
         }
 
-        if ($outputMode === 'json') {
-            $this->line($this->jsonReport($checks, $briefMode, $gateDecision));
+        if ($outputMode === 'json' || $outputMode === 'compact-json') {
+            $this->line($this->jsonReport($checks, $briefMode, $gateDecision, $outputMode === 'compact-json'));
 
             return $exitCode;
         }
@@ -126,7 +126,7 @@ final class DoctorCommand extends Command
     /**
      * @param  list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>  $checks
      */
-    private function jsonReport(array $checks, bool $briefMode, array $gateDecision): string
+    private function jsonReport(array $checks, bool $briefMode, array $gateDecision, bool $compactJson = false): string
     {
         $checks = $this->withSeverity($checks);
         if (! $briefMode) {
@@ -145,7 +145,9 @@ final class DoctorCommand extends Command
                 ], $checks),
             ];
 
-            $report = $this->jsonContract->envelope('doctor', $report);
+            $report = $compactJson
+                ? $this->jsonContract->compactEnvelope('doctor', $report)
+                : $this->jsonContract->envelope('doctor', $report);
 
             return json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         }
@@ -166,47 +168,14 @@ final class DoctorCommand extends Command
                 'notes' => $check['notes'],
                 'data' => $check['data'],
             ], $this->topIssues($checks, 3)),
-            'next_actions' => array_slice($this->suggestionsFromChecks($checks), 0, 3),
+            'next_actions' => array_slice($this->suggestionsFromChecks($checks, compact: $briefMode || $compactJson), 0, 3),
         ];
 
-        $report = $this->jsonContract->envelope('doctor', $report);
+        $report = $compactJson
+            ? $this->jsonContract->compactEnvelope('doctor', $report)
+            : $this->jsonContract->envelope('doctor', $report);
 
         return json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-    }
-
-    private function stringOption(string $key): ?string
-    {
-        $value = $this->option($key);
-
-        return is_string($value) ? $value : null;
-    }
-
-    private function policyProfileOverride(): ?string
-    {
-        $override = $this->stringOption('policy-profile');
-
-        if (! is_string($override)) {
-            return null;
-        }
-
-        $override = trim($override);
-
-        return $override !== '' ? $override : null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $gateDecision
-     * @return array{profile:string,profile_source:string,verdict:string,failed_gate:string,exit_code:int}
-     */
-    private function machineGateDecision(array $gateDecision): array
-    {
-        return [
-            'profile' => (string) ($gateDecision['profile'] ?? 'unknown'),
-            'profile_source' => (string) ($gateDecision['profile_source'] ?? 'default'),
-            'verdict' => (string) ($gateDecision['verdict'] ?? 'fail'),
-            'failed_gate' => (string) ($gateDecision['failed_gate'] ?? 'policy'),
-            'exit_code' => (int) ($gateDecision['exit_code'] ?? 12),
-        ];
     }
 
     /**
@@ -218,7 +187,7 @@ final class DoctorCommand extends Command
         $failedCount = count(array_filter($checks, static fn (array $check): bool => (string) $check['status'] === 'fail'));
         $warnCount = count(array_filter($checks, static fn (array $check): bool => (string) $check['status'] === 'warn'));
         $totals = $this->severityTotals($checks);
-        $suggestions = $this->suggestionsFromChecks($checks);
+        $suggestions = $this->suggestionsFromChecks($checks, compact: $briefMode);
         $ok = $this->reportBuilder->healthOk($checks);
 
         $report = [
@@ -254,7 +223,7 @@ final class DoctorCommand extends Command
      * @param  list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>  $checks
      * @return list<string>
      */
-    private function suggestionsFromChecks(array $checks): array
+    private function suggestionsFromChecks(array $checks, bool $compact = false): array
     {
         $suggestions = [];
 
@@ -264,6 +233,24 @@ final class DoctorCommand extends Command
             }
 
             $code = (string) $check['code'];
+
+            if ($compact) {
+                $suggestions[] = $this->compactSuggestionForCheck($code);
+
+                if (str_starts_with($code, 'backup_drill.')) {
+                    $playbookCommands = $check['data']['recommended_commands'] ?? null;
+
+                    if (is_array($playbookCommands)) {
+                        foreach ($playbookCommands as $command) {
+                            if (is_string($command) && trim($command) !== '') {
+                                $suggestions[] = $command;
+                            }
+                        }
+                    }
+                }
+
+                continue;
+            }
 
             if ($code === 'config.validation') {
                 $suggestions[] = 'Fix checkpoint config validation errors and rerun checkpoint:doctor --agent.';
@@ -327,6 +314,27 @@ final class DoctorCommand extends Command
         $suggestions = array_values(array_unique($suggestions));
 
         return array_slice($suggestions, 0, 5);
+    }
+
+    private function compactSuggestionForCheck(string $code): string
+    {
+        return match (true) {
+            $code === 'config.validation' => 'checkpoint:doctor --agent',
+            $code === 'queue.orphaned_runs' => 'checkpoint:recover-orphans',
+            str_starts_with($code, 'backup_drill.') => 'checkpoint:enqueue-drill',
+            $code === 'backup.last_known_good' => 'Queue a backup',
+            $code === 'backup.duration_anomaly' => 'Inspect backup duration history',
+            $code === 'restore.post_verification' => 'Inspect restore verification results',
+            $code === 'verification.runs' => 'Inspect verification runs',
+            $code === 'restore.posture.environments' => 'Review restore policy',
+            $code === 'restore.posture.databases' => 'Review database posture',
+            $code === 'restore.posture.ci_bypass' => 'Review CI configuration',
+            $code === 'restore.posture.verified_backup' => 'Enable verified backups',
+            $code === 'config.backup_command' => 'Set backup command in config',
+            str_starts_with($code, 'driver.binary.') => sprintf('Install %s', str($code)->after('driver.binary.')->replace('.', ' ')->toString()),
+            str_starts_with($code, 'binary.') => sprintf('Install %s', str($code)->after('binary.')->replace('.', ' ')->toString()),
+            default => 'Review check output',
+        };
     }
 
     /**
@@ -430,7 +438,7 @@ final class DoctorCommand extends Command
 
         $totals = $this->severityTotals($checks);
         $topIssues = $this->topIssues($checks, 3);
-        $suggestions = $this->suggestionsFromChecks($checks);
+        $suggestions = $this->suggestionsFromChecks($checks, compact: $briefMode);
         $priorityCounts = $this->priorityCounts($checks);
         $suppressedPassChecks = count(array_filter($checks, static fn (array $check): bool => $check['status'] === 'pass'));
 
@@ -479,37 +487,6 @@ final class DoctorCommand extends Command
         $issues = $this->orderedChecksForDisplay($issues);
 
         return array_slice($issues, 0, max(1, $limit));
-    }
-
-    /**
-     * @param  list<array{code:string,check:string,status:string,severity:string,notes:string,data:array<string,mixed>}>  $checks
-     * @return list<array{code:string,check:string,status:string,severity:string,notes:string,data:array<string,mixed>}>
-     */
-    private function orderedChecksForDisplay(array $checks): array
-    {
-        usort($checks, function (array $left, array $right): int {
-            $rank = [
-                'fail' => 0,
-                'warn' => 1,
-                'pass' => 2,
-            ];
-
-            $leftRank = $rank[$left['status']] ?? 3;
-            $rightRank = $rank[$right['status']] ?? 3;
-
-            if ($leftRank !== $rightRank) {
-                return $leftRank <=> $rightRank;
-            }
-
-            return strcmp((string) $left['check'], (string) $right['check']);
-        });
-
-        return $checks;
-    }
-
-    private function shouldCollapsePassingChecks(): bool
-    {
-        return ! $this->getOutput()->isVerbose();
     }
 
     /**

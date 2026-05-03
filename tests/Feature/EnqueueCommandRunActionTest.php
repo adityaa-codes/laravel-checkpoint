@@ -5,7 +5,7 @@ declare(strict_types=1);
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupQueued;
-use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Bus;
@@ -40,7 +40,7 @@ it('rejects invalid arguments without creating a run or dispatching a job', func
     Event::fake([BackupQueued::class]);
 
     expect(fn () => resolve(EnqueueCommandRunAction::class)->execute('logical_restore_file'))
-        ->toThrow(InvalidArgumentException::class);
+        ->toThrow(CheckpointArgumentException::class);
 
     expect(CommandRun::query()->count())->toBe(0);
 
@@ -137,7 +137,7 @@ it('blocks replication apply runs outside governance preflight', function (): vo
     expect(fn () => resolve(EnqueueCommandRunAction::class)->execute(
         'replication_sync',
         '{"source":"profile:pg-source","destination":"profile:prod-destination","dry_run":false,"apply":true}',
-    ))->toThrow(InvalidArgumentException::class, 'Replication apply is blocked by governance preflight: destination_not_allowlisted.');
+    ))->toThrow(CheckpointArgumentException::class, 'Replication apply is blocked by governance preflight: destination_not_allowlisted.');
 
     expect(CommandRun::query()->count())->toBe(0);
     Bus::assertNothingDispatched();

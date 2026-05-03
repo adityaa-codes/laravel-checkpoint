@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Services;
 
-use Illuminate\Contracts\Config\Repository;
+use AdityaaCodes\LaravelCheckpoint\ValueObjects\GateProfileConfig;
 use Illuminate\Support\Carbon;
 use Throwable;
 
@@ -12,7 +12,7 @@ use Throwable;
 final readonly class GatePolicyEvaluator
 {
     public function __construct(
-        private Repository $config,
+        private GateProfileConfig $config,
     ) {}
 
     /**
@@ -103,7 +103,9 @@ final readonly class GatePolicyEvaluator
                 'failed_count' => $failedCount,
                 'exit_code' => $codeMap['pass'],
             ];
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
+            report($exception);
+
             $codeMap = $this->codeMap();
 
             return [
@@ -131,14 +133,8 @@ final readonly class GatePolicyEvaluator
             return ['profile' => $override, 'source' => 'override'];
         }
 
-        $environment = app()->environment();
-        $map = $this->config->get('checkpoint.gates.environment_profile_map', []);
-
-        if (! is_array($map)) {
-            return ['profile' => $this->defaultProfile(), 'source' => 'default'];
-        }
-
-        $mappedProfile = $map[$environment] ?? null;
+        $map = $this->config->environmentProfileMap;
+        $mappedProfile = $map[$this->config->environment] ?? null;
 
         if (is_string($mappedProfile) && trim($mappedProfile) !== '') {
             return ['profile' => trim($mappedProfile), 'source' => 'environment'];
@@ -149,13 +145,7 @@ final readonly class GatePolicyEvaluator
 
     private function defaultProfile(): string
     {
-        $profile = $this->config->get('checkpoint.gates.default_profile', 'production');
-
-        if (! is_string($profile)) {
-            return 'production';
-        }
-
-        $profile = trim($profile);
+        $profile = trim($this->config->defaultProfile);
 
         return $profile !== '' ? $profile : 'production';
     }
@@ -165,8 +155,7 @@ final readonly class GatePolicyEvaluator
         $candidate = $profileOverride;
 
         if (! is_string($candidate) || trim($candidate) === '') {
-            $configured = $this->config->get('checkpoint.gates.override_profile');
-            $candidate = is_string($configured) ? $configured : null;
+            $candidate = $this->config->overrideProfile;
         }
 
         if (! is_string($candidate)) {
@@ -180,19 +169,14 @@ final readonly class GatePolicyEvaluator
 
     private function hasProfile(string $profile): bool
     {
-        $profiles = $this->config->get('checkpoint.gates.profiles', []);
-
-        return is_array($profiles) && array_key_exists($profile, $profiles);
+        return array_key_exists($profile, $this->config->profiles);
     }
 
-    /**
-     * @return array{exit_on_warn:bool,safety:array<string,mixed>,evidence:array<string,mixed>}
-     */
     private function profilePolicy(string $profile): array
     {
-        $profiles = $this->config->get('checkpoint.gates.profiles', []);
+        $profiles = $this->config->profiles;
 
-        if (! is_array($profiles) || ! isset($profiles[$profile]) || ! is_array($profiles[$profile])) {
+        if (! isset($profiles[$profile]) || ! is_array($profiles[$profile])) {
             return [
                 'exit_on_warn' => false,
                 'safety' => [
@@ -214,23 +198,16 @@ final readonly class GatePolicyEvaluator
         ];
     }
 
-    /**
-     * @return array{pass:int,warn:int,safety_fail:int,evidence_fail:int,policy_error:int}
-     */
     private function codeMap(): array
     {
-        $configured = $this->config->get('checkpoint.gates.code_map', []);
-
-        if (! is_array($configured)) {
-            $configured = [];
-        }
+        $codeMap = $this->config->codeMap;
 
         return [
-            'pass' => max(0, (int) ($configured['pass'] ?? 0)),
-            'warn' => max(0, (int) ($configured['warn'] ?? 2)),
-            'safety_fail' => max(0, (int) ($configured['safety_fail'] ?? 10)),
-            'evidence_fail' => max(0, (int) ($configured['evidence_fail'] ?? 11)),
-            'policy_error' => max(0, (int) ($configured['policy_error'] ?? 12)),
+            'pass' => max(0, $codeMap['pass'] ?? 0),
+            'warn' => max(0, $codeMap['warn'] ?? 2),
+            'safety_fail' => max(0, $codeMap['safety_fail'] ?? 10),
+            'evidence_fail' => max(0, $codeMap['evidence_fail'] ?? 11),
+            'policy_error' => max(0, $codeMap['policy_error'] ?? 12),
         ];
     }
 
@@ -310,7 +287,9 @@ final readonly class GatePolicyEvaluator
 
         try {
             $lastRestore = Carbon::parse($timestamp);
-        } catch (Throwable) {
+        } catch (Throwable $exception) {
+            report($exception);
+
             return true;
         }
 

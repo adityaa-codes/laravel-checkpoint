@@ -7,7 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Services;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 
 /** @internal */
-final class PostRestoreVerificationBuilder
+final readonly class PostRestoreVerificationBuilder
 {
     /**
      * @param  array<string, mixed>  $metadata

@@ -230,7 +230,7 @@ it('renders summary signals as machine-readable json', function (): void {
 
 it('fails for unsupported status output formats', function (): void {
     checkpoint_artisan('checkpoint:status --format=xml')
-        ->expectsOutput('The --format option must be table or json.')
+        ->expectsOutput('The --format option must be table, json, or compact-json.')
         ->assertFailed();
 });
 

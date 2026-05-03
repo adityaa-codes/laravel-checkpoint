@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Services;
 
-use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationEndpoint;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationEndpointKind;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationRequest;
@@ -73,7 +73,7 @@ final readonly class ReplicationGovernanceEvaluator
             ? implode(', ', array_map(static fn (mixed $reason): string => (string) $reason, $reasons))
             : 'unknown_policy_failure';
 
-        throw new InvalidArgumentException(
+        throw new CheckpointArgumentException(
             sprintf('Replication apply is blocked by governance preflight: %s.', $reasonText),
         );
     }

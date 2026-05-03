@@ -1,0 +1,230 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        $commandRuns = $this->commandRunsTable();
+        $restoreDecisionEvents = $this->restoreDecisionEventsTable();
+        $backupDrillRuns = $this->backupDrillRunsTable();
+        $verificationRuns = $this->verificationRunsTable();
+
+        if (! Schema::hasTable($commandRuns)) {
+            Schema::create($commandRuns, function (Blueprint $table) use ($commandRuns): void {
+                $table->id();
+                $table->nullableMorphs('requested_by');
+                $table->string('operation');
+                $table->text('argument_text')->nullable();
+                $table->string('backup_type')->nullable();
+                $table->string('backup_label')->nullable();
+                $table->string('stanza')->nullable();
+                $table->unsignedInteger('repository')->nullable();
+                $table->string('driver_name')->nullable();
+                $table->string('verification_state')->nullable();
+                $table->text('restore_target')->nullable();
+                $table->string('restore_confirmation_satisfied_via')->nullable();
+                $table->unsignedBigInteger('restore_verified_signal_run_id')->nullable();
+                $table->string('restore_post_verification_result')->nullable();
+                $table->text('artifact_path')->nullable();
+                $table->unsignedBigInteger('backup_size_bytes')->nullable();
+                $table->unsignedInteger('duration_seconds')->nullable();
+                $table->unsignedBigInteger('throughput_bytes_per_second')->nullable();
+                $table->timestamp('verified_at')->nullable();
+                $table->timestamp('last_known_good_at')->nullable();
+                $table->json('metadata')->nullable();
+                $table->string('status');
+                $table->text('command_line')->nullable();
+                $table->longText('command_output')->nullable();
+                $table->integer('exit_code')->nullable();
+                $table->unsignedInteger('attempts')->default(0);
+                $table->timestamp('started_at')->nullable();
+                $table->timestamp('heartbeat_at')->nullable();
+                $table->timestamp('finished_at')->nullable();
+                $table->timestamp('orphan_recovery_claimed_at')->nullable();
+                $table->timestamps();
+
+                $table->index(['operation', 'status']);
+                $table->index(['status', 'orphan_recovery_claimed_at', 'updated_at'], $this->orphanRecoveryIndexName());
+                $table->index(['status', 'heartbeat_at', 'updated_at'], $this->heartbeatIndexName());
+                $table->index('last_known_good_at');
+                $table->index('created_at');
+                $table->index(['verification_state', 'verified_at', 'id'], $this->verifiedAtIndexName());
+                $table->index(['status', 'created_at'], $this->statusCreatedAtIndexName());
+                $table->index(['status', 'updated_at', 'id'], $this->statusUpdatedAtIndexName());
+                $table->index(['operation', 'status', 'finished_at', 'id'], $this->restoreFinishedIndexName());
+                $table->index(['operation', 'finished_at', 'started_at', 'id'], $this->restoreActivityIndexName());
+            });
+        }
+
+        if (! Schema::hasTable($restoreDecisionEvents)) {
+            Schema::create($restoreDecisionEvents, function (Blueprint $table) use ($restoreDecisionEvents): void {
+                $table->id();
+                $table->unsignedBigInteger('command_run_id')->nullable();
+                $table->string('operation');
+                $table->string('decision');
+                $table->string('reason');
+                $table->json('payload')->nullable();
+                $table->timestamp('created_at')->useCurrent();
+
+                $table->index(['command_run_id', 'created_at'], $this->runCreatedAtIndexName());
+                $table->index(['decision', 'created_at'], $this->decisionCreatedAtIndexName());
+            });
+        }
+
+        if (! Schema::hasTable($backupDrillRuns)) {
+            Schema::create($backupDrillRuns, function (Blueprint $table) use ($backupDrillRuns): void {
+                $table->id();
+                $table->uuid('run_uuid')->unique();
+                $table->uuid('marker_uuid')->nullable();
+                $table->string('marker_email')->nullable();
+                $table->unsignedInteger('marker_count')->nullable();
+                $table->string('marker_result')->nullable();
+                $table->unsignedInteger('rto_target_seconds')->nullable();
+                $table->unsignedInteger('rto_actual_seconds')->nullable();
+                $table->string('rto_result')->nullable();
+                $table->unsignedInteger('rpo_target_seconds')->nullable();
+                $table->unsignedInteger('rpo_actual_seconds')->nullable();
+                $table->string('rpo_result')->nullable();
+                $table->string('overall_result');
+                $table->string('executed_by')->nullable();
+                $table->timestamp('executed_at');
+                $table->timestamps();
+
+                $table->index('overall_result');
+                $table->index('executed_at');
+                $table->index(['executed_at', 'overall_result'], $this->drillExecutedAtIndexName());
+                $table->index(['overall_result', 'executed_at'], $this->drillResultExecutedAtIndexName());
+            });
+        }
+
+        if (! Schema::hasTable($verificationRuns)) {
+            Schema::create($verificationRuns, function (Blueprint $table) use ($verificationRuns, $commandRuns): void {
+                $table->id();
+                $table->unsignedBigInteger('command_run_id');
+                $table->string('verification_type');
+                $table->string('status');
+                $table->timestamp('verified_at')->nullable();
+                $table->json('metadata')->nullable();
+                $table->longText('error_detail')->nullable();
+                $table->timestamps();
+
+                $table
+                    ->foreign('command_run_id', $this->commandRunForeignKeyName())
+                    ->references('id')
+                    ->on($commandRuns)
+                    ->cascadeOnDelete();
+                $table->index(['command_run_id', 'verified_at'], $this->commandRunVerifiedAtIndexName());
+                $table->index(['status', 'verified_at'], $this->statusVerifiedAtIndexName());
+            });
+        }
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists($this->verificationRunsTable());
+        Schema::dropIfExists($this->backupDrillRunsTable());
+        Schema::dropIfExists($this->restoreDecisionEventsTable());
+        Schema::dropIfExists($this->commandRunsTable());
+    }
+
+    private function tablePrefix(): string
+    {
+        return sprintf('%s', config('checkpoint.table_prefix', 'db_ops_'));
+    }
+
+    private function commandRunsTable(): string
+    {
+        return $this->tablePrefix().'command_runs';
+    }
+
+    private function restoreDecisionEventsTable(): string
+    {
+        return $this->tablePrefix().'restore_decision_events';
+    }
+
+    private function backupDrillRunsTable(): string
+    {
+        return $this->tablePrefix().'backup_drill_runs';
+    }
+
+    private function verificationRunsTable(): string
+    {
+        return $this->tablePrefix().'verification_runs';
+    }
+
+    private function orphanRecoveryIndexName(): string
+    {
+        return $this->commandRunsTable().'_orphan_recovery_index';
+    }
+
+    private function heartbeatIndexName(): string
+    {
+        return $this->commandRunsTable().'_running_heartbeat_index';
+    }
+
+    private function verifiedAtIndexName(): string
+    {
+        return $this->commandRunsTable().'_verified_at_lookup_index';
+    }
+
+    private function statusCreatedAtIndexName(): string
+    {
+        return $this->commandRunsTable().'_status_created_at_index';
+    }
+
+    private function statusUpdatedAtIndexName(): string
+    {
+        return $this->commandRunsTable().'_status_updated_at_index';
+    }
+
+    private function restoreFinishedIndexName(): string
+    {
+        return $this->commandRunsTable().'_restore_finished_lookup_index';
+    }
+
+    private function restoreActivityIndexName(): string
+    {
+        return $this->commandRunsTable().'_restore_activity_lookup_index';
+    }
+
+    private function runCreatedAtIndexName(): string
+    {
+        return $this->restoreDecisionEventsTable().'_run_created_at_index';
+    }
+
+    private function decisionCreatedAtIndexName(): string
+    {
+        return $this->restoreDecisionEventsTable().'_decision_created_at_index';
+    }
+
+    private function drillExecutedAtIndexName(): string
+    {
+        return $this->backupDrillRunsTable().'_executed_at_result_index';
+    }
+
+    private function drillResultExecutedAtIndexName(): string
+    {
+        return $this->backupDrillRunsTable().'_result_executed_at_index';
+    }
+
+    private function commandRunForeignKeyName(): string
+    {
+        return $this->verificationRunsTable().'_command_run_id_foreign';
+    }
+
+    private function commandRunVerifiedAtIndexName(): string
+    {
+        return $this->verificationRunsTable().'_command_run_verified_at_index';
+    }
+
+    private function statusVerifiedAtIndexName(): string
+    {
+        return $this->verificationRunsTable().'_status_verified_at_index';
+    }
+};

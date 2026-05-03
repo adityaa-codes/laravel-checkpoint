@@ -69,8 +69,8 @@
       "title": "Backup drill pass rate is below threshold",
       "summary": "Drill pass rate is 0.0% in the last 30 day(s), below the configured 100.0% threshold.",
       "recommended_commands": [
-        "db-ops:enqueue-drill",
-        "db-ops:status --summary --format=json"
+        "checkpoint:enqueue-drill",
+        "checkpoint:status --summary --format=json"
       ],
       "steps": [
         "Run a new drill and validate marker, RTO, and RPO checks.",
@@ -220,7 +220,7 @@
       "status": "failed",
       "exit_code": 1,
       "failure_reason": "Command exited with code 1.",
-      "next_action": "Run php artisan db-ops:report --limit=10 --format=json for full failure context."
+      "next_action": "Run php artisan checkpoint:report --limit=10 --format=json for full failure context."
     }
   },
   "gates": {

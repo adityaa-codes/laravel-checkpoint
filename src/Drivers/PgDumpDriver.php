@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Drivers;
 
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\Concerns\ExecutesReplicationSync;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupCompleted;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
@@ -16,7 +17,6 @@ use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
 use AdityaaCodes\LaravelCheckpoint\Services\PostRestoreVerificationBuilder;
-use AdityaaCodes\LaravelCheckpoint\Services\ReplicationFailureSuggestionMapper;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use Illuminate\Support\Facades\Log;
 use Psr\Log\LoggerInterface;
@@ -26,6 +26,8 @@ use Throwable;
 /** @internal */
 final class PgDumpDriver implements BackupDriver
 {
+    use ExecutesReplicationSync;
+
     public function execute(CommandRun $run): void
     {
         $storedOutputMetadata = null;
@@ -915,61 +917,54 @@ final class PgDumpDriver implements BackupDriver
     }
 
     /**
-     * @param  array<string, mixed>  $context
-     * @return array{
-     *     category:string,
-     *     signature:string,
-     *     immediate_fix:string,
-     *     deeper_diagnostics:list<string>,
-     *     diagnostics:array<string, mixed>
-     * }
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return array{output:string,exit_code:int,metadata:array<string,mixed>}
      */
-    private function failureAnalysis(string $stage, string $failureOutput, array $context = []): array
+    private function executeDryRunReplication(array $plannedMetadata, CommandRun $run): array
     {
-        return $this->suggestionMapper()->map($stage, $failureOutput, $context);
-    }
+        $process = new Process(
+            $this->replicationDryRunCommand($plannedMetadata),
+            timeout: $this->commandTimeout(),
+        );
 
-    /**
-     * @param  array{
-     *     immediate_fix:string,
-     *     deeper_diagnostics:list<string>
-     * } $analysis
-     * @return list<string>
-     */
-    private function legacySuggestions(array $analysis): array
-    {
+        $captured = $this->outputCapture()->captureProcess(
+            $process,
+            fn (string $chunk, string $type): null => $this->tapCapturedOutput($run, null, $chunk),
+        );
+
         return [
-            $analysis['immediate_fix'],
-            ...$analysis['deeper_diagnostics'],
+            'output' => $captured['output'],
+            'exit_code' => $process->getExitCode() ?? -1,
+            'metadata' => $captured['metadata'],
         ];
     }
 
     /**
-     * @param  array{
-     *     category:string,
-     *     immediate_fix:string,
-     *     deeper_diagnostics:list<string>
-     * } $analysis
+     * @param  array<string, mixed>  $plannedMetadata
+     * @return array{output:string,exit_code:int,metadata:array<string,mixed>}
      */
-    private function renderDebugSuggestions(array $analysis): string
+    private function executeApplyReplication(string $artifactPath, CommandRun $run): array
     {
-        $lines = [
-            '',
-            '[replication_sync:debug]',
-            sprintf('category: %s', $analysis['category']),
-            sprintf('immediate_fix: %s', $analysis['immediate_fix']),
+        $process = new Process(
+            $this->replicationApplyCommand($artifactPath),
+            timeout: $this->commandTimeout(),
+        );
+
+        $captured = $this->outputCapture()->captureProcess(
+            $process,
+            fn (string $chunk, string $type): null => $this->tapCapturedOutput($run, null, $chunk),
+        );
+
+        return [
+            'output' => $captured['output'],
+            'exit_code' => $process->getExitCode() ?? -1,
+            'metadata' => $captured['metadata'],
         ];
-
-        foreach ($analysis['deeper_diagnostics'] as $index => $step) {
-            $lines[] = sprintf('diagnostic_%d: %s', $index + 1, $step);
-        }
-
-        return "\n".implode("\n", $lines);
     }
 
-    private function suggestionMapper(): ReplicationFailureSuggestionMapper
+    private function replicationDriverLabel(): string
     {
-        return resolve(ReplicationFailureSuggestionMapper::class);
+        return 'pg_dump';
     }
 
     /**
@@ -1231,80 +1226,6 @@ final class PgDumpDriver implements BackupDriver
                 : (is_array($replicationMetadata['governance_preflight'] ?? null) ? $replicationMetadata['governance_preflight'] : null),
             'artifact_path' => $this->replicationArtifactPath($run),
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $replication
-     */
-    private function assertLocalConfiguredReplicationSemantics(array $replication): void
-    {
-        $source = is_array($replication['source'] ?? null) ? $replication['source'] : [];
-        $destination = is_array($replication['destination'] ?? null) ? $replication['destination'] : [];
-        $sourceKind = strtolower(trim((string) ($source['kind'] ?? '')));
-        $destinationKind = strtolower(trim((string) ($destination['kind'] ?? '')));
-
-        $usesHostBoundEndpoint = in_array($sourceKind, ['dsn', 'key_value'], true)
-            || in_array($destinationKind, ['dsn', 'key_value'], true);
-
-        if (! $usesHostBoundEndpoint) {
-            return;
-        }
-
-        throw new ConfigurationException(
-            'pg_dump replication execution currently supports only local/configured endpoint semantics. '
-            .'Remote or cross-host source/destination endpoints are not supported. '
-            .'Use matching local profile endpoints and run remote replication through external tooling.',
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $replication
-     */
-    private function assertReplicationGovernanceAllowsApply(array $replication, bool $applyRequested, bool $dryRunRequested): void
-    {
-        if (! $applyRequested || $dryRunRequested) {
-            return;
-        }
-
-        $preflight = is_array($replication['governance_preflight'] ?? null) ? $replication['governance_preflight'] : null;
-
-        if ($preflight !== null && (bool) ($preflight['allowed'] ?? false)) {
-            return;
-        }
-
-        $reasons = $preflight['blocked_reasons'] ?? null;
-        $reasonText = is_array($reasons) && $reasons !== []
-            ? implode(', ', array_map(static fn (mixed $reason): string => (string) $reason, $reasons))
-            : 'missing_governance_preflight_metadata';
-
-        throw new ConfigurationException(sprintf(
-            'Replication apply is blocked by governance preflight at execution time: %s. Re-queue with approved destination/change window, or run dry-run mode.',
-            $reasonText,
-        ));
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function replicationPayload(CommandRun $run): array
-    {
-        $argument = trim((string) ($run->argument_text ?? ''));
-
-        if ($argument === '') {
-            throw new ConfigurationException('replication_sync requires a JSON payload argument.');
-        }
-
-        try {
-            $payload = json_decode($argument, true, flags: JSON_THROW_ON_ERROR);
-        } catch (\JsonException $exception) {
-            throw new ConfigurationException('replication_sync argument must be valid JSON.', $exception->getCode(), previous: $exception);
-        }
-
-        if (! is_array($payload)) {
-            throw new ConfigurationException('replication_sync argument payload must decode to an object.');
-        }
-
-        return $payload;
     }
 
     private function replicationArtifactPath(CommandRun $run): string

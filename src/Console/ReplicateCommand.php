@@ -7,7 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 use AdityaaCodes\LaravelCheckpoint\Actions\BuildReplicationCommandPayloadAction;
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
-use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use Illuminate\Console\Command;
 use Throwable;
 
@@ -33,8 +33,6 @@ final class ReplicateCommand extends Command
 
     protected $description = 'Queue a replication sync run with conservative defaults.';
 
-    protected $aliases = ['checkpoint:do:replicate'];
-
     public function handle(
         EnqueueCommandRunAction $enqueueCommandRun,
         BuildReplicationCommandPayloadAction $buildPayload,
@@ -45,7 +43,7 @@ final class ReplicateCommand extends Command
                 note('Default mode is dry-run. Use apply mode only after validation.');
                 note('What: queue replication diff/apply workflow between endpoints.');
                 note('When: controlled data sync or migration scenarios.');
-                note('Next: run checkpoint:do:status to monitor replication execution.');
+                note('Next: run checkpoint:status to monitor replication execution.');
             }
 
             $applyRequested = (bool) $this->option('apply');
@@ -92,6 +90,8 @@ final class ReplicateCommand extends Command
 
             return self::SUCCESS;
         } catch (Throwable $exception) {
+            report($exception);
+
             $this->promptError($exception->getMessage());
 
             return self::FAILURE;
@@ -113,7 +113,7 @@ final class ReplicateCommand extends Command
         }
 
         if ($this->input !== null && ! $this->input->isInteractive()) {
-            throw new InvalidArgumentException(sprintf(
+            throw new CheckpointArgumentException(sprintf(
                 'Replication %s endpoint is required in non-interactive mode. Pass --%s=... or the positional %s argument.',
                 $role,
                 $role,
@@ -143,22 +143,13 @@ final class ReplicateCommand extends Command
 
     private function queuedMessage(int $runId): string
     {
-        $operation = __('messages.operations.replication_sync');
+        $operation = $this->translatedOr('messages.operations.replication_sync', 'Replication Sync');
 
-        if ($operation === 'messages.operations.replication_sync') {
-            $operation = 'Replication Sync';
-        }
-
-        $message = __('messages.cli.backup_queued', [
-            'operation' => $operation,
-            'id' => $runId,
-        ]);
-
-        if ($message === 'messages.cli.backup_queued') {
-            return sprintf('Queued %s run #%d.', $operation, $runId);
-        }
-
-        return (string) $message;
+        return $this->translatedOr(
+            'messages.cli.backup_queued',
+            sprintf('Queued %s run #%d.', $operation, $runId),
+            ['operation' => $operation, 'id' => $runId],
+        );
     }
 
     private function safeEndpointLabel(string $endpoint): string

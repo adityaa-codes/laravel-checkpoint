@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Services;
 
 /** @internal */
-final class CommandJsonContract
+final readonly class CommandJsonContract
 {
     /**
      * @var array<string, int>
@@ -176,5 +176,41 @@ final class CommandJsonContract
         $value = trim($cursor);
 
         return $value === '' || $value === '-' ? null : $value;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function stripNullValues(array $payload): array
+    {
+        $filtered = [];
+
+        foreach ($payload as $key => $value) {
+            if ($value === null) {
+                continue;
+            }
+
+            if (is_array($value)) {
+                $filtered[$key] = $this->stripNullValues($value);
+
+                continue;
+            }
+
+            $filtered[$key] = $value;
+        }
+
+        return $filtered;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function compactEnvelope(string $surface, array $payload): array
+    {
+        $enveloped = $this->envelope($surface, $payload);
+
+        return $this->stripNullValues($enveloped);
     }
 }

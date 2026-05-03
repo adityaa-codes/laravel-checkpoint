@@ -40,8 +40,6 @@ final class RecordDrillRunCommand extends Command
 
     protected $description = 'Record a backup drill result.';
 
-    protected $aliases = ['checkpoint:admin:record-drill'];
-
     public function __construct(
         private readonly Factory $validator,
         private readonly DateFactory $date,
@@ -57,7 +55,7 @@ final class RecordDrillRunCommand extends Command
                 intro('Record Backup Drill Run');
                 note('What: persist externally executed drill outcomes into checkpoint history.');
                 note('When: drills are executed outside queue automation.');
-                note('Next: run checkpoint:check:report to verify drill evidence is reflected.');
+                note('Next: run checkpoint:report to verify drill evidence is reflected.');
             }
 
             $attributes = $this->validatedAttributes();
@@ -79,6 +77,8 @@ final class RecordDrillRunCommand extends Command
 
             return self::FAILURE;
         } catch (Throwable $exception) {
+            report($exception);
+
             $this->promptError($exception->getMessage());
 
             return self::FAILURE;
@@ -134,15 +134,11 @@ final class RecordDrillRunCommand extends Command
     private function recordedMessage(BackupDrillRun $run): string
     {
         $result = strtoupper((string) $run->overall_result);
-        $message = __('messages.cli.drill_recorded', [
-            'uuid' => $run->run_uuid,
-            'result' => $result,
-        ]);
 
-        if ($message === 'messages.cli.drill_recorded') {
-            return sprintf('Recorded backup drill run %s (overall: %s).', $run->run_uuid, $result);
-        }
-
-        return (string) $message;
+        return $this->translatedOr(
+            'messages.cli.drill_recorded',
+            sprintf('Recorded backup drill run %s (overall: %s).', $run->run_uuid, $result),
+            ['uuid' => $run->run_uuid, 'result' => $result],
+        );
     }
 }

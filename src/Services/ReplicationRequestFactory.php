@@ -6,7 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Services;
 
 use AdityaaCodes\LaravelCheckpoint\Contracts\ReplicationEndpointParser;
 use AdityaaCodes\LaravelCheckpoint\Enums\ReplicationEngine;
-use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationEndpoint;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationEndpointKind;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationRequest;
@@ -52,7 +52,7 @@ final readonly class ReplicationRequestFactory
                 : null;
 
             if (! $engineValue instanceof ReplicationEngine) {
-                throw new InvalidArgumentException(
+                throw new CheckpointArgumentException(
                     sprintf('Replication profile [%s] must define engine as pgsql or mysql.', $parsed->identifier ?? ''),
                 );
             }
@@ -75,13 +75,13 @@ final readonly class ReplicationRequestFactory
         $destinationEngine = $destination->engine;
 
         if (! $sourceEngine instanceof ReplicationEngine || ! $destinationEngine instanceof ReplicationEngine) {
-            throw new InvalidArgumentException(
+            throw new CheckpointArgumentException(
                 'Replication requires explicit source and destination engines. Use profile, DSN scheme, or key=value engine field.',
             );
         }
 
         if ($sourceEngine !== $destinationEngine) {
-            throw new InvalidArgumentException(
+            throw new CheckpointArgumentException(
                 sprintf(
                     'Replication v1 supports same-engine only. Received %s -> %s.',
                     $sourceEngine->value,
@@ -96,15 +96,15 @@ final readonly class ReplicationRequestFactory
     private function assertSafetyDefaults(): void
     {
         if (! (bool) $this->config->get('checkpoint.replication.require_confirmation_token', true)) {
-            throw new InvalidArgumentException('Replication safety requires confirmation token enforcement.');
+            throw new CheckpointArgumentException('Replication safety requires confirmation token enforcement.');
         }
 
         if (! (bool) $this->config->get('checkpoint.replication.block_in_ci', true)) {
-            throw new InvalidArgumentException('Replication safety requires CI blocking by default.');
+            throw new CheckpointArgumentException('Replication safety requires CI blocking by default.');
         }
 
         if (! (bool) $this->config->get('checkpoint.replication.require_dry_run_before_apply', true)) {
-            throw new InvalidArgumentException('Replication safety requires dry-run-before-apply gate.');
+            throw new CheckpointArgumentException('Replication safety requires dry-run-before-apply gate.');
         }
     }
 
@@ -116,13 +116,13 @@ final readonly class ReplicationRequestFactory
         $profiles = $this->config->get('checkpoint.replication.profiles', []);
 
         if (! is_array($profiles)) {
-            throw new InvalidArgumentException('Replication profiles must be configured as an array.');
+            throw new CheckpointArgumentException('Replication profiles must be configured as an array.');
         }
 
         $profile = $profiles[$identifier] ?? null;
 
         if (! is_array($profile)) {
-            throw new InvalidArgumentException(
+            throw new CheckpointArgumentException(
                 sprintf('Unknown replication profile [%s] for %s endpoint.', $identifier, $role),
             );
         }

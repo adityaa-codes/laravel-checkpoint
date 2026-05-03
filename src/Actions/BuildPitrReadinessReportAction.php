@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Actions;
 
-use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
@@ -134,8 +134,10 @@ final readonly class BuildPitrReadinessReportAction
 
         try {
             return Date::parse($value);
-        } catch (\Throwable) {
-            throw new InvalidArgumentException('PITR target must be a valid datetime string.');
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            throw new CheckpointArgumentException('PITR target must be a valid datetime string.');
         }
     }
 

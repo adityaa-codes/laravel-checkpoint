@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidOperationException;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
 
@@ -33,13 +33,13 @@ it('throws for unsupported operations and missing required arguments', function 
         ->toThrow(InvalidOperationException::class, 'Unsupported operation: not-real');
 
     expect(fn (): ?string => $catalog->validate('logical_restore_file', null))
-        ->toThrow(InvalidArgumentException::class, 'Operation logical_restore_file requires an argument.');
+        ->toThrow(CheckpointArgumentException::class, 'Operation logical_restore_file requires an argument.');
 
     expect(fn (): ?string => $catalog->validate('replication_sync', 'not-json'))
-        ->toThrow(InvalidArgumentException::class, 'Invalid argument for replication_sync. Expected: json payload with source, destination, optional dry_run/apply/force_overwrite booleans, and optional critical_tables array');
+        ->toThrow(CheckpointArgumentException::class, 'Invalid argument for replication_sync. Expected: json payload with source, destination, optional dry_run/apply/force_overwrite booleans, and optional critical_tables array');
 
     expect(fn (): ?string => $catalog->validate('replication_sync', '{"source":"profile:source","destination":"profile:destination","overwrite_destination":"yes"}'))
-        ->toThrow(InvalidArgumentException::class, 'Invalid argument for replication_sync. Expected: json payload with source, destination, optional dry_run/apply/force_overwrite booleans, and optional critical_tables array');
+        ->toThrow(CheckpointArgumentException::class, 'Invalid argument for replication_sync. Expected: json payload with source, destination, optional dry_run/apply/force_overwrite booleans, and optional critical_tables array');
 });
 
 it('supports runtime extension with custom validators', function (): void {
@@ -58,7 +58,7 @@ it('supports runtime extension with custom validators', function (): void {
         ->and($catalog->isDestructive('custom_snapshot'))->toBeFalse();
 
     expect(fn (): ?string => $catalog->validate('custom_snapshot', 'weekly'))
-        ->toThrow(InvalidArgumentException::class, 'Invalid argument for custom_snapshot. Expected: snapshot label');
+        ->toThrow(CheckpointArgumentException::class, 'Invalid argument for custom_snapshot. Expected: snapshot label');
 });
 
 it('merges configured custom operations at construction time', function (): void {
@@ -80,5 +80,5 @@ it('merges configured custom operations at construction time', function (): void
         ->and($catalog->isExclusive('tenant_backup'))->toBeTrue();
 
     expect(fn (): ?string => $catalog->validate('tenant_backup', 'abc'))
-        ->toThrow(InvalidArgumentException::class, 'Invalid argument for tenant_backup. Expected: tenant id');
+        ->toThrow(CheckpointArgumentException::class, 'Invalid argument for tenant_backup. Expected: tenant id');
 });

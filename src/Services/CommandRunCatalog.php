@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Services;
 
-use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidOperationException;
 
 final class CommandRunCatalog
@@ -51,7 +51,7 @@ final class CommandRunCatalog
         $required = (bool) ($definition['argument_required'] ?? false);
 
         if ($required && ($normalizedArgument === null || $normalizedArgument === '')) {
-            throw new InvalidArgumentException(
+            throw new CheckpointArgumentException(
                 sprintf('Operation %s requires an argument.', $operation),
             );
         }
@@ -65,7 +65,7 @@ final class CommandRunCatalog
         if (is_callable($validator) && ! $validator($normalizedArgument)) {
             $hint = (string) ($definition['argument_hint'] ?? 'valid input');
 
-            throw new InvalidArgumentException(
+            throw new CheckpointArgumentException(
                 sprintf(
                     'Invalid argument for %s. Expected: %s',
                     $operation,

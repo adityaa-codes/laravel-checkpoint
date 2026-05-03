@@ -23,8 +23,6 @@ final class ReportCommand extends Command
 
     protected $description = 'Show checkpoint operational report (table by default, json/agent supported).';
 
-    protected $aliases = ['checkpoint:check:report'];
-
     public function __construct(
         private readonly ConfigValidator $validator,
         private readonly Repository $config,
@@ -47,11 +45,11 @@ final class ReportCommand extends Command
             intro('Checkpoint Operational Report');
             note('What: consolidated operational report across runs, health, and verification.');
             note('When: handoff reporting, audits, and broader operational review.');
-            note('Next: use checkpoint:check:doctor to troubleshoot failing checks from this report.');
+            note('Next: use checkpoint:doctor to troubleshoot failing checks from this report.');
         }
 
         if ($outputMode === '') {
-            $this->promptError('The --format option must be table or json.');
+            $this->promptError('The --format option must be table, json, or compact-json.');
 
             return self::FAILURE;
         }
@@ -62,6 +60,8 @@ final class ReportCommand extends Command
             $this->validator->validate();
             $reportPayload = $this->reportBuilder->reportPayload($effectiveLimit);
         } catch (\Throwable $exception) {
+            report($exception);
+
             $reportPayload = [
                 'recent_runs' => [],
                 'summary' => $this->emptySummary(),
@@ -97,12 +97,13 @@ final class ReportCommand extends Command
                 briefMode: $briefMode,
                 gateDecision: $gateDecision,
             )), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
-        } elseif ($outputMode === 'json') {
+        } elseif ($outputMode === 'json' || $outputMode === 'compact-json') {
+            $compactJson = $outputMode === 'compact-json';
             $lastFailedRun = is_array($reportPayload['summary']['latest_failed_run'] ?? null)
                 ? $reportPayload['summary']['latest_failed_run']
                 : ['label' => '-', 'timestamp' => null, 'operation' => null, 'status' => null, 'exit_code' => null, 'failure_reason' => null, 'next_action' => null];
 
-            $this->line(json_encode($this->jsonContract->envelope('report', [
+            $reportPayloadData = [
                 'mode' => $briefMode ? 'brief' : 'full',
                 'generated_at' => now()->toIso8601String(),
                 'driver' => (string) $this->config->get('checkpoint.driver'),
@@ -115,7 +116,13 @@ final class ReportCommand extends Command
                 'breakdown' => $reportPayload['breakdown'],
                 'verification' => $reportPayload['verification'],
                 'health' => $reportPayload['health'],
-            ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            ];
+
+            $reportPayloadData = $compactJson
+                ? $this->jsonContract->compactEnvelope('report', $reportPayloadData)
+                : $this->jsonContract->envelope('report', $reportPayloadData);
+
+            $this->line(json_encode($reportPayloadData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
         } else {
             $this->renderTableReport($reportPayload, $requestedLimit, $effectiveLimit, $briefMode);
         }
@@ -123,23 +130,9 @@ final class ReportCommand extends Command
         return $exitCode;
     }
 
-    /**
-     * @return array{requested:int,effective:int}
-     */
-    private function recentRunLimits(): array
-    {
-        $requestedLimit = max(1, (int) $this->option('limit'));
-        $configuredCap = max(1, (int) $this->config->get('checkpoint.reporting.max_recent_runs', 100));
-
-        return [
-            'requested' => $requestedLimit,
-            'effective' => min($requestedLimit, $configuredCap),
-        ];
-    }
-
     private function normalizedOutputMode(string $format): string
     {
-        return in_array($format, ['table', 'json'], true) ? $format : '';
+        return in_array($format, ['table', 'json', 'compact-json'], true) ? $format : '';
     }
 
     /**
@@ -291,7 +284,7 @@ final class ReportCommand extends Command
                     warnChecks: $warnChecks,
                 ),
             ],
-            'suggestions' => $this->reportSuggestions($checks, $failedRuns, $lastFailedRun),
+            'suggestions' => $this->reportSuggestions($checks, $failedRuns, $lastFailedRun, compact: $briefMode),
         ];
     }
 
@@ -388,13 +381,13 @@ final class ReportCommand extends Command
      * @param  array{label?:string,timestamp?:string|null,operation?:string|null,status?:string|null,exit_code?:int|null,failure_reason?:string|null,next_action?:string|null}  $lastFailedRun
      * @return list<string>
      */
-    private function reportSuggestions(array $checks, int $failedRuns, array $lastFailedRun): array
+    private function reportSuggestions(array $checks, int $failedRuns, array $lastFailedRun, bool $compact = false): array
     {
         $suggestions = [];
         $checks = $this->prioritizeChecks($checks);
 
         if ($failedRuns > 0) {
-            $suggestions[] = 'Inspect failed runs in data.recent_runs and rerun impacted operation with corrected inputs.';
+            $suggestions[] = $compact ? 'Inspect failed runs' : 'Inspect failed runs in data.recent_runs and rerun impacted operation with corrected inputs.';
         }
 
         if (is_string($lastFailedRun['next_action'] ?? null) && trim($lastFailedRun['next_action']) !== '') {
@@ -409,23 +402,23 @@ final class ReportCommand extends Command
             $code = (string) $check['code'];
 
             if ($code === 'config.validation') {
-                $suggestions[] = 'Resolve config validation failures before executing queue operations.';
+                $suggestions[] = $compact ? 'checkpoint:doctor --agent' : 'Resolve config validation failures before executing queue operations.';
             } elseif ($code === 'queue.orphaned_runs') {
-                $suggestions[] = 'Run checkpoint:recover-orphans and verify worker heartbeat settings.';
+                $suggestions[] = $compact ? 'checkpoint:recover-orphans' : 'Run checkpoint:recover-orphans and verify worker heartbeat settings.';
             } elseif (str_starts_with($code, 'backup_drill.')) {
-                $suggestions[] = 'Run a backup drill and track pass-rate/freshness health signals.';
+                $suggestions[] = $compact ? 'checkpoint:enqueue-drill' : 'Run a backup drill and track pass-rate/freshness health signals.';
 
                 $playbookCommands = $check['data']['recommended_commands'] ?? null;
 
                 if (is_array($playbookCommands)) {
                     foreach ($playbookCommands as $command) {
                         if (is_string($command) && trim($command) !== '') {
-                            $suggestions[] = 'Run '.$command.' to execute the drill remediation playbook.';
+                            $suggestions[] = $compact ? $command : 'Run '.$command.' to execute the drill remediation playbook.';
                         }
                     }
                 }
             } elseif ($code === 'backup.last_known_good') {
-                $suggestions[] = 'Queue a successful backup to refresh the last-known-good signal.';
+                $suggestions[] = $compact ? 'Queue a backup' : 'Queue a successful backup to refresh the last-known-good signal.';
             }
         }
 
@@ -529,46 +522,6 @@ final class ReportCommand extends Command
         }
     }
 
-    private function stringOption(string $key): ?string
-    {
-        $value = $this->option($key);
-
-        return is_string($value) ? $value : null;
-    }
-
-    private function shouldCollapsePassingChecks(): bool
-    {
-        return ! $this->getOutput()->isVerbose();
-    }
-
-    /**
-     * @param  list<array<string,mixed>>  $checks
-     * @return list<array<string,mixed>>
-     */
-    private function orderedChecksForDisplay(array $checks): array
-    {
-        usort($checks, static function (array $left, array $right): int {
-            $rank = [
-                'fail' => 0,
-                'warn' => 1,
-                'pass' => 2,
-            ];
-
-            $leftStatus = (string) ($left['status'] ?? 'pass');
-            $rightStatus = (string) ($right['status'] ?? 'pass');
-            $leftRank = $rank[$leftStatus] ?? 3;
-            $rightRank = $rank[$rightStatus] ?? 3;
-
-            if ($leftRank !== $rightRank) {
-                return $leftRank <=> $rightRank;
-            }
-
-            return strcmp((string) ($left['check'] ?? ''), (string) ($right['check'] ?? ''));
-        });
-
-        return $checks;
-    }
-
     private function priorityLabel(string $status): string
     {
         return match ($status) {
@@ -576,54 +529,6 @@ final class ReportCommand extends Command
             'warn' => 'P1',
             default => 'P3',
         };
-    }
-
-    private function policyProfileOverride(): ?string
-    {
-        $override = $this->stringOption('policy-profile');
-
-        if (! is_string($override)) {
-            return null;
-        }
-
-        $override = trim($override);
-
-        return $override !== '' ? $override : null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $gateDecision
-     * @return array{profile:string,profile_source:string,verdict:string,failed_gate:string,exit_code:int}
-     */
-    private function machineGateDecision(array $gateDecision): array
-    {
-        return [
-            'profile' => (string) ($gateDecision['profile'] ?? 'unknown'),
-            'profile_source' => (string) ($gateDecision['profile_source'] ?? 'default'),
-            'verdict' => (string) ($gateDecision['verdict'] ?? 'fail'),
-            'failed_gate' => (string) ($gateDecision['failed_gate'] ?? 'policy'),
-            'exit_code' => (int) ($gateDecision['exit_code'] ?? 12),
-        ];
-    }
-
-    /**
-     * @param  list<array{name:string,target:int|float,current:int|float,status:string,unit:string}>  $indicators
-     */
-    private function overallSloStatus(array $indicators): string
-    {
-        foreach ($indicators as $indicator) {
-            if ($indicator['status'] === 'fail') {
-                return 'fail';
-            }
-        }
-
-        foreach ($indicators as $indicator) {
-            if ($indicator['status'] === 'warn') {
-                return 'warn';
-            }
-        }
-
-        return 'pass';
     }
 
     /**

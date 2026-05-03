@@ -27,8 +27,8 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupQueued;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Events\OrphanRunRedispatched;
 use AdityaaCodes\LaravelCheckpoint\Events\QueueLagDetected;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
-use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidOperationException;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpoint;
@@ -61,7 +61,7 @@ it('keeps package internals final by default with explicit seams', function (): 
         FakeDriver::class,
         ShellCommandDriver::class,
         ConfigurationException::class,
-        InvalidArgumentException::class,
+        CheckpointArgumentException::class,
         InvalidOperationException::class,
         AdityaaCodes\LaravelCheckpoint\Facades\LaravelCheckpoint::class,
         ProcessCommandRunJob::class,

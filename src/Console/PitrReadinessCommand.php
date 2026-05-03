@@ -21,8 +21,6 @@ final class PitrReadinessCommand extends Command
 
     protected $description = 'Evaluate PITR readiness for a target timestamp.';
 
-    protected $aliases = ['checkpoint:check:pitr'];
-
     public function __construct(
         private readonly ConfigValidator $validator,
         private readonly BuildPitrReadinessReportAction $buildPitrReadinessReport,
@@ -39,7 +37,7 @@ final class PitrReadinessCommand extends Command
         if ($this->enhancedInteractiveMode() && ! $agentMode) {
             note('What: evaluate whether PITR prerequisites are currently satisfied.');
             note('When: before relying on point-in-time recovery in real incidents.');
-            note('Next: remediate failing checks, then rerun checkpoint:check:pitr.');
+            note('Next: remediate failing checks, then rerun checkpoint:pitr-readiness.');
         }
 
         $format = $this->stringOption('format') ?? 'table';
@@ -57,6 +55,8 @@ final class PitrReadinessCommand extends Command
             $payload = $this->buildPitrReadinessReport->execute($targetInput);
             $exitCode = $payload['readiness'] === 'ready' ? self::SUCCESS : self::FAILURE;
         } catch (\Throwable $exception) {
+            report($exception);
+
             $payload = [
                 'generated_at' => now()->toIso8601String(),
                 'target' => null,
@@ -168,12 +168,5 @@ final class PitrReadinessCommand extends Command
         }
 
         return array_values(array_unique($suggestions));
-    }
-
-    private function stringOption(string $key): ?string
-    {
-        $value = $this->option($key);
-
-        return is_string($value) ? $value : null;
     }
 }

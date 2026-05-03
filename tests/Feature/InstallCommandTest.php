@@ -87,13 +87,10 @@ it('writes preset values into the configured environment file', function (): voi
     }
 });
 
-it('fails non-local readiness when blocker checks exist', function (): void {
-    config()->set('checkpoint.drivers.pgbackrest.binary', PHP_BINARY);
-    config()->set('checkpoint.drivers.pgdump.dump_binary', PHP_BINARY);
-    config()->set('checkpoint.drivers.pgdump.restore_binary', PHP_BINARY);
+it('fails readiness when missing active driver binaries cause blockers', function (): void {
+    config()->set('checkpoint.drivers.pgbackrest.binary', 'missing-pgbackrest-xyz');
 
     checkpoint_artisan('checkpoint:install --preset=postgres-prod --skip-publish --skip-migrate')
-        ->expectsOutputToContain('Readiness')
         ->assertFailed();
 });
 

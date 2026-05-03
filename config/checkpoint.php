@@ -13,7 +13,7 @@ use Illuminate\Foundation\Auth\User;
 $env = static fn (string $key, mixed $default = null): mixed => env($key, $default);
 $appEnv = (string) (getenv('APP_ENV') ?: $env('APP_ENV', 'production'));
 $nonLocalPosture = ! in_array($appEnv, ['local', 'testing'], true);
-$queueTimeoutDefault = (int) $env('DB_OPS_QUEUE_TIMEOUT', 3600);
+$timeoutBase = (int) $env('DB_OPS_TIMEOUT', $env('DB_OPS_QUEUE_TIMEOUT', 3600));
 
 return [
     'user_model' => $env('DB_OPS_USER_MODEL', User::class),
@@ -24,15 +24,15 @@ return [
         'connection' => $env('DB_OPS_QUEUE_CONNECTION'),
         'name' => $env('DB_OPS_QUEUE_NAME', 'db-ops'),
         'max_attempts' => (int) $env('DB_OPS_QUEUE_MAX_ATTEMPTS', 1),
-        'retry_after' => (int) $env('DB_OPS_QUEUE_RETRY_AFTER', 3660),
-        'timeout' => $queueTimeoutDefault,
+        'retry_after' => (int) $env('DB_OPS_QUEUE_RETRY_AFTER', $timeoutBase + 60),
+        'timeout' => (int) $env('DB_OPS_QUEUE_TIMEOUT', $timeoutBase),
         'orphan_threshold' => (int) $env('DB_OPS_QUEUE_ORPHAN_THRESHOLD', 10),
-        'orphan_claim_timeout' => (int) $env('DB_OPS_QUEUE_ORPHAN_CLAIM_TIMEOUT', (int) ceil(((int) $env('DB_OPS_QUEUE_RETRY_AFTER', 3660)) / 60)),
+        'orphan_claim_timeout' => (int) $env('DB_OPS_QUEUE_ORPHAN_CLAIM_TIMEOUT', (int) ceil(((int) $env('DB_OPS_QUEUE_RETRY_AFTER', (string) ($timeoutBase + 60))) / 60)),
         'orphan_batch_size' => (int) $env('DB_OPS_QUEUE_ORPHAN_BATCH_SIZE', 100),
         'orphan_event_max_ids' => (int) $env('DB_OPS_QUEUE_ORPHAN_EVENT_MAX_IDS', 50),
         'heartbeat_interval_seconds' => (int) $env('DB_OPS_QUEUE_HEARTBEAT_INTERVAL_SECONDS', 30),
         'heartbeat_grace_seconds' => (int) $env('DB_OPS_QUEUE_HEARTBEAT_GRACE_SECONDS', 60),
-        'unique_for' => (int) $env('DB_OPS_QUEUE_UNIQUE_FOR', 3660),
+        'unique_for' => (int) $env('DB_OPS_QUEUE_UNIQUE_FOR', $timeoutBase + 60),
         'lock_store' => $env('DB_OPS_QUEUE_LOCK_STORE'),
     ],
 
@@ -105,7 +105,12 @@ return [
         'prune_keep_backup_drill_days' => (int) $env('DB_OPS_PRUNE_KEEP_BACKUP_DRILL_DAYS', 365),
     ],
 
-    'driver' => $env('DB_OPS_DRIVER', 'shell'),
+    'driver' => $env('DB_OPS_DRIVER') ?: match (strtolower(trim((string) config('database.connections.'.config('database.default', 'mysql').'.driver', 'mysql')))) {
+        'pgsql', 'postgres', 'postgresql' => 'postgres',
+        'mysql', 'mariadb' => 'mysql',
+        'sqlite' => 'shell',
+        default => 'shell',
+    },
     'observability' => [
         'max_last_known_good_age_hours' => (int) $env('DB_OPS_MAX_LAST_KNOWN_GOOD_AGE_HOURS', 24),
         'backup_duration_anomaly_factor' => (float) $env('DB_OPS_BACKUP_DURATION_ANOMALY_FACTOR', 2.0),
@@ -270,7 +275,7 @@ return [
             'backup_dir' => $env('DB_OPS_BACKUP_DIR', storage_path('db-backups')),
             'backup_prefix' => $env('DB_OPS_BACKUP_PREFIX', 'backup'),
             'pre_restore_snapshot' => (bool) $env('DB_OPS_PRE_RESTORE_SNAPSHOT', true),
-            'command_timeout_seconds' => (int) $env('DB_OPS_CMD_TIMEOUT', $queueTimeoutDefault),
+            'command_timeout_seconds' => (int) $env('DB_OPS_CMD_TIMEOUT', $timeoutBase),
         ],
         'postgres' => [
             'class' => PostgresDriver::class,
@@ -309,7 +314,7 @@ return [
             'backup_standby' => (bool) $env('DB_OPS_PGBACKREST_BACKUP_STANDBY', false),
             'checksum_page' => (bool) $env('DB_OPS_PGBACKREST_CHECKSUM_PAGE', false),
             'delta' => (bool) $env('DB_OPS_PGBACKREST_DELTA', false),
-            'command_timeout_seconds' => (int) $env('DB_OPS_PGBACKREST_TIMEOUT', $queueTimeoutDefault),
+            'command_timeout_seconds' => (int) $env('DB_OPS_PGBACKREST_TIMEOUT', $timeoutBase),
             'extra_args' => [
                 'backup' => [],
                 'restore' => [],
@@ -330,7 +335,7 @@ return [
             'file_extension' => $env('DB_OPS_PGDUMP_FILE_EXTENSION', 'dump'),
             'clean' => (bool) $env('DB_OPS_PGDUMP_RESTORE_CLEAN', true),
             'create' => (bool) $env('DB_OPS_PGDUMP_RESTORE_CREATE', false),
-            'command_timeout_seconds' => (int) $env('DB_OPS_PGDUMP_TIMEOUT', $queueTimeoutDefault),
+            'command_timeout_seconds' => (int) $env('DB_OPS_PGDUMP_TIMEOUT', $timeoutBase),
             'extra_args' => [
                 'backup' => [],
                 'restore' => [],
@@ -348,7 +353,7 @@ return [
             'output_prefix' => $env('DB_OPS_MYSQL_OUTPUT_PREFIX', 'mysql-export'),
             'file_extension' => $env('DB_OPS_MYSQL_FILE_EXTENSION', 'sql'),
             'drill_command' => $env('DB_OPS_MYSQL_DRILL_COMMAND', ''),
-            'command_timeout_seconds' => (int) $env('DB_OPS_MYSQL_TIMEOUT', $queueTimeoutDefault),
+            'command_timeout_seconds' => (int) $env('DB_OPS_MYSQL_TIMEOUT', $timeoutBase),
             'pitr' => [
                 'binlog_files' => array_values(array_filter(array_map(
                     trim(...),

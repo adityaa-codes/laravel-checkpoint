@@ -17,8 +17,6 @@ final class EnqueueBackupDrillCommand extends Command
 
     protected $description = 'Queue a backup drill command run.';
 
-    protected $aliases = ['checkpoint:do:drill'];
-
     public function handle(EnqueueCommandRunAction $enqueueCommandRun): int
     {
         try {
@@ -28,13 +26,15 @@ final class EnqueueBackupDrillCommand extends Command
 
             if ($this->enhancedInteractiveMode()) {
                 \Laravel\Prompts\info($message);
-                \Laravel\Prompts\note('Monitor progress: php artisan checkpoint:check:report');
+                \Laravel\Prompts\note('Monitor progress: php artisan checkpoint:report');
             } else {
                 $this->promptInfo($message);
             }
 
             return self::SUCCESS;
         } catch (Throwable $exception) {
+            report($exception);
+
             $this->promptError($exception->getMessage());
 
             return self::FAILURE;
@@ -43,21 +43,12 @@ final class EnqueueBackupDrillCommand extends Command
 
     private function queuedMessage(int $runId): string
     {
-        $operation = __('messages.operations.backup_drill');
+        $operation = $this->translatedOr('messages.operations.backup_drill', 'Backup Drill');
 
-        if ($operation === 'messages.operations.backup_drill') {
-            $operation = 'Backup Drill';
-        }
-
-        $message = __('messages.cli.backup_queued', [
-            'operation' => $operation,
-            'id' => $runId,
-        ]);
-
-        if ($message === 'messages.cli.backup_queued') {
-            return sprintf('Queued %s run #%d.', $operation, $runId);
-        }
-
-        return (string) $message;
+        return $this->translatedOr(
+            'messages.cli.backup_queued',
+            sprintf('Queued %s run #%d.', $operation, $runId),
+            ['operation' => $operation, 'id' => $runId],
+        );
     }
 }

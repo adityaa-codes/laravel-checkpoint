@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Enums\ReplicationEngine;
-use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationEndpointInputParser;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationRequestFactory;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationEndpointKind;
@@ -33,7 +33,7 @@ it('rejects mixed engine replication requests', function (): void {
         'pgsql://src:pw@db-a/source',
         'mysql://dst:pw@db-b/destination',
         dryRunRequested: true,
-    ))->toThrow(InvalidArgumentException::class, 'Replication v1 supports same-engine only.');
+    ))->toThrow(CheckpointArgumentException::class, 'Replication v1 supports same-engine only.');
 });
 
 it('requires explicit engine resolution for source and destination', function (): void {
@@ -46,7 +46,7 @@ it('requires explicit engine resolution for source and destination', function ()
         'host=source.internal,db=checkpoint',
         'host=destination.internal,db=checkpoint',
         dryRunRequested: true,
-    ))->toThrow(InvalidArgumentException::class, 'Replication requires explicit source and destination engines.');
+    ))->toThrow(CheckpointArgumentException::class, 'Replication requires explicit source and destination engines.');
 });
 
 it('rejects disabled replication safety defaults', function (): void {
@@ -61,5 +61,5 @@ it('rejects disabled replication safety defaults', function (): void {
         'profile:pg-source',
         'profile:pg-destination',
         dryRunRequested: true,
-    ))->toThrow(InvalidArgumentException::class, 'Replication safety requires CI blocking by default.');
+    ))->toThrow(CheckpointArgumentException::class, 'Replication safety requires CI blocking by default.');
 });

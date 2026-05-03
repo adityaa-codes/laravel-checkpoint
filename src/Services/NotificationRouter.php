@@ -14,6 +14,7 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Throwable;
 
 final readonly class NotificationRouter
 {
@@ -155,10 +156,19 @@ final readonly class NotificationRouter
 
         $body = $this->webhookBody($payload, $provider);
 
-        Http::timeout(max(1, $timeout))
-            ->asJson()
-            ->post($url, $body)
-            ->throw();
+        try {
+            Http::timeout(max(1, $timeout))
+                ->asJson()
+                ->post($url, $body)
+                ->throw();
+        } catch (Throwable $e) {
+            Log::channel((string) $this->config->get('checkpoint.log_channel', 'stack'))
+                ->error('Checkpoint webhook delivery failed', [
+                    'url' => $url,
+                    'provider' => $provider,
+                    'error' => $e->getMessage(),
+                ]);
+        }
     }
 
     /**

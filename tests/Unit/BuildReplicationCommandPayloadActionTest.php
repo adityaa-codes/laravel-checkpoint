@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Actions\BuildReplicationCommandPayloadAction;
-use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 
 it('builds dry-run payloads with configured critical table fallback', function (): void {
     config()->set('checkpoint.replication.critical_tables', ['accounts', 'invoices', 'accounts']);
@@ -48,14 +48,14 @@ it('requires non-empty source and destination endpoints', function (): void {
         destination: 'profile:pg-destination',
         apply: false,
         forceOverwrite: false,
-    ))->toThrow(InvalidArgumentException::class, 'Replication source endpoint is required.');
+    ))->toThrow(CheckpointArgumentException::class, 'Replication source endpoint is required.');
 
     expect(fn (): array => resolve(BuildReplicationCommandPayloadAction::class)->execute(
         source: 'profile:pg-source',
         destination: '   ',
         apply: false,
         forceOverwrite: false,
-    ))->toThrow(InvalidArgumentException::class, 'Replication destination endpoint is required.');
+    ))->toThrow(CheckpointArgumentException::class, 'Replication destination endpoint is required.');
 });
 
 it('rejects invalid critical table configuration types', function (): void {
@@ -66,5 +66,5 @@ it('rejects invalid critical table configuration types', function (): void {
         destination: 'profile:pg-destination',
         apply: false,
         forceOverwrite: false,
-    ))->toThrow(InvalidArgumentException::class, 'checkpoint.replication.critical_tables must be an array of non-empty strings.');
+    ))->toThrow(CheckpointArgumentException::class, 'checkpoint.replication.critical_tables must be an array of non-empty strings.');
 });

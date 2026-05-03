@@ -11,8 +11,10 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Schema;
 use Spatie\LaravelPackageTools\Package;
 
 it('resolves the configured backup driver from the service provider binding', function (): void {
@@ -56,27 +58,7 @@ it('registers the public report and catalog commands', function (): void {
 
     expect(Artisan::all())->toHaveKey('checkpoint:report')
         ->toHaveKey('checkpoint:catalog-export')
-        ->toHaveKey('checkpoint:admin:catalog-export')
-        ->toHaveKey('checkpoint:admin:prune')
-        ->toHaveKey('checkpoint:admin:recover-orphans')
-        ->toHaveKey('checkpoint:admin:retention')
-        ->toHaveKey('checkpoint:check:doctor')
-        ->toHaveKey('checkpoint:check:health')
-        ->toHaveKey('checkpoint:check:pitr')
-        ->toHaveKey('checkpoint:check:report')
-        ->toHaveKey('checkpoint:do:backup')
-        ->toHaveKey('checkpoint:do:backup:diff')
-        ->toHaveKey('checkpoint:do:backup:full')
-        ->toHaveKey('checkpoint:do:backup:incr')
-        ->toHaveKey('checkpoint:do:backup:logical')
-        ->toHaveKey('checkpoint:do:drill')
         ->toHaveKey('checkpoint:install')
-        ->toHaveKey('checkpoint:do:install')
-        ->toHaveKey('checkpoint:do:replicate')
-        ->toHaveKey('checkpoint:do:restore:file')
-        ->toHaveKey('checkpoint:do:restore:latest')
-        ->toHaveKey('checkpoint:do:restore:pitr')
-        ->toHaveKey('checkpoint:do:status')
         ->toHaveKey('checkpoint:pitr-readiness')
         ->toHaveKey('checkpoint:retention-policy')
         ->toHaveKey('checkpoint:enqueue-drill');
@@ -86,8 +68,45 @@ it('registers the replicate command interface', function (): void {
     expect(Artisan::all())->toHaveKey('checkpoint:replicate');
 });
 
-it('registers published migrations in dependency order', function (): void {
+it('registers the squashed migration on a fresh install', function (): void {
     $provider = new LaravelCheckpointServiceProvider(app());
+    $reflector = new ReflectionClass($provider);
+    $method = $reflector->getMethod('isExistingInstallation');
+    $method->setAccessible(true);
+
+    Schema::dropIfExists('db_ops_verification_runs');
+    Schema::dropIfExists('db_ops_restore_decision_events');
+    Schema::dropIfExists('db_ops_backup_drill_runs');
+    Schema::dropIfExists('db_ops_command_runs');
+
+    expect($method->invoke($provider))->toBeFalse();
+
+    $package = new Package;
+
+    $provider->configurePackage($package);
+
+    expect($package->migrationFileNames)->toBe([
+        'create_checkpoint_tables',
+    ]);
+});
+
+it('registers incremental migrations when upgrading an existing installation', function (): void {
+    Schema::dropIfExists('db_ops_verification_runs');
+    Schema::dropIfExists('db_ops_restore_decision_events');
+    Schema::dropIfExists('db_ops_backup_drill_runs');
+    Schema::dropIfExists('db_ops_command_runs');
+
+    Schema::create('db_ops_command_runs', function (Blueprint $table): void {
+        $table->id();
+    });
+
+    $provider = new LaravelCheckpointServiceProvider(app());
+    $reflector = new ReflectionClass($provider);
+    $method = $reflector->getMethod('isExistingInstallation');
+    $method->setAccessible(true);
+
+    expect($method->invoke($provider))->toBeTrue();
+
     $package = new Package;
 
     $provider->configurePackage($package);
@@ -103,6 +122,8 @@ it('registers published migrations in dependency order', function (): void {
         'create_checkpoint_verification_runs_table',
         'add_reporting_indexes_to_checkpoint_tables',
     ]);
+
+    Schema::dropIfExists('db_ops_command_runs');
 });
 
 it('can disable schedule overlap and cluster guards', function (): void {

@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Services;
 
+use AdityaaCodes\LaravelCheckpoint\Support\DsnPattern;
+
 /** @internal */
-final class ReplicationSecretRedactor
+final readonly class ReplicationSecretRedactor
 {
     public function redact(string $input): string
     {
@@ -15,7 +17,7 @@ final class ReplicationSecretRedactor
             return $trimmed;
         }
 
-        if (preg_match('/^[A-Za-z][A-Za-z0-9+.-]*:\/\//', $trimmed) === 1) {
+        if (preg_match(DsnPattern::REGEX, $trimmed) === 1) {
             $parts = parse_url($trimmed);
 
             if (is_array($parts) && isset($parts['scheme']) && isset($parts['host'])) {

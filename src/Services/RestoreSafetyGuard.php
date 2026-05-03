@@ -7,6 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Services;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
+use AdityaaCodes\LaravelCheckpoint\Support\StringListFormatter;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -17,6 +18,7 @@ final readonly class RestoreSafetyGuard
 {
     public function __construct(
         private Repository $config,
+        private StringListFormatter $stringListFormatter,
     ) {}
 
     /**
@@ -195,7 +197,9 @@ final readonly class RestoreSafetyGuard
 
         try {
             Date::parse($target);
-        } catch (\Throwable) {
+        } catch (\Throwable $exception) {
+            report($exception);
+
             throw new ConfigurationException(
                 sprintf('pitr_restore target [%s] must be a valid datetime string.', $target),
             );
@@ -263,16 +267,7 @@ final readonly class RestoreSafetyGuard
      */
     private function stringList(string $key): array
     {
-        $value = $this->config->get($key, []);
-
-        if (! is_array($value)) {
-            return [];
-        }
-
-        return array_values(array_filter(array_map(
-            static fn (mixed $item): string => is_string($item) ? trim($item) : '',
-            $value,
-        ), static fn (string $item): bool => $item !== ''));
+        return $this->stringListFormatter->format($this->config->get($key, []));
     }
 
     private function ciBypassActive(): bool

@@ -132,19 +132,23 @@ final class NotificationMessageFormatter
     {
         $icon = $this->iconForLevel((string) $canonical['level']);
         $context = $this->inlineContext($canonical);
+        $extra = isset($canonical['actions'][2]) ? sprintf("\n• `%s`", $canonical['actions'][2]) : '';
 
-        return sprintf(
-            "%s *[%s]* `%s`\n*Summary:* %s\n*When:* %s\n*Context:* %s\n*Next actions:*\n• `%s`\n• `%s`%s",
+        $template = "%s *[%s]* `%s`\n*Summary:* {summary}\n*When:* %s\n*Context:* %s\n*Next actions:*\n• `%s`\n• `%s`%s";
+
+        $result = sprintf(
+            $template,
             $icon,
             strtoupper((string) $canonical['level']),
             (string) $canonical['event_key'],
-            (string) $canonical['summary'],
             (string) $canonical['occurred_at'],
             $context,
             $canonical['actions'][0] ?? '',
             $canonical['actions'][1] ?? '',
-            isset($canonical['actions'][2]) ? sprintf("\n• `%s`", $canonical['actions'][2]) : '',
+            $extra,
         );
+
+        return str_replace('{summary}', (string) $canonical['summary'], $result);
     }
 
     /**
@@ -154,19 +158,23 @@ final class NotificationMessageFormatter
     {
         $icon = $this->iconForLevel((string) $canonical['level']);
         $context = $this->inlineContext($canonical);
+        $extra = isset($canonical['actions'][2]) ? sprintf("\n- %s", $canonical['actions'][2]) : '';
 
-        return sprintf(
-            "%s [%s] %s\nSummary: %s\nWhen: %s\nContext: %s\nNext:\n- %s\n- %s%s",
+        $template = "%s [%s] %s\nSummary: {summary}\nWhen: %s\nContext: %s\nNext:\n- %s\n- %s%s";
+
+        $result = sprintf(
+            $template,
             $icon,
             strtoupper((string) $canonical['level']),
             (string) $canonical['event_key'],
-            (string) $canonical['summary'],
             (string) $canonical['occurred_at'],
             $context,
             $canonical['actions'][0] ?? '',
             $canonical['actions'][1] ?? '',
-            isset($canonical['actions'][2]) ? sprintf("\n- %s", $canonical['actions'][2]) : '',
+            $extra,
         );
+
+        return str_replace('{summary}', (string) $canonical['summary'], $result);
     }
 
     /**

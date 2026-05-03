@@ -79,7 +79,7 @@
       "title": "No backup drill evidence available",
       "summary": "No backup drill run is recorded. Schedule and record a drill run before relying on restore readiness.",
       "recommended_commands": [
-        "db-ops:enqueue-drill"
+        "checkpoint:enqueue-drill"
       ],
       "steps": [],
       "evidence": {

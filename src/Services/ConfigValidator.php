@@ -23,26 +23,40 @@ final readonly class ConfigValidator
 
     public function validate(): void
     {
-        $this->validateDriver();
-        $this->validatePgBackRestConfig();
-        $this->validatePgDumpConfig();
-        $this->validateMysqlConfig();
-        $this->validateQueueSettings();
-        $this->validateDriverTimeoutBudgets();
-        $this->validateRestoreSettings();
-        $this->validateScheduleSettings();
-        $this->validateRetentionSettings();
-        $this->validateObservabilitySettings();
-        $this->validateReportingSettings();
-        $this->validateGateSettings();
-        $this->validateNotificationSettings();
-        $this->validateOutputSettings();
-        $this->validateReplicationSettings();
-        $this->validateCustomOperations();
-        $this->validateLogChannel();
-        $this->validateUserModel();
-        $this->validateTablePrefix();
-        $this->validateTempDirectory();
+        $errors = [];
+
+        foreach ([
+            'validateDriver',
+            'validatePgBackRestConfig',
+            'validatePgDumpConfig',
+            'validateMysqlConfig',
+            'validateQueueSettings',
+            'validateDriverTimeoutBudgets',
+            'validateRestoreSettings',
+            'validateScheduleSettings',
+            'validateRetentionSettings',
+            'validateObservabilitySettings',
+            'validateReportingSettings',
+            'validateGateSettings',
+            'validateNotificationSettings',
+            'validateOutputSettings',
+            'validateReplicationSettings',
+            'validateCustomOperations',
+            'validateLogChannel',
+            'validateUserModel',
+            'validateTablePrefix',
+            'validateTempDirectory',
+        ] as $method) {
+            try {
+                $this->$method();
+            } catch (ConfigurationException $exception) {
+                $errors[] = $exception->getMessage();
+            }
+        }
+
+        if ($errors !== []) {
+            throw new ConfigurationException(implode("\n", $errors));
+        }
     }
 
     private function validateDriver(): void

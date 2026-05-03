@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Enums\ReplicationEngine;
-use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationEndpointInputParser;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationEndpointKind;
 
@@ -47,14 +47,14 @@ it('rejects invalid endpoint formats with clear errors', function (): void {
     $parser = new ReplicationEndpointInputParser;
 
     expect(fn (): mixed => $parser->parse('not-a-valid-endpoint'))
-        ->toThrow(InvalidArgumentException::class, 'Replication endpoint must be one of: profile:<id>, <engine>:// DSN, or key=value pairs.');
+        ->toThrow(CheckpointArgumentException::class, 'Replication endpoint must be one of: profile:<id>, <engine>:// DSN, or key=value pairs.');
 
     expect(fn (): mixed => $parser->parse('profile:bad profile'))
-        ->toThrow(InvalidArgumentException::class, 'Invalid profile reference.');
+        ->toThrow(CheckpointArgumentException::class, 'Invalid profile reference.');
 
     expect(fn (): mixed => $parser->parse('sqlserver://user:pass@host/db'))
-        ->toThrow(InvalidArgumentException::class, 'Unsupported DSN engine.');
+        ->toThrow(CheckpointArgumentException::class, 'Unsupported DSN engine.');
 
     expect(fn (): mixed => $parser->parse('engine=sqlserver,host=example'))
-        ->toThrow(InvalidArgumentException::class, 'Unsupported engine in key=value endpoint.');
+        ->toThrow(CheckpointArgumentException::class, 'Unsupported engine in key=value endpoint.');
 });

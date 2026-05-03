@@ -634,13 +634,9 @@ final class PgBackRestDriver implements BackupDriver
 
     private function redactCommandLine(string $commandLine): string
     {
-        $patterns = [
-            '/(--repo\d+-s3-key=)[^\s]+/',
-            '/(--repo\d+-s3-key-secret=)[^\s]+/',
-            '/(--repo\d+-cipher-pass=)[^\s]+/',
-        ];
+        $pattern = '/(--\S*(?:-key|-secret|-pass(?:word)?)=)[^\s]+/';
 
-        return (string) preg_replace($patterns, '$1[REDACTED]', $commandLine);
+        return (string) preg_replace($pattern, '$1[REDACTED]', $commandLine);
     }
 
     /**
@@ -689,6 +685,12 @@ final class PgBackRestDriver implements BackupDriver
         }
 
         @chmod($path, 0600);
+
+        register_shutdown_function(function () use ($path): void {
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        });
 
         return ['path' => $path];
     }

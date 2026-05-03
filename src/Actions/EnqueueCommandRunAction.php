@@ -29,10 +29,13 @@ class EnqueueCommandRunAction
         private readonly ReplicationGovernanceEvaluator $replicationGovernanceEvaluator,
         private readonly ReplicationRequestFactory $replicationRequestFactory,
         private readonly ReplicationSecretRedactor $replicationSecretRedactor,
+        private readonly ValidateOperationBinaries $validateOperationBinaries,
     ) {}
 
     public function execute(string $operation, ?string $argument = null, ?Model $requestedBy = null): CommandRun
     {
+        $this->validateOperationBinaries->validate($operation);
+
         $prepared = $this->preparedOperation($operation, $argument);
 
         $run = $this->database->transaction(fn (): CommandRun => CommandRun::query()->create([

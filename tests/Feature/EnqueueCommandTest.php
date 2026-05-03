@@ -83,3 +83,35 @@ it('fails in non-interactive mode when required operation argument is missing', 
     expect(CommandRun::query()->count())->toBe(0);
     Bus::assertNothingDispatched();
 });
+
+it('rejects PITR operation when mysqlbinlog is missing for mysql driver', function (): void {
+    Bus::fake();
+    Event::fake([BackupQueued::class]);
+
+    config()->set('checkpoint.driver', 'mysql');
+    config()->set('checkpoint.drivers.mysql.dump_binary', PHP_BINARY);
+    config()->set('checkpoint.drivers.mysql.mysql_binary', PHP_BINARY);
+    config()->set('checkpoint.drivers.mysql.mysqlbinlog_binary', 'missing-mysqlbinlog-binary');
+
+    checkpoint_artisan('checkpoint:enqueue pitr_restore --argument=2024-01-01T00:00:00Z')
+        ->expectsOutputToContain('mysqlbinlog')
+        ->assertFailed();
+
+    expect(CommandRun::query()->count())->toBe(0);
+    Bus::assertNothingDispatched();
+});
+
+it('allows PITR operation when all driver binaries are available', function (): void {
+    Bus::fake();
+    Event::fake([BackupQueued::class]);
+
+    config()->set('checkpoint.driver', 'mysql');
+    config()->set('checkpoint.drivers.mysql.dump_binary', PHP_BINARY);
+    config()->set('checkpoint.drivers.mysql.mysql_binary', PHP_BINARY);
+    config()->set('checkpoint.drivers.mysql.mysqlbinlog_binary', PHP_BINARY);
+
+    checkpoint_artisan('checkpoint:enqueue pitr_restore --argument=2024-01-01T00:00:00Z')
+        ->assertSuccessful();
+
+    expect(CommandRun::query()->count())->toBe(1);
+});

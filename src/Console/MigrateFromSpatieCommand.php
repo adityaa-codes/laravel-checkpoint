@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
+use AdityaaCodes\LaravelCheckpoint\Services\EnvFileManager;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use RuntimeException;
@@ -22,6 +23,12 @@ use function Laravel\Prompts\warning;
 final class MigrateFromSpatieCommand extends Command
 {
     use UsesLaravelPrompts;
+
+    public function __construct(
+        private readonly EnvFileManager $envFileManager,
+    ) {
+        parent::__construct();
+    }
 
     protected $signature = 'checkpoint:migrate-from-spatie
         {--dry-run : Preview the migration plan without making changes.}
@@ -123,6 +130,8 @@ final class MigrateFromSpatieCommand extends Command
 
             return self::SUCCESS;
         } catch (Throwable $exception) {
+            report($exception);
+
             foreach (preg_split('/\r\n|\r|\n/', $exception->getMessage()) ?: [] as $line) {
                 if (trim((string) $line) !== '') {
                     $this->promptError((string) $line);
@@ -331,35 +340,10 @@ final class MigrateFromSpatieCommand extends Command
         }
 
         $contents = (string) file_get_contents($path);
-
-        foreach ($entries as $key => $value) {
-            $line = sprintf('%s=%s', $key, $this->formattedEnvValue($value));
-            $pattern = '/^'.preg_quote($key, '/').'=.*/m';
-
-            if (preg_match($pattern, $contents) === 1) {
-                $contents = (string) preg_replace($pattern, $line, $contents, 1);
-            } else {
-                $suffix = str_ends_with($contents, "\n") ? '' : "\n";
-                $contents .= $suffix.$line."\n";
-            }
-        }
-
+        $contents = $this->envFileManager->writeEntries($contents, $entries);
         file_put_contents($path, $contents);
 
         $this->promptInfo('.env updated with '.count($entries).' value(s).');
-    }
-
-    private function formattedEnvValue(string $value): string
-    {
-        if ($value === '') {
-            return '""';
-        }
-
-        if (preg_match('/\s/', $value) === 1) {
-            return '"'.str_replace('"', '\"', $value).'"';
-        }
-
-        return $value;
     }
 
     private function publishCheckpointConfig(): void

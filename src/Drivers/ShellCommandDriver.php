@@ -150,24 +150,34 @@ final class ShellCommandDriver implements BackupDriver
 
     private function buildProcess(CommandRun $run): Process
     {
-        $template = (string) config("checkpoint.drivers.shell.commands.{$run->operation}", '');
+        $template = config("checkpoint.drivers.shell.commands.{$run->operation}", '');
 
-        if ($template === '') {
+        if (is_array($template)) {
+            if ($template === []) {
+                throw new ConfigurationException(
+                    sprintf('No shell command configured for operation [%s].', $run->operation),
+                );
+            }
+
+            $argv = $this->substitutePlaceholders($template, $run);
+        } elseif (is_string($template) && trim($template) !== '') {
+            $tokens = preg_split('/\s+/', trim($template));
+
+            if ($tokens === false || $tokens === []) {
+                throw new ConfigurationException(
+                    sprintf('Invalid shell command template for operation [%s].', $run->operation),
+                );
+            }
+
+            $argv = $this->substitutePlaceholders($tokens, $run);
+        } else {
             throw new ConfigurationException(
                 sprintf('No shell command configured for operation [%s].', $run->operation),
             );
         }
 
-        $argv = preg_split('/\s+/', trim($template));
-
-        if ($argv === false || $argv === []) {
-            throw new ConfigurationException(
-                sprintf('Invalid shell command template for operation [%s].', $run->operation),
-            );
-        }
-
         return new Process(
-            $this->substitutePlaceholders($argv, $run),
+            $argv,
             timeout: (float) config('checkpoint.drivers.shell.command_timeout_seconds', 7200),
         );
     }

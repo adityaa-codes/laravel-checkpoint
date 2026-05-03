@@ -330,8 +330,8 @@
       "title": "Backup drill pass rate is below threshold",
       "summary": "Drill pass rate is 0.0% in the last 14 day(s), below the configured 100.0% threshold.",
       "recommended_commands": [
-        "db-ops:enqueue-drill",
-        "db-ops:status --summary --format=json"
+        "checkpoint:enqueue-drill",
+        "checkpoint:status --summary --format=json"
       ],
       "steps": [
         "Run a new drill and validate marker, RTO, and RPO checks.",
@@ -359,7 +359,7 @@
       "status": "failed",
       "exit_code": 1,
       "failure_reason": "Command exited with code 1.",
-      "next_action": "Run php artisan db-ops:report --limit=10 --format=json for full failure context."
+      "next_action": "Run php artisan checkpoint:report --limit=10 --format=json for full failure context."
     }
   },
   "breakdown": {
@@ -416,7 +416,8 @@
         "notes": "shell",
         "data": {
           "driver": "shell"
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "config.queue_name",
@@ -425,7 +426,8 @@
         "notes": "db-ops",
         "data": {
           "queue_name": "db-ops"
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "config.log_channel",
@@ -434,7 +436,8 @@
         "notes": "stack",
         "data": {
           "log_channel": "stack"
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "config.pgbackrest_stanza",
@@ -443,7 +446,8 @@
         "notes": "main",
         "data": {
           "stanza": "main"
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "config.pgbackrest_repo",
@@ -452,7 +456,8 @@
         "notes": "1",
         "data": {
           "repository": 1
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "config.pgbackrest_repositories",
@@ -461,7 +466,8 @@
         "notes": "1",
         "data": {
           "repository_count": 1
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "config.pgbackrest_process_max",
@@ -470,7 +476,8 @@
         "notes": "2",
         "data": {
           "process_max": 2
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "repo.pgbackrest_active",
@@ -480,7 +487,8 @@
         "data": {
           "repository": 1,
           "type": "posix"
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "repo.pgbackrest_target",
@@ -490,7 +498,8 @@
         "data": {
           "type": "posix",
           "path": "/tmp/checkpoint-pgbackrest-repo1"
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "repo.pgbackrest_tls",
@@ -500,7 +509,8 @@
         "data": {
           "verify": true,
           "ca_file": null
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "repo.pgbackrest_encryption",
@@ -510,7 +520,8 @@
         "data": {
           "enabled": false,
           "cipher_type": "aes-256-cbc"
-        }
+        },
+        "severity": "warning"
       },
       {
         "code": "binary.pg_dump",
@@ -523,7 +534,8 @@
           "found": false,
           "path": null,
           "reason": "not_found"
-        }
+        },
+        "severity": "warning"
       },
       {
         "code": "binary.pgbackrest",
@@ -536,7 +548,8 @@
           "found": false,
           "path": null,
           "reason": "not_found"
-        }
+        },
+        "severity": "warning"
       },
       {
         "code": "binary.gzip",
@@ -549,7 +562,8 @@
           "found": false,
           "path": null,
           "reason": "not_found"
-        }
+        },
+        "severity": "warning"
       },
       {
         "code": "db.command_runs_table",
@@ -560,7 +574,8 @@
           "table": "db_ops_command_runs",
           "exists": true,
           "row_count": 3
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "db.backup_drill_runs_table",
@@ -571,7 +586,8 @@
           "table": "db_ops_backup_drill_runs",
           "exists": true,
           "row_count": 1
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "db.verification_runs_table",
@@ -582,7 +598,8 @@
           "table": "db_ops_verification_runs",
           "exists": true,
           "row_count": 2
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "queue.worker_visibility",
@@ -591,7 +608,8 @@
         "notes": "Cannot verify queue without running worker",
         "data": {
           "queue_name": "db-ops"
-        }
+        },
+        "severity": "warning"
       },
       {
         "code": "queue.orphaned_runs",
@@ -601,7 +619,8 @@
         "data": {
           "orphaned_run_count": 0,
           "threshold_minutes": 10
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "restore.posture.environments",
@@ -615,7 +634,8 @@
             "workbench"
           ],
           "reason": "local_or_testing"
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "restore.posture.databases",
@@ -629,7 +649,8 @@
             ":memory:"
           ],
           "reason": "local_or_testing"
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "restore.posture.ci_bypass",
@@ -640,7 +661,8 @@
           "environment": "testing",
           "allow_in_ci": true,
           "reason": "local_or_testing"
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "restore.posture.verified_backup",
@@ -651,7 +673,8 @@
           "environment": "testing",
           "require_verified_backup": false,
           "reason": "local_or_testing"
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "restore.post_verification",
@@ -709,7 +732,8 @@
             ]
           },
           "reason": "check_failed"
-        }
+        },
+        "severity": "warning"
       },
       {
         "code": "backup.last_known_good",
@@ -720,7 +744,8 @@
           "age_hours": 1,
           "threshold_hours": 24,
           "reason": "fresh"
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "backup.duration_anomaly",
@@ -732,7 +757,8 @@
           "min_samples": 3,
           "sample_count": 0,
           "reason": "insufficient_samples"
-        }
+        },
+        "severity": "warning"
       },
       {
         "code": "backup_drill.latest_run",
@@ -745,7 +771,8 @@
           "age_days": 1,
           "threshold_days": 30,
           "reason": "fresh"
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "backup_drill.pass_rate",
@@ -760,7 +787,8 @@
           "threshold_percent": 100,
           "latest_run_uuid": "drill-fail-001",
           "reason": "below_threshold"
-        }
+        },
+        "severity": "warning"
       },
       {
         "code": "backup_drill.trend",
@@ -794,7 +822,8 @@
           },
           "trajectory": "insufficient_data",
           "status": "stable"
-        }
+        },
+        "severity": "info"
       },
       {
         "code": "backup_drill.playbook",
@@ -807,8 +836,8 @@
           "title": "Backup drill pass rate is below threshold",
           "summary": "Drill pass rate is 0.0% in the last 14 day(s), below the configured 100.0% threshold.",
           "recommended_commands": [
-            "db-ops:enqueue-drill",
-            "db-ops:status --summary --format=json"
+            "checkpoint:enqueue-drill",
+            "checkpoint:status --summary --format=json"
           ],
           "steps": [
             "Run a new drill and validate marker, RTO, and RPO checks.",
@@ -828,7 +857,8 @@
             "trend_status": "stable",
             "trend_trajectory": "insufficient_data"
           }
-        }
+        },
+        "severity": "warning"
       },
       {
         "code": "verification.runs",
@@ -849,7 +879,8 @@
             "verified_at": "2026-03-11 11:57:00"
           },
           "reason": "failed_runs_present"
-        }
+        },
+        "severity": "warning"
       }
     ]
   },
@@ -863,6 +894,6 @@
     "status": "failed",
     "exit_code": 1,
     "failure_reason": "Command exited with code 1.",
-    "next_action": "Run php artisan db-ops:report --limit=10 --format=json for full failure context."
+    "next_action": "Run php artisan checkpoint:report --limit=10 --format=json for full failure context."
   }
 }

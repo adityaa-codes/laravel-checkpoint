@@ -4,29 +4,10 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint;
 
+use AdityaaCodes\LaravelCheckpoint\Actions\BuildDrillRemediationPlaybookAction;
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
-use AdityaaCodes\LaravelCheckpoint\Console\AdminCatalogExportCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\AdminPruneCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\AdminRecoverOrphansCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\AdminRetentionCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\CatalogExportCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\CheckDoctorCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\CheckHealthCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\CheckPitrCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\CheckReportCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoBackupCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoBackupDiffCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoBackupFullCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoBackupIncrCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoBackupLogicalCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoDrillCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoInstallCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoReplicateCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoRestoreFileCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoRestoreLatestCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoRestorePitrCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoStatusCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueBackupDrillCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueLogicalBackupCommand;
@@ -41,6 +22,7 @@ use AdityaaCodes\LaravelCheckpoint\Console\ReplicateCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ReportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RetentionPolicyCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\StatusCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\TestCommand;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Contracts\ReplicationEndpointParser;
 use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
@@ -54,13 +36,19 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
+use AdityaaCodes\LaravelCheckpoint\Services\HealthCheckComposer;
 use AdityaaCodes\LaravelCheckpoint\Services\NotificationRouter;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationEndpointInputParser;
+use AdityaaCodes\LaravelCheckpoint\Support\BinaryFinder;
+use AdityaaCodes\LaravelCheckpoint\ValueObjects\GateProfileConfig;
 use Illuminate\Console\Scheduling\Event as ScheduledEvent;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Database\DatabaseManager;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Schema;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
+use Throwable;
 
 final class LaravelCheckpointServiceProvider extends PackageServiceProvider
 {
@@ -69,6 +57,19 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
         $this->app->singleton(LaravelCheckpoint::class, fn ($app): LaravelCheckpoint => new LaravelCheckpoint(
             $app->make(EnqueueCommandRunAction::class),
         ));
+
+        $this->app->bind(GateProfileConfig::class, function ($app): GateProfileConfig {
+            $config = $app['config'];
+
+            return new GateProfileConfig(
+                environment: (string) $config->get('app.env', 'production'),
+                overrideProfile: is_string($config->get('checkpoint.gates.override_profile')) ? $config->get('checkpoint.gates.override_profile') : null,
+                defaultProfile: (string) $config->get('checkpoint.gates.default_profile', 'production'),
+                environmentProfileMap: (array) $config->get('checkpoint.gates.environment_profile_map', []),
+                codeMap: array_map(static fn (mixed $v) => max(0, (int) $v), (array) $config->get('checkpoint.gates.code_map', [])),
+                profiles: (array) $config->get('checkpoint.gates.profiles', []),
+            );
+        });
 
         $this->app->bind(function ($app): BackupDriver {
             $driver = (string) $app['config']->get('checkpoint.driver', 'shell');
@@ -94,6 +95,52 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             ReplicationEndpointParser::class,
             ReplicationEndpointInputParser::class,
         );
+
+        $this->app->bind(HealthCheckComposer::class, function ($app): HealthCheckComposer {
+            $config = $app['config'];
+            $environment = (string) $config->get('app.env', 'production');
+            $defaultConnection = (string) $config->get('database.default', '');
+
+            return new HealthCheckComposer(
+                database: $app->make(DatabaseManager::class),
+                buildDrillRemediationPlaybook: $app->make(BuildDrillRemediationPlaybookAction::class),
+                driver: (string) $config->get('checkpoint.driver', 'shell'),
+                queueName: (string) $config->get('checkpoint.queue.name', 'db-ops'),
+                logChannel: (string) $config->get('checkpoint.log_channel', 'stack'),
+                pgbackrestStanza: (string) $config->get('checkpoint.drivers.pgbackrest.stanza', 'main'),
+                pgbackrestRepo: (int) $config->get('checkpoint.drivers.pgbackrest.repo', 1),
+                pgbackrestRepositories: (array) $config->get('checkpoint.drivers.pgbackrest.repositories', []),
+                pgbackrestProcessMax: (int) $config->get('checkpoint.drivers.pgbackrest.process_max', 1),
+                pgbackrestBinary: (string) $config->get('checkpoint.drivers.pgbackrest.binary', 'pgbackrest'),
+                orphanThreshold: max(1, (int) $config->get('checkpoint.queue.orphan_threshold', 10)),
+                drillWindowDays: max(1, (int) $config->get('checkpoint.observability.backup_drill_pass_rate_window_days', 30)),
+                backupDrillMinPassRate: max(0.0, min(100.0, (float) $config->get('checkpoint.observability.backup_drill_min_pass_rate', 100.0))),
+                maxBackupDrillAgeDays: max(1, (int) $config->get('checkpoint.observability.max_backup_drill_age_days', 30)),
+                maxLastKnownGoodAgeHours: max(1, (int) $config->get('checkpoint.observability.max_last_known_good_age_hours', 24)),
+                backupDurationMinSamples: max(2, (int) $config->get('checkpoint.observability.backup_duration_min_samples', 3)),
+                backupDurationAnomalyFactor: max(1.1, (float) $config->get('checkpoint.observability.backup_duration_anomaly_factor', 2.0)),
+                alertCooldownSeconds: max(0, (int) $config->get('checkpoint.observability.alert_cooldown_seconds', 300)),
+                lockStore: $config->get('checkpoint.queue.lock_store'),
+                allowedEnvironments: array_values(array_filter(array_map(
+                    static fn (mixed $item): string => is_string($item) ? trim($item) : '',
+                    (array) $config->get('checkpoint.restore.allowed_environments', []),
+                ), static fn (string $item): bool => $item !== '')),
+                allowedDatabases: array_values(array_filter(array_map(
+                    static fn (mixed $item): string => is_string($item) ? trim($item) : '',
+                    (array) $config->get('checkpoint.restore.allowed_databases', []),
+                ), static fn (string $item): bool => $item !== '')),
+                allowInCi: (bool) $config->get('checkpoint.restore.allow_in_ci', false),
+                requireVerifiedBackup: (bool) $config->get('checkpoint.restore.require_verified_backup', false),
+                environment: $environment,
+                currentDatabaseName: (string) $config->get('database.connections.'.$defaultConnection.'.database', ''),
+                pgdumpDumpBinary: (string) $config->get('checkpoint.drivers.pgdump.dump_binary', 'pg_dump'),
+                pgdumpRestoreBinary: (string) $config->get('checkpoint.drivers.pgdump.restore_binary', 'pg_restore'),
+                mysqlDumpBinary: (string) $config->get('checkpoint.drivers.mysql.dump_binary', 'mysqldump'),
+                mysqlBinary: (string) $config->get('checkpoint.drivers.mysql.mysql_binary', 'mysql'),
+                mysqlBinlogBinary: (string) $config->get('checkpoint.drivers.mysql.mysqlbinlog_binary', 'mysqlbinlog'),
+                binaryFinder: $app->make(BinaryFinder::class),
+            );
+        });
     }
 
     public function configurePackage(Package $package): void
@@ -106,52 +153,41 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
         $package
             ->name('laravel-checkpoint')
             ->hasConfigFile()
-            ->hasViews()
-            ->hasMigration('create_checkpoint_command_runs_table')
-            ->hasMigration('add_checkpoint_metadata_to_command_runs_table')
-            ->hasMigration('add_orphan_recovery_claim_to_command_runs_table')
-            ->hasMigration('add_heartbeat_to_command_runs_table')
-            ->hasMigration('add_operator_summary_columns_to_command_runs_table')
-            ->hasMigration('create_checkpoint_restore_decision_events_table')
-            ->hasMigration('create_checkpoint_backup_drill_runs_table')
-            ->hasMigration('create_checkpoint_verification_runs_table')
-            ->hasMigration('add_reporting_indexes_to_checkpoint_tables')
+            ->hasViews();
+
+        if ($this->isExistingInstallation()) {
+            $package
+                ->hasMigration('create_checkpoint_command_runs_table')
+                ->hasMigration('add_checkpoint_metadata_to_command_runs_table')
+                ->hasMigration('add_orphan_recovery_claim_to_command_runs_table')
+                ->hasMigration('add_heartbeat_to_command_runs_table')
+                ->hasMigration('add_operator_summary_columns_to_command_runs_table')
+                ->hasMigration('create_checkpoint_restore_decision_events_table')
+                ->hasMigration('create_checkpoint_backup_drill_runs_table')
+                ->hasMigration('create_checkpoint_verification_runs_table')
+                ->hasMigration('add_reporting_indexes_to_checkpoint_tables');
+        } else {
+            $package->hasMigration('create_checkpoint_tables');
+        }
+
+        $package
             ->hasCommand(DoctorCommand::class)
-            ->hasCommand(CheckDoctorCommand::class)
-            ->hasCommand(CheckReportCommand::class)
             ->hasCommand(EnqueueCommand::class)
             ->hasCommand(HealthCheckCommand::class)
             ->hasCommand(InstallCommand::class)
-            ->hasCommand(DoInstallCommand::class)
-            ->hasCommand(DoBackupCommand::class)
-            ->hasCommand(DoStatusCommand::class)
-            ->hasCommand(DoBackupLogicalCommand::class)
-            ->hasCommand(DoBackupFullCommand::class)
-            ->hasCommand(DoBackupDiffCommand::class)
-            ->hasCommand(DoBackupIncrCommand::class)
-            ->hasCommand(DoRestoreLatestCommand::class)
-            ->hasCommand(DoRestoreFileCommand::class)
-            ->hasCommand(DoRestorePitrCommand::class)
-            ->hasCommand(DoReplicateCommand::class)
-            ->hasCommand(DoDrillCommand::class)
             ->hasCommand(PruneCommand::class)
-            ->hasCommand(AdminPruneCommand::class)
             ->hasCommand(RecoverOrphansCommand::class)
-            ->hasCommand(AdminRecoverOrphansCommand::class)
             ->hasCommand(ReportCommand::class)
             ->hasCommand(CatalogExportCommand::class)
-            ->hasCommand(AdminCatalogExportCommand::class)
             ->hasCommand(PitrReadinessCommand::class)
-            ->hasCommand(CheckPitrCommand::class)
             ->hasCommand(RetentionPolicyCommand::class)
-            ->hasCommand(AdminRetentionCommand::class)
             ->hasCommand(StatusCommand::class)
-            ->hasCommand(CheckHealthCommand::class)
             ->hasCommand(RecordDrillRunCommand::class)
             ->hasCommand(EnqueueBackupDrillCommand::class)
             ->hasCommand(EnqueueLogicalBackupCommand::class)
             ->hasCommand(MigrateFromSpatieCommand::class)
-            ->hasCommand(ReplicateCommand::class);
+            ->hasCommand(ReplicateCommand::class)
+            ->hasCommand(TestCommand::class);
     }
 
     public function packageBooted(): void
@@ -163,6 +199,15 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
         $this->app->make(NotificationRouter::class)->register();
 
         $this->app->make(ConfigValidator::class)->validate();
+    }
+
+    private function isExistingInstallation(): bool
+    {
+        try {
+            return Schema::hasTable((string) config('checkpoint.table_prefix', 'db_ops_').'command_runs');
+        } catch (Throwable) {
+            return true;
+        }
     }
 
     private function registerSchedules(): void

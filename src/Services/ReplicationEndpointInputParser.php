@@ -6,7 +6,8 @@ namespace AdityaaCodes\LaravelCheckpoint\Services;
 
 use AdityaaCodes\LaravelCheckpoint\Contracts\ReplicationEndpointParser;
 use AdityaaCodes\LaravelCheckpoint\Enums\ReplicationEngine;
-use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidArgumentException;
+use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
+use AdityaaCodes\LaravelCheckpoint\Support\DsnPattern;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationEndpoint;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationEndpointKind;
 
@@ -36,7 +37,7 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
             return $this->parseKeyValue($input, $normalized);
         }
 
-        throw new InvalidArgumentException(
+        throw new CheckpointArgumentException(
             'Replication endpoint must be one of: profile:<id>, <engine>:// DSN, or key=value pairs.',
         );
     }
@@ -46,7 +47,7 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
         $identifier = trim(substr($normalized, strlen('profile:')));
 
         if ($identifier === '' || ! preg_match('/^[A-Za-z0-9._-]+$/', $identifier)) {
-            throw new InvalidArgumentException(
+            throw new CheckpointArgumentException(
                 'Invalid profile reference. Use profile:<identifier> with letters, numbers, dot, underscore, or hyphen.',
             );
         }
@@ -63,7 +64,7 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
         $components = parse_url($normalized);
 
         if (! is_array($components)) {
-            throw new InvalidArgumentException('Invalid DSN input for replication endpoint.');
+            throw new CheckpointArgumentException('Invalid DSN input for replication endpoint.');
         }
 
         $scheme = is_string($components['scheme'] ?? null)
@@ -73,7 +74,7 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
         $engine = ReplicationEngine::fromInput($scheme);
 
         if (! $engine instanceof ReplicationEngine) {
-            throw new InvalidArgumentException(
+            throw new CheckpointArgumentException(
                 'Unsupported DSN engine. Replication v1 supports only pgsql:// and mysql://.',
             );
         }
@@ -92,7 +93,7 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
 
         foreach ($pairs as $pair) {
             if (! str_contains($pair, '=')) {
-                throw new InvalidArgumentException(
+                throw new CheckpointArgumentException(
                     'Invalid key=value endpoint input. Use comma-separated key=value pairs.',
                 );
             }
@@ -100,7 +101,7 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
             [$key, $value] = array_map(trim(...), explode('=', $pair, 2));
 
             if ($key === '' || $value === '') {
-                throw new InvalidArgumentException(
+                throw new CheckpointArgumentException(
                     'Invalid key=value endpoint input. Keys and values must be non-empty.',
                 );
             }
@@ -112,7 +113,7 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
         $engine = is_string($engineInput) ? ReplicationEngine::fromInput($engineInput) : null;
 
         if ($engineInput !== null && ! $engine instanceof ReplicationEngine) {
-            throw new InvalidArgumentException(
+            throw new CheckpointArgumentException(
                 'Unsupported engine in key=value endpoint. Supported engines are pgsql and mysql.',
             );
         }
@@ -127,6 +128,6 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
 
     private function looksLikeDsn(string $input): bool
     {
-        return preg_match('/^[A-Za-z][A-Za-z0-9+.-]*:\/\//', $input) === 1;
+        return preg_match(DsnPattern::REGEX, $input) === 1;
     }
 }

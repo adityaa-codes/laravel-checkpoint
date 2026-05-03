@@ -28,8 +28,6 @@ final class RecoverOrphansCommand extends Command
 
     protected $description = 'Re-dispatch stale pending checkpoint command runs.';
 
-    protected $aliases = ['checkpoint:admin:recover-orphans'];
-
     public function __construct(
         private readonly Repository $config,
         private readonly Dispatcher $dispatcher,
@@ -45,7 +43,7 @@ final class RecoverOrphansCommand extends Command
             intro('Recover Orphaned Queue Runs');
             note('What: reclaim stale pending runs and re-dispatch processing jobs.');
             note('When: queue lag, worker crashes, or stale pending growth.');
-            note('Next: run checkpoint:do:status to confirm backlog recovery.');
+            note('Next: run checkpoint:status to confirm backlog recovery.');
         }
 
         $thresholdMinutes = max(1, (int) $this->config->get('checkpoint.queue.orphan_threshold', 10));
@@ -165,15 +163,11 @@ final class RecoverOrphansCommand extends Command
 
     private function redispatchedMessage(int $runId): string
     {
-        $message = __('messages.cli.orphan_redispatched', [
-            'id' => $runId,
-        ]);
-
-        if ($message === 'messages.cli.orphan_redispatched') {
-            return sprintf('Re-dispatched orphaned run #%d.', $runId);
-        }
-
-        return (string) $message;
+        return $this->translatedOr(
+            'messages.cli.orphan_redispatched',
+            sprintf('Re-dispatched orphaned run #%d.', $runId),
+            ['id' => $runId],
+        );
     }
 
     private function staleAgeMinutes(CommandRun $run): int

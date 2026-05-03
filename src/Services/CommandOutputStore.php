@@ -93,7 +93,15 @@ final readonly class CommandOutputStore
             return;
         }
 
-        if (@file_put_contents($session['temp_path'], $chunk, FILE_APPEND) === false) {
+        try {
+            $written = file_put_contents($session['temp_path'], $chunk, FILE_APPEND);
+        } catch (\ErrorException) {
+            $written = false;
+        }
+
+        if ($written === false) {
+            logger()->error('Unable to append command output to temporary storage.', ['temp_path' => $session['temp_path']]);
+
             throw new ConfigurationException('Unable to append command output to temporary storage.');
         }
     }
@@ -120,10 +128,15 @@ final readonly class CommandOutputStore
             return $this->persist($run, $capturedOutput);
         }
 
-        $stream = @fopen($session['temp_path'], 'rb');
+        try {
+            $stream = fopen($session['temp_path'], 'rb');
+        } catch (\ErrorException) {
+            $stream = false;
+        }
 
-        if (! is_resource($stream)) {
+        if ($stream === false) {
             $this->discardCapture($session);
+            logger()->error('Unable to open temporary command output storage.', ['temp_path' => $session['temp_path']]);
 
             throw new ConfigurationException('Unable to open temporary command output storage.');
         }
@@ -242,8 +255,18 @@ final readonly class CommandOutputStore
             throw new ConfigurationException(sprintf('Unable to create checkpoint temp directory [%s].', $configured));
         }
 
-        if (! is_dir($configured) && ! @mkdir($configured, 0700, true) && ! is_dir($configured)) {
-            throw new ConfigurationException(sprintf('Unable to create checkpoint temp directory [%s].', $configured));
+        if (! is_dir($configured)) {
+            try {
+                $created = mkdir($configured, 0700, true);
+            } catch (\ErrorException) {
+                $created = false;
+            }
+
+            if (! $created && ! is_dir($configured)) {
+                logger()->error('Unable to create checkpoint temp directory.', ['path' => $configured]);
+
+                throw new ConfigurationException(sprintf('Unable to create checkpoint temp directory [%s].', $configured));
+            }
         }
 
         return $configured;
@@ -288,7 +311,15 @@ final readonly class CommandOutputStore
     private function discardCapture(array $session): void
     {
         if (is_file($session['temp_path'])) {
-            @unlink($session['temp_path']);
+            try {
+                $removed = unlink($session['temp_path']);
+            } catch (\ErrorException) {
+                $removed = false;
+            }
+
+            if ($removed === false) {
+                logger()->error('Unable to remove temporary command output file.', ['temp_path' => $session['temp_path']]);
+            }
         }
     }
 }

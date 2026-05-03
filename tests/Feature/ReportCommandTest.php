@@ -221,7 +221,7 @@ it('renders triage-first brief report output with cause and action', function ()
 
 it('fails for unsupported report output formats', function (): void {
     checkpoint_artisan('checkpoint:report --format=xml')
-        ->expectsOutput('The --format option must be table or json.')
+        ->expectsOutput('The --format option must be table, json, or compact-json.')
         ->assertFailed();
 });
 

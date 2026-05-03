@@ -29,8 +29,6 @@ final class CatalogExportCommand extends Command
 
     protected $description = 'Export backup catalog snapshots in machine-friendly JSON or CSV formats.';
 
-    protected $aliases = ['checkpoint:admin:catalog-export'];
-
     public function __construct(
         private readonly ConfigValidator $validator,
         private readonly BuildBackupCatalogExportAction $buildCatalogExport,
@@ -67,6 +65,8 @@ final class CatalogExportCommand extends Command
         try {
             $this->validator->validate();
         } catch (\Throwable $exception) {
+            report($exception);
+
             if ($format === 'json') {
                 $this->line(json_encode($this->jsonContract->envelope('catalog_export', [
                     'generated_at' => now()->toIso8601String(),
@@ -147,28 +147,6 @@ final class CatalogExportCommand extends Command
         return self::SUCCESS;
     }
 
-    /**
-     * @return array{requested:int,effective:int}
-     */
-    private function recentRunLimits(): array
-    {
-        $requestedLimit = max(1, (int) $this->option('limit'));
-        $configuredCap = (int) $this->config->get('checkpoint.reporting.max_recent_runs', 100);
-
-        if ($configuredCap < 1) {
-            throw new ConfigurationException('checkpoint.reporting.max_recent_runs must be greater than zero.');
-        }
-
-        if ($configuredCap > 1000) {
-            throw new ConfigurationException('checkpoint.reporting.max_recent_runs must not exceed 1000.');
-        }
-
-        return [
-            'requested' => $requestedLimit,
-            'effective' => min($requestedLimit, $configuredCap),
-        ];
-    }
-
     private function normalizedRepositoryFilter(): int|string|null
     {
         $repository = $this->stringOption('repository');
@@ -209,13 +187,6 @@ final class CatalogExportCommand extends Command
         return $hours;
     }
 
-    private function stringOption(string $key): ?string
-    {
-        $value = $this->option($key);
-
-        return is_string($value) ? $value : null;
-    }
-
     private function normalizedTextFilter(?string $value): ?string
     {
         if (! is_string($value)) {
@@ -241,7 +212,7 @@ final class CatalogExportCommand extends Command
 
         $trimmed = trim($outputPath);
 
-        if (@file_put_contents($trimmed, $payload) === false) {
+        if (file_put_contents($trimmed, $payload) === false) {
             throw new ConfigurationException(sprintf('Unable to write catalog export to [%s].', $trimmed));
         }
 

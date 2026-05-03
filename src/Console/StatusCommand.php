@@ -6,6 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
+use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use AdityaaCodes\LaravelCheckpoint\Services\GatePolicyEvaluator;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
@@ -19,11 +20,9 @@ final class StatusCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    protected $signature = 'checkpoint:status {--limit=10} {--summary : Show an operator-facing summary instead of recent runs.} {--brief : Show triage-first status output with cause and next action.} {--format=table : Output format: table or json.} {--agent : Emit compact AI-agent friendly JSON output.} {--policy-profile= : Override gate policy profile for CI/automation.}';
+    protected $signature = 'checkpoint:status {--limit=10} {--summary : Show an operator-facing summary instead of recent runs.} {--brief : Show triage-first status output with cause and next action.} {--format=table : Output format: table or json.} {--agent : Emit compact AI-agent friendly JSON output.} {--policy-profile= : Override gate policy profile for CI/automation.} {--watch= : Poll every N seconds until all running jobs complete.}';
 
     protected $description = 'Show recent checkpoint command runs.';
-
-    protected $aliases = ['checkpoint:do:status'];
 
     public function __construct(
         private readonly OperationalReportBuilder $reportBuilder,
@@ -51,11 +50,11 @@ final class StatusCommand extends Command
             intro($summaryMode ? 'Checkpoint Status Summary' : 'Checkpoint Status: Recent Runs');
             note('What: operational view of recent runs and summary signals.');
             note('When: immediately after queueing, or during incident triage.');
-            note('Next: run checkpoint:check:doctor for deeper health diagnostics.');
+            note('Next: run checkpoint:doctor for deeper health diagnostics.');
         }
 
-        if (! $agentMode && ! in_array($format, ['table', 'json'], true)) {
-            $this->promptError('The --format option must be table or json.');
+        if (! $agentMode && ! in_array($format, ['table', 'json', 'compact-json'], true)) {
+            $this->promptError('The --format option must be table, json, or compact-json.');
 
             return self::FAILURE;
         }
@@ -97,13 +96,20 @@ final class StatusCommand extends Command
             return $gateDecision['exit_code'];
         }
 
-        if ($format === 'json') {
-            $this->line(json_encode($this->jsonContract->envelope('status', [
+        if ($format === 'json' || $format === 'compact-json') {
+            $compactJson = $format === 'compact-json';
+            $payload = [
                 'mode' => 'runs',
                 'limit' => $limit,
                 'runs' => $runs,
                 'gates' => $this->machineGateDecision($gateDecision),
-            ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            ];
+
+            $payload = $compactJson
+                ? $this->jsonContract->compactEnvelope('status', $payload)
+                : $this->jsonContract->envelope('status', $payload);
+
+            $this->line(json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 
             return $gateDecision['exit_code'];
         }
@@ -122,42 +128,13 @@ final class StatusCommand extends Command
             $run['finished_at'] ?? '-',
         ], $runs));
 
-        return $gateDecision['exit_code'];
-    }
+        $watchInterval = $this->watchInterval();
 
-    private function stringOption(string $key): ?string
-    {
-        $value = $this->option($key);
-
-        return is_string($value) ? $value : null;
-    }
-
-    private function policyProfileOverride(): ?string
-    {
-        $override = $this->stringOption('policy-profile');
-
-        if (! is_string($override)) {
-            return null;
+        if ($watchInterval !== null) {
+            return $this->pollUntilComplete($watchInterval);
         }
 
-        $override = trim($override);
-
-        return $override !== '' ? $override : null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $gateDecision
-     * @return array{profile:string,profile_source:string,verdict:string,failed_gate:string,exit_code:int}
-     */
-    private function machineGateDecision(array $gateDecision): array
-    {
-        return [
-            'profile' => (string) ($gateDecision['profile'] ?? 'unknown'),
-            'profile_source' => (string) ($gateDecision['profile_source'] ?? 'default'),
-            'verdict' => (string) ($gateDecision['verdict'] ?? 'fail'),
-            'failed_gate' => (string) ($gateDecision['failed_gate'] ?? 'policy'),
-            'exit_code' => (int) ($gateDecision['exit_code'] ?? 12),
-        ];
+        return $gateDecision['exit_code'];
     }
 
     private function renderSummary(string $format, bool $agentMode, array $gateDecision): void
@@ -187,12 +164,19 @@ final class StatusCommand extends Command
             return;
         }
 
-        if ($format === 'json') {
-            $this->line(json_encode($this->jsonContract->envelope('status', [
+        if ($format === 'json' || $format === 'compact-json') {
+            $compactJson = $format === 'compact-json';
+            $payload = [
                 'mode' => 'summary',
                 'summary' => $summary,
                 'gates' => $this->machineGateDecision($gateDecision),
-            ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            ];
+
+            $payload = $compactJson
+                ? $this->jsonContract->compactEnvelope('status', $payload)
+                : $this->jsonContract->envelope('status', $payload);
+
+            $this->line(json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 
             return;
         }
@@ -249,8 +233,9 @@ final class StatusCommand extends Command
             return;
         }
 
-        if ($format === 'json') {
-            $this->line(json_encode($this->jsonContract->envelope('status', [
+        if ($format === 'json' || $format === 'compact-json') {
+            $compactJson = $format === 'compact-json';
+            $payload = [
                 'mode' => 'brief',
                 'failed_runs_24h' => $failedRuns24h,
                 'pending_runs' => $pendingRuns,
@@ -258,7 +243,13 @@ final class StatusCommand extends Command
                 'last_failed_run' => $latestFailedRun,
                 'action_now' => $actionNow,
                 'gates' => $this->machineGateDecision($gateDecision),
-            ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            ];
+
+            $payload = $compactJson
+                ? $this->jsonContract->compactEnvelope('status', $payload)
+                : $this->jsonContract->envelope('status', $payload);
+
+            $this->line(json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 
             return;
         }
@@ -269,6 +260,14 @@ final class StatusCommand extends Command
         $this->line('Cause: '.$reason);
         $this->line('Action now: '.$actionNow);
         $this->line('Deep dive: php artisan checkpoint:report --limit=10 --format=json');
+
+        if ($this->output->isVerbose()) {
+            $this->renderBriefPassingRuns();
+        }
+
+        if ($this->output->isVeryVerbose()) {
+            $this->renderBriefFailedOutput();
+        }
     }
 
     private function coloredStatus(string $status): string
@@ -355,12 +354,12 @@ final class StatusCommand extends Command
      * @param  array<string, mixed>  $summary
      * @return list<string>
      */
-    private function summarySuggestions(array $summary): array
+    private function summarySuggestions(array $summary, bool $compact = false): array
     {
         $suggestions = [];
 
         if ((int) ($summary['failed_runs_24h'] ?? 0) > 0) {
-            $suggestions[] = 'Run checkpoint:status --format=json to inspect failed runs and statuses.';
+            $suggestions[] = $compact ? 'Inspect recent runs' : 'Run checkpoint:status --format=json to inspect failed runs and statuses.';
         }
 
         $latestFailedRun = $summary['latest_failed_run'] ?? null;
@@ -370,11 +369,11 @@ final class StatusCommand extends Command
         }
 
         if ((int) ($summary['pending_runs'] ?? 0) > 0) {
-            $suggestions[] = 'Start or scale queue workers for the db-ops queue to drain pending runs.';
+            $suggestions[] = $compact ? 'Scale queue workers' : 'Start or scale queue workers for the db-ops queue to drain pending runs.';
         }
 
         if ((int) ($summary['running_runs'] ?? 0) > 0) {
-            $suggestions[] = 'Run checkpoint:doctor --format=json to check queue heartbeat and orphan signals.';
+            $suggestions[] = $compact ? 'checkpoint:doctor --agent' : 'Run checkpoint:doctor --format=json to check queue heartbeat and orphan signals.';
         }
 
         $playbook = $summary['backup_drill_remediation_playbook'] ?? null;
@@ -385,7 +384,7 @@ final class StatusCommand extends Command
             if (is_array($commands)) {
                 foreach ($commands as $command) {
                     if (is_string($command) && trim($command) !== '') {
-                        $suggestions[] = 'Run '.$command.' to remediate drill posture.';
+                        $suggestions[] = $compact ? $command : 'Run '.$command.' to remediate drill posture.';
                     }
                 }
             }
@@ -478,23 +477,97 @@ final class StatusCommand extends Command
         ];
     }
 
-    /**
-     * @param  list<array{name:string,target:int|float,current:int|float,status:string,unit:string}>  $indicators
-     */
-    private function overallSloStatus(array $indicators): string
+    private function watchInterval(): ?int
     {
-        foreach ($indicators as $indicator) {
-            if ($indicator['status'] === 'fail') {
-                return 'fail';
-            }
+        $watch = $this->option('watch');
+
+        if ($watch === null || $watch === false) {
+            return null;
         }
 
-        foreach ($indicators as $indicator) {
-            if ($indicator['status'] === 'warn') {
-                return 'warn';
-            }
+        if ($watch === true || (is_string($watch) && trim($watch) === '')) {
+            return 10;
         }
 
-        return 'pass';
+        return max(1, (int) $watch);
+    }
+
+    private function pollUntilComplete(int $intervalSeconds): int
+    {
+        $maxIterations = 120;
+
+        for ($i = 0; $i < $maxIterations; $i++) {
+            $runningCount = CommandRun::query()
+                ->whereIn('status', ['pending', 'running'])
+                ->count();
+
+            if ($runningCount === 0) {
+                $this->promptInfo('All jobs completed.');
+
+                return self::SUCCESS;
+            }
+
+            if ($i === 0) {
+                $this->promptInfo(sprintf('Waiting for %d running/pending job(s). Polling every %ds.', $runningCount, $intervalSeconds));
+            }
+
+            sleep($intervalSeconds);
+        }
+
+        $this->promptWarning(sprintf('Polling timed out after %d iterations. Jobs may still be running.', $maxIterations));
+
+        return self::FAILURE;
+    }
+
+    private function renderBriefPassingRuns(): void
+    {
+        $runs = CommandRun::query()
+            ->where('status', 'succeeded')
+            ->latest('id')
+            ->limit(10)
+            ->get();
+
+        if ($runs->isEmpty()) {
+            return;
+        }
+
+        $this->newLine();
+        $this->promptInfo('Recent passing runs:');
+        $this->newLine();
+
+        foreach ($runs as $run) {
+            $this->line(sprintf('  #%d %s — %s', $run->getKey(), $run->operation, $run->finished_at?->diffForHumans() ?? '-'));
+        }
+    }
+
+    private function renderBriefFailedOutput(): void
+    {
+        $runs = CommandRun::query()
+            ->where('status', 'failed')
+            ->whereNotNull('command_output')
+            ->latest('id')
+            ->limit(3)
+            ->get();
+
+        if ($runs->isEmpty()) {
+            return;
+        }
+
+        foreach ($runs as $run) {
+            $output = (string) ($run->command_output ?? '');
+            $snippet = mb_substr($output, 0, 500);
+
+            if ($snippet === '') {
+                continue;
+            }
+
+            $this->newLine();
+            $this->promptWarning(sprintf('--- Failed run #%d (%s) ---', $run->getKey(), $run->operation));
+            $this->line($snippet);
+
+            if (mb_strlen($output) > 500) {
+                $this->line('... (truncated)');
+            }
+        }
     }
 }

@@ -62,12 +62,6 @@ it('renders triage-first brief doctor output with top issue and action', functio
         ->assertSuccessful();
 });
 
-it('supports the check doctor command alias', function (): void {
-    checkpoint_artisan('checkpoint:check:doctor')
-        ->expectsOutputToContain('Suppressed')
-        ->assertSuccessful();
-});
-
 it('renders stable status labels when translation keys cannot be resolved', function (): void {
     config()->set('app.locale', 'zz');
     config()->set('app.fallback_locale', 'zz');

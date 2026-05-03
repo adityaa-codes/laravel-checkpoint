@@ -43,6 +43,12 @@
             "AdityaaCodes\\LaravelCheckpoint\\Database\\Factories\\": "database/factories/"
         }
     },
+    "suggest": {
+        "ext-pcntl": "For process timeout enforcement in shell commands",
+        "ext-pdo_mysql": "For MySQL driver support",
+        "ext-pdo_pgsql": "For PostgreSQL driver support",
+        "laravel/horizon": "For queue monitoring and enhanced orphan recovery visibility"
+    },
     "autoload-dev": {
         "psr-4": {
             "AdityaaCodes\\LaravelCheckpoint\\Tests\\": "tests/",

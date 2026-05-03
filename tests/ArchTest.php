@@ -27,7 +27,22 @@ arch('jobs implement should queue')
 
 arch('drivers implement backup driver')
     ->expect('AdityaaCodes\\LaravelCheckpoint\\Drivers')
-    ->toImplement(BackupDriver::class);
+    ->toImplement(BackupDriver::class)
+    ->ignoring([
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\Concerns',
+    ]);
+
+arch('package classes are final by default')
+    ->expect('AdityaaCodes\\LaravelCheckpoint')
+    ->classes()
+    ->toBeFinal()
+    ->ignoring([
+        'AdityaaCodes\\LaravelCheckpoint\\Actions\\EnqueueCommandRunAction',
+        'AdityaaCodes\\LaravelCheckpoint\\Models\\CommandRun',
+        'AdityaaCodes\\LaravelCheckpoint\\Models\\VerificationRun',
+        'AdityaaCodes\\LaravelCheckpoint\\Models\\RestoreDecisionEvent',
+        'AdityaaCodes\\LaravelCheckpoint\\Models\\BackupDrillRun',
+    ]);
 
 arch('it will not use debugging functions')
     ->expect(['dd', 'dump', 'ray'])

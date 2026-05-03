@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Services;
 
 /** @internal */
-final class CommandLineRedactor
+final readonly class CommandLineRedactor
 {
     public function redact(string $commandLine): string
     {

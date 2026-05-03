@@ -24,7 +24,7 @@ final readonly class ReplicationEndpoint
     {
         return match ($this->kind) {
             ReplicationEndpointKind::ConfigProfile => sprintf('profile:%s', $this->identifier ?? ''),
-            ReplicationEndpointKind::Dsn => sprintf('%s://[REDACTED]', $this->engine->value),
+            ReplicationEndpointKind::Dsn => sprintf('%s://[REDACTED]', $this->engine?->value ?? 'dsn'),
             ReplicationEndpointKind::KeyValue => sprintf(
                 'kv:%s',
                 implode(',', array_keys($this->attributes)),

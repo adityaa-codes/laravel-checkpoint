@@ -49,6 +49,73 @@ it('applies the command run migrations on a fresh install', function (): void {
         ->and(verificationRunIndexNames())->toContain('db_ops_verification_runs_status_verified_at_index');
 });
 
+it('creates all checkpoint tables from the squashed migration', function (): void {
+    Schema::dropIfExists('db_ops_restore_decision_events');
+    Schema::dropIfExists('db_ops_backup_drill_runs');
+    Schema::dropIfExists('db_ops_verification_runs');
+    Schema::dropIfExists('db_ops_command_runs');
+
+    squashedTablesMigration()->up();
+
+    expect(Schema::hasTable('db_ops_command_runs'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'backup_type'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'orphan_recovery_claimed_at'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'heartbeat_at'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'driver_name'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'restore_confirmation_satisfied_via'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'restore_verified_signal_run_id'))->toBeTrue()
+        ->and(Schema::hasColumn('db_ops_command_runs', 'restore_post_verification_result'))->toBeTrue()
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_orphan_recovery_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_running_heartbeat_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_verified_at_lookup_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_status_created_at_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_status_updated_at_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_restore_finished_lookup_index')
+        ->and(commandRunIndexNames())->toContain('db_ops_command_runs_restore_activity_lookup_index')
+        ->and(Schema::hasTable('db_ops_restore_decision_events'))->toBeTrue()
+        ->and(restoreDecisionEventIndexNames())->toContain('db_ops_restore_decision_events_run_created_at_index')
+        ->and(restoreDecisionEventIndexNames())->toContain('db_ops_restore_decision_events_decision_created_at_index')
+        ->and(Schema::hasTable('db_ops_backup_drill_runs'))->toBeTrue()
+        ->and(backupDrillRunIndexNames())->toContain('db_ops_backup_drill_runs_executed_at_result_index')
+        ->and(backupDrillRunIndexNames())->toContain('db_ops_backup_drill_runs_result_executed_at_index')
+        ->and(Schema::hasTable('db_ops_verification_runs'))->toBeTrue()
+        ->and(verificationRunIndexNames())->toContain('db_ops_verification_runs_command_run_verified_at_index')
+        ->and(verificationRunIndexNames())->toContain('db_ops_verification_runs_status_verified_at_index');
+});
+
+it('is idempotent when squashed migration runs twice', function (): void {
+    Schema::dropIfExists('db_ops_restore_decision_events');
+    Schema::dropIfExists('db_ops_backup_drill_runs');
+    Schema::dropIfExists('db_ops_verification_runs');
+    Schema::dropIfExists('db_ops_command_runs');
+
+    squashedTablesMigration()->up();
+    squashedTablesMigration()->up();
+
+    expect(Schema::hasTable('db_ops_command_runs'))->toBeTrue()
+        ->and(Schema::hasTable('db_ops_restore_decision_events'))->toBeTrue()
+        ->and(Schema::hasTable('db_ops_backup_drill_runs'))->toBeTrue()
+        ->and(Schema::hasTable('db_ops_verification_runs'))->toBeTrue();
+});
+
+it('supports rolling back the squashed migration', function (): void {
+    Schema::dropIfExists('db_ops_restore_decision_events');
+    Schema::dropIfExists('db_ops_backup_drill_runs');
+    Schema::dropIfExists('db_ops_verification_runs');
+    Schema::dropIfExists('db_ops_command_runs');
+
+    squashedTablesMigration()->up();
+
+    expect(Schema::hasTable('db_ops_command_runs'))->toBeTrue();
+
+    squashedTablesMigration()->down();
+
+    expect(Schema::hasTable('db_ops_command_runs'))->toBeFalse()
+        ->and(Schema::hasTable('db_ops_restore_decision_events'))->toBeFalse()
+        ->and(Schema::hasTable('db_ops_backup_drill_runs'))->toBeFalse()
+        ->and(Schema::hasTable('db_ops_verification_runs'))->toBeFalse();
+});
+
 it('adds operational summary columns and indexes on upgrade installs', function (): void {
     Schema::dropIfExists('db_ops_backup_drill_runs');
     Schema::dropIfExists('db_ops_verification_runs');
@@ -189,6 +256,14 @@ function verificationRunMigration(): Migration
 {
     /** @var Migration $migration */
     $migration = require __DIR__.'/../../database/migrations/create_checkpoint_verification_runs_table.php.stub';
+
+    return $migration;
+}
+
+function squashedTablesMigration(): Migration
+{
+    /** @var Migration $migration */
+    $migration = require __DIR__.'/../../database/migrations/create_checkpoint_tables.php.stub';
 
     return $migration;
 }
