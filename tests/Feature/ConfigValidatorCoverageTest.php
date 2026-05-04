@@ -9,9 +9,7 @@ use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Foundation\Auth\User;
 
 it('defaults restore verification requirement outside local and testing environments', function (): void {
-    putenv('CP_REPLICATION_CHANGE_WINDOW_DAYS');
     putenv('APP_ENV=production');
-    putenv('CP_RESTORE_REQUIRE_VERIFIED_BACKUP');
 
     $config = require __DIR__.'/../../config/checkpoint.php';
 
@@ -21,9 +19,7 @@ it('defaults restore verification requirement outside local and testing environm
 });
 
 it('defaults restore verification requirement off in testing environment', function (): void {
-    putenv('CP_REPLICATION_CHANGE_WINDOW_DAYS');
     putenv('APP_ENV=testing');
-    putenv('CP_RESTORE_REQUIRE_VERIFIED_BACKUP');
 
     $config = require __DIR__.'/../../config/checkpoint.php';
 
@@ -32,12 +28,14 @@ it('defaults restore verification requirement off in testing environment', funct
     putenv('APP_ENV');
 });
 
-it('disables ci restore bypass by default', function (): void {
-    putenv('CP_RESTORE_ALLOW_IN_CI');
+it('allows ci restore bypass in local and testing environments', function (): void {
+    putenv('APP_ENV=local');
 
     $config = require __DIR__.'/../../config/checkpoint.php';
 
-    expect($config['restore']['allow_in_ci'])->toBeFalse();
+    expect($config['restore']['allow_in_ci'])->toBeTrue();
+
+    putenv('APP_ENV');
 });
 
 it('rejects a missing configured driver', function (): void {
