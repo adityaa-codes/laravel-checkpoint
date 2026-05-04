@@ -15,6 +15,8 @@ return [
         'timeout' => (int) env('CP_QUEUE_TIMEOUT', 3600),
     ],
 
+    'disk' => env('CP_DISK'),
+
     'restore' => [
         'allowed_environments' => array_values(array_filter(array_map(
             trim(...),

@@ -12,6 +12,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
+use AdityaaCodes\LaravelCheckpoint\Services\BackupArtifactUploader;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
@@ -95,6 +96,8 @@ final class PgBaseBackupDriver implements BackupDriver
             if ($exitCode === 0) {
                 $run->markAsSucceeded($exitCode, $output);
                 $run = $run->fresh() ?? $run;
+
+                $this->uploadArtifact($run);
 
                 event(new BackupCompleted($run, $exitCode, $output));
 
@@ -328,5 +331,32 @@ final class PgBaseBackupDriver implements BackupDriver
     private function tapCapturedOutput(CommandRun $run, ?array $outputSession, string $chunk): void
     {
         $this->outputStore()->tapCaptureStream($run, $outputSession, $chunk);
+    }
+
+    private function uploadArtifact(CommandRun $run): void
+    {
+        $disk = (string) config('checkpoint.disk', '');
+
+        if ($disk === '') {
+            return;
+        }
+
+        $backupDirs = glob($this->outputDir().'/backup_*', GLOB_ONLYDIR);
+
+        if ($backupDirs === false || $backupDirs === []) {
+            return;
+        }
+
+        $artifactPath = $backupDirs[array_key_last($backupDirs)];
+
+        $uploadMetadata = (new BackupArtifactUploader)->upload($artifactPath, $disk, 'checkpoint/basebackups');
+
+        if ($uploadMetadata !== null) {
+            $run->recordMetadata([
+                'metadata' => [
+                    'upload' => $uploadMetadata,
+                ],
+            ]);
+        }
     }
 }

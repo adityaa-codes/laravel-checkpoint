@@ -13,6 +13,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
+use AdityaaCodes\LaravelCheckpoint\Services\BackupArtifactUploader;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
@@ -105,6 +106,8 @@ final class PgDumpDriver implements BackupDriver
             if ($exitCode === 0) {
                 $run->markAsSucceeded($exitCode, $output);
                 $run = $run->fresh() ?? $run;
+
+                $this->uploadArtifact($run);
 
                 event(new BackupCompleted($run, $exitCode, $output));
 
@@ -1306,5 +1309,29 @@ final class PgDumpDriver implements BackupDriver
             'size' => $size === false ? null : $size,
             'sha1' => is_file($path) ? sha1_file($path) : null,
         ];
+    }
+
+    private function uploadArtifact(CommandRun $run): void
+    {
+        $disk = (string) config('checkpoint.disk', '');
+
+        if ($disk === '') {
+            return;
+        }
+
+        $format = trim((string) config('checkpoint.drivers.pgdump.format', 'directory'));
+        $artifactPath = $format === 'directory'
+            ? $this->outputDir().'/'.$this->outputPrefix().'-'.$run->getKey()
+            : $this->outputDir().'/'.$this->outputPrefix().'-'.$run->getKey().'.'.$this->fileExtension();
+
+        $uploadMetadata = (new BackupArtifactUploader)->upload($artifactPath, $disk, 'checkpoint/logical-exports');
+
+        if ($uploadMetadata !== null) {
+            $run->recordMetadata([
+                'metadata' => [
+                    'upload' => $uploadMetadata,
+                ],
+            ]);
+        }
     }
 }
