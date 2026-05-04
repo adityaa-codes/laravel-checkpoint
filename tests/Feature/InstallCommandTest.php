@@ -74,7 +74,6 @@ it('writes preset values into the configured environment file', function (): voi
         $contents = (string) file_get_contents($envPath);
 
         expect($contents)->toContain('CP_DRIVER=mysql')
-            ->toContain('CP_QUEUE_LOCK_STORE=redis')
             ->toContain('CP_RESTORE_ALLOWED_ENVIRONMENTS=staging');
     } finally {
         app()->useEnvironmentPath($originalEnvironmentPath);

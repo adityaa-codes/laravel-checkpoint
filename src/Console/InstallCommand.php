@@ -61,12 +61,10 @@ final class InstallCommand extends Command
             'description' => 'Production-oriented PostgreSQL preset.',
             'env' => [
                 'CP_DRIVER' => 'postgres',
-                'CP_QUEUE_LOCK_STORE' => 'redis',
                 'CP_RESTORE_ALLOWED_ENVIRONMENTS' => 'staging',
             ],
             'config' => [
                 'checkpoint.driver' => 'postgres',
-                'checkpoint.queue.lock_store' => 'redis',
                 'checkpoint.restore.allowed_environments' => ['staging'],
             ],
         ],
@@ -74,12 +72,10 @@ final class InstallCommand extends Command
             'description' => 'Production-oriented MySQL preset using logical export and replay.',
             'env' => [
                 'CP_DRIVER' => 'mysql',
-                'CP_QUEUE_LOCK_STORE' => 'redis',
                 'CP_RESTORE_ALLOWED_ENVIRONMENTS' => 'staging',
             ],
             'config' => [
                 'checkpoint.driver' => 'mysql',
-                'checkpoint.queue.lock_store' => 'redis',
                 'checkpoint.restore.allowed_environments' => ['staging'],
             ],
         ],

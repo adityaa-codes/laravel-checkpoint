@@ -52,16 +52,15 @@ final class MigrateFromSpatieCommand extends Command
     ];
 
     /**
-     * @var array<string, array{env_key:string, default:string, label:string}>
+     * @var array<string, array{config_path:string, default:string, label:string}>
      */
     private const array ENV_MAP = [
-        'database_driver' => ['env_key' => 'CP_DRIVER', 'default' => '', 'label' => 'Checkpoint driver'],
-        'backup_disk' => ['env_key' => 'CP_OUTPUT_FILESYSTEM_DISK', 'default' => '', 'label' => 'Output filesystem disk'],
-        'backup_dir' => ['env_key' => 'CP_BACKUP_DIR', 'default' => '', 'label' => 'Backup destination directory'],
-        'schedule_time' => ['env_key' => 'CP_BACKUP_DAILY_AT', 'default' => '', 'label' => 'Scheduled backup time (UTC)'],
-        'notification_mail_to' => ['env_key' => 'CP_NOTIFICATIONS_MAIL_TO', 'default' => '', 'label' => 'Notification mail recipients'],
-        'retention_hot_days' => ['env_key' => 'CP_RETENTION_TIER_HOT_DAYS', 'default' => '', 'label' => 'Hot retention tier (days)'],
-        'retention_default_days' => ['env_key' => 'CP_RETENTION_DEFAULT_DAYS', 'default' => '', 'label' => 'Default retention (days)'],
+        'database_driver' => ['config_path' => 'checkpoint.driver', 'default' => '', 'label' => 'Checkpoint driver'],
+        'backup_disk' => ['config_path' => 'checkpoint.output.filesystem.disk', 'default' => '', 'label' => 'Output filesystem disk'],
+        'backup_dir' => ['config_path' => 'checkpoint.drivers.shell.backup_dir', 'default' => '', 'label' => 'Backup destination directory'],
+        'schedule_time' => ['config_path' => 'checkpoint.schedule.logical_backup_daily_at', 'default' => '', 'label' => 'Scheduled backup time'],
+        'notification_mail_to' => ['config_path' => 'checkpoint.notifications.mail.to', 'default' => '', 'label' => 'Notification mail recipients'],
+        'retention_default_days' => ['config_path' => 'checkpoint.retention.default_days', 'default' => '', 'label' => 'Default retention (days)'],
     ];
 
     /**
@@ -182,7 +181,7 @@ final class MigrateFromSpatieCommand extends Command
 
     /**
      * @param  array<string, mixed>  $spatieConfig
-     * @return array<string, array{env_key:string, value:string, label:string}>
+     * @return array<string, array{config_path:string, value:string, label:string}>
      */
     private function mapConfiguration(array $spatieConfig): array
     {
@@ -190,7 +189,7 @@ final class MigrateFromSpatieCommand extends Command
 
         $databaseDriver = $this->detectDatabaseDriver() ?: 'shell';
         $mapped['database_driver'] = [
-            'env_key' => 'CP_DRIVER',
+            'config_path' => 'checkpoint.driver',
             'value' => $databaseDriver,
             'label' => self::ENV_MAP['database_driver']['label'],
         ];
@@ -199,7 +198,7 @@ final class MigrateFromSpatieCommand extends Command
         $firstDisk = is_array($disks) && $disks !== [] ? (string) reset($disks) : '';
         if ($firstDisk !== '') {
             $mapped['backup_disk'] = [
-                'env_key' => 'CP_OUTPUT_FILESYSTEM_DISK',
+                'config_path' => 'checkpoint.output.filesystem.disk',
                 'value' => $firstDisk,
                 'label' => self::ENV_MAP['backup_disk']['label'],
             ];
@@ -208,7 +207,7 @@ final class MigrateFromSpatieCommand extends Command
         $backupFileNamePrefix = $spatieConfig['backup']['destination']['filename_prefix'] ?? '';
         if (is_string($backupFileNamePrefix) && $backupFileNamePrefix !== '') {
             $mapped['backup_prefix'] = [
-                'env_key' => 'CP_BACKUP_PREFIX',
+                'config_path' => 'checkpoint.drivers.shell.backup_prefix',
                 'value' => $backupFileNamePrefix,
                 'label' => 'Backup file prefix',
             ];
@@ -220,13 +219,13 @@ final class MigrateFromSpatieCommand extends Command
 
         if (is_array($mailTo)) {
             $mapped['notification_mail_to'] = [
-                'env_key' => 'CP_NOTIFICATIONS_MAIL_TO',
+                'config_path' => 'checkpoint.notifications.mail.to',
                 'value' => implode(',', $mailTo),
                 'label' => self::ENV_MAP['notification_mail_to']['label'],
             ];
 
             $mapped['notification_enabled'] = [
-                'env_key' => 'CP_NOTIFICATIONS_ENABLED',
+                'config_path' => 'checkpoint.notifications.enabled',
                 'value' => 'true',
                 'label' => 'Notifications enabled',
             ];
@@ -234,7 +233,7 @@ final class MigrateFromSpatieCommand extends Command
 
         if (isset($spatieConfig['backup']['notifications'])) {
             $mapped['notification_enabled'] = [
-                'env_key' => 'CP_NOTIFICATIONS_ENABLED',
+                'config_path' => 'checkpoint.notifications.enabled',
                 'value' => 'true',
                 'label' => 'Notifications enabled',
             ];
@@ -246,7 +245,7 @@ final class MigrateFromSpatieCommand extends Command
 
         if (is_int($retentionDays) && $retentionDays > 0) {
             $mapped['retention_hot_days'] = [
-                'env_key' => 'CP_RETENTION_TIER_HOT_DAYS',
+                'config_path' => 'checkpoint.retention.tiers.hot',
                 'value' => (string) $retentionDays,
                 'label' => self::ENV_MAP['retention_hot_days']['label'],
             ];
@@ -267,7 +266,7 @@ final class MigrateFromSpatieCommand extends Command
 
         if ($longestRetention > 0) {
             $mapped['retention_default_days'] = [
-                'env_key' => 'CP_RETENTION_DEFAULT_DAYS',
+                'config_path' => 'checkpoint.retention.default_days',
                 'value' => (string) $longestRetention,
                 'label' => self::ENV_MAP['retention_default_days']['label'],
             ];
@@ -290,42 +289,28 @@ final class MigrateFromSpatieCommand extends Command
     }
 
     /**
-     * @param  array<string, array{env_key:string, value:string, label:string}>  $mapped
+     * @param  array<string, array{config_path:string, value:string, label:string}>  $mapped
      */
     private function applyMigration(array $mapped): void
     {
         $isDryRun = (bool) $this->option('dry-run');
-        $skipConfig = (bool) $this->option('skip-config');
-        $writeEnv = (bool) $this->option('write-env');
-        $skipNotifications = (bool) $this->option('skip-notifications');
-        $removeSpatie = (bool) $this->option('remove-spatie');
 
         if ($isDryRun) {
             return;
         }
 
-        if (! $skipConfig && $mapped !== []) {
-            if ($writeEnv || ($this->enhancedInteractiveMode() && confirm(label: 'Write mapped configuration to .env?', default: true))) {
-                $entries = [];
-                foreach ($mapped as $item) {
-                    $entries[$item['env_key']] = $item['value'];
-                }
-
-                if (! $skipNotifications) {
-                    $entries['CP_NOTIFICATIONS_ENABLED'] = 'true';
-                }
-
-                $this->writeEnvEntries($entries);
-            }
-        }
-
         $this->publishCheckpointConfig();
 
-        if ($removeSpatie) {
-            $this->removeSpatiePackage();
+        if ($mapped !== []) {
+            $this->line('');
+            $this->line('Publish config and set these values in config/checkpoint.php:');
+            $this->promptTable(['Config key', 'Value', 'Description'], array_map(
+                static fn (array $item): array => [(string) $item['config_path'], (string) $item['value'], (string) $item['label']],
+                $mapped,
+            ));
         }
 
-        $this->promptInfo('Migration applied. Run php artisan checkpoint:install to validate.');
+        $this->promptInfo('Config published and migration plan applied. Review config/checkpoint.php.');
     }
 
     /**
@@ -448,14 +433,14 @@ final class MigrateFromSpatieCommand extends Command
         $dbDriver = $this->detectDatabaseDriver();
         $steps[] = [
             'step' => '2. Set driver',
-            'action' => sprintf('CP_DRIVER=%s (detected from database.default).', $dbDriver),
+            'action' => sprintf('Set checkpoint.driver = %s (detected from database.default).', $dbDriver),
         ];
 
         $disks = $spatieConfig['backup']['destination']['disks'] ?? [];
         if (is_array($disks) && $disks !== []) {
             $steps[] = [
                 'step' => '3. Map storage disk',
-                'action' => sprintf('CP_OUTPUT_FILESYSTEM_DISK=%s (from Spatie destination disks).', implode(', ', array_map('strval', $disks))),
+                'action' => sprintf('Set checkpoint.output.filesystem.disk = %s (from Spatie destination disks).', implode(', ', array_map('strval', $disks))),
             ];
         }
 
@@ -467,7 +452,7 @@ final class MigrateFromSpatieCommand extends Command
             $to = is_array($mailTo) ? implode(', ', array_map('strval', $mailTo)) : (string) $mailTo;
             $steps[] = [
                 'step' => '4. Map notifications',
-                'action' => sprintf('CP_NOTIFICATIONS_ENABLED=true, CP_NOTIFICATIONS_MAIL_TO=%s.', $to),
+                'action' => sprintf('Set checkpoint.notifications.enabled = true, checkpoint.notifications.mail.to = [%s].', $to),
             ];
         }
 
