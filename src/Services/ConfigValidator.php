@@ -11,7 +11,6 @@ use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
-use AdityaaCodes\LaravelCheckpoint\Support\NotificationEventMap;
 use Illuminate\Contracts\Config\Repository;
 
 /** @internal */
@@ -37,7 +36,6 @@ final readonly class ConfigValidator
             'validateObservabilitySettings',
             'validateReportingSettings',
             'validateGateSettings',
-            'validateNotificationSettings',
             'validateOutputSettings',
             'validateReplicationSettings',
             'validateCustomOperations',
@@ -686,99 +684,6 @@ final readonly class ConfigValidator
             if (! is_int($maxAge) || $maxAge < 0) {
                 throw new ConfigurationException(sprintf('checkpoint.gates.profiles.%s.evidence.max_restore_verification_age_days must be an integer greater than or equal to zero.', $name));
             }
-        }
-    }
-
-    private function validateNotificationSettings(): void
-    {
-        $config = $this->config->get('checkpoint.notifications', []);
-
-        if (! is_array($config)) {
-            throw new ConfigurationException('checkpoint.notifications must be an array.');
-        }
-
-        if (! is_bool($config['enabled'] ?? null)) {
-            throw new ConfigurationException('checkpoint.notifications.enabled must be a boolean.');
-        }
-
-        $events = $config['events'] ?? [];
-
-        if (! is_array($events)) {
-            throw new ConfigurationException('checkpoint.notifications.events must be an array.');
-        }
-
-        foreach ($events as $event) {
-            if (! is_string($event) || trim($event) === '') {
-                throw new ConfigurationException('checkpoint.notifications.events must contain non-empty strings.');
-            }
-
-            if (! NotificationEventMap::supportsKey($event)) {
-                throw new ConfigurationException(sprintf('checkpoint.notifications.events contains unsupported event key [%s].', $event));
-            }
-        }
-
-        $routing = $config['routing'] ?? [];
-
-        if (! is_array($routing)) {
-            throw new ConfigurationException('checkpoint.notifications.routing must be an array.');
-        }
-
-        foreach (['info', 'warning', 'critical'] as $level) {
-            $channels = $routing[$level] ?? null;
-
-            if (! is_array($channels)) {
-                throw new ConfigurationException(sprintf('checkpoint.notifications.routing.%s must be an array.', $level));
-            }
-
-            foreach ($channels as $channel) {
-                if (! is_string($channel) || ! in_array($channel, ['log', 'mail', 'webhook'], true)) {
-                    throw new ConfigurationException(
-                        sprintf('checkpoint.notifications.routing.%s must only contain: log, mail, webhook.', $level),
-                    );
-                }
-            }
-        }
-
-        $mail = $config['mail'] ?? [];
-
-        if (! is_array($mail)) {
-            throw new ConfigurationException('checkpoint.notifications.mail must be an array.');
-        }
-
-        $mailTo = $mail['to'] ?? [];
-
-        if (! is_array($mailTo)) {
-            throw new ConfigurationException('checkpoint.notifications.mail.to must be an array.');
-        }
-
-        foreach ($mailTo as $address) {
-            if (! is_string($address) || ! filter_var($address, FILTER_VALIDATE_EMAIL)) {
-                throw new ConfigurationException('checkpoint.notifications.mail.to must contain valid email addresses.');
-            }
-        }
-
-        $webhook = $config['webhook'] ?? [];
-
-        if (! is_array($webhook)) {
-            throw new ConfigurationException('checkpoint.notifications.webhook must be an array.');
-        }
-
-        $webhookUrl = $webhook['url'] ?? null;
-
-        if ($webhookUrl !== null && (! is_string($webhookUrl) || trim($webhookUrl) === '' || ! filter_var($webhookUrl, FILTER_VALIDATE_URL))) {
-            throw new ConfigurationException('checkpoint.notifications.webhook.url must be null or a valid URL.');
-        }
-
-        $timeoutSeconds = $webhook['timeout_seconds'] ?? null;
-
-        if (! is_int($timeoutSeconds) || $timeoutSeconds < 1 || $timeoutSeconds > 60) {
-            throw new ConfigurationException('checkpoint.notifications.webhook.timeout_seconds must be between 1 and 60.');
-        }
-
-        $provider = $webhook['provider'] ?? 'generic';
-
-        if (! is_string($provider) || ! in_array($provider, ['generic', 'slack', 'telegram'], true)) {
-            throw new ConfigurationException('checkpoint.notifications.webhook.provider must be generic, slack, or telegram.');
         }
     }
 

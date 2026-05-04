@@ -92,56 +92,6 @@ it('rejects invalid replication configuration structure', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.replication must be an array.');
 });
 
-it('rejects an invalid notifications configuration structure', function (): void {
-    config()->set('checkpoint.notifications', 'invalid');
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.notifications must be an array.');
-});
-
-it('rejects notifications with unsupported event keys', function (): void {
-    config()->set('checkpoint.notifications.enabled', true);
-    config()->set('checkpoint.notifications.events', ['backup.failed', 'unsupported.event']);
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.notifications.events contains unsupported event key [unsupported.event].');
-});
-
-it('rejects notifications with invalid routing channels', function (): void {
-    config()->set('checkpoint.notifications.routing.warning', ['log', 'pagerduty']);
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.notifications.routing.warning must only contain: log, mail, webhook.');
-});
-
-it('rejects notifications with invalid email recipients', function (): void {
-    config()->set('checkpoint.notifications.mail.to', ['ops@example.com', 'invalid-email']);
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.notifications.mail.to must contain valid email addresses.');
-});
-
-it('rejects notifications with invalid webhook url', function (): void {
-    config()->set('checkpoint.notifications.webhook.url', 'not-a-url');
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.notifications.webhook.url must be null or a valid URL.');
-});
-
-it('rejects notifications with invalid webhook timeout', function (): void {
-    config()->set('checkpoint.notifications.webhook.timeout_seconds', 0);
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.notifications.webhook.timeout_seconds must be between 1 and 60.');
-});
-
-it('rejects notifications with invalid webhook provider', function (): void {
-    config()->set('checkpoint.notifications.webhook.provider', 'discord');
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.notifications.webhook.provider must be generic, slack, or telegram.');
-});
-
 it('rejects non-array replication critical tables configuration', function (): void {
     config()->set('checkpoint.replication.critical_tables', 'users');
 

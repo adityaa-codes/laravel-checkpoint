@@ -971,13 +971,12 @@ it('rethrows pg_dump runtime exceptions after marking the run failed', function 
     $logger->shouldReceive('info')
         ->once()
         ->andThrow(new RuntimeException('logger runtime failure'));
-    $logger->shouldReceive('warning')->atLeast()->once();
     $logger->shouldReceive('error')
         ->once()
         ->with('pg_dump operation crashed', Mockery::on(
             fn (array $context): bool => $context['error'] === 'logger runtime failure'
         ));
-    Log::shouldReceive('channel')->times(4)->andReturn($logger);
+    Log::shouldReceive('channel')->times(2)->andReturn($logger);
 
     $run = CommandRun::query()->create([
         'operation' => 'logical_backup',

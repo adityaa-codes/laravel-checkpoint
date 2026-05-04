@@ -37,7 +37,6 @@ use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use AdityaaCodes\LaravelCheckpoint\Services\HealthCheckComposer;
-use AdityaaCodes\LaravelCheckpoint\Services\NotificationRouter;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationEndpointInputParser;
 use AdityaaCodes\LaravelCheckpoint\Support\BinaryFinder;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\GateProfileConfig;
@@ -192,7 +191,6 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
         Gate::policy(BackupDrillRun::class, BackupDrillRunPolicy::class);
 
         $this->registerSchedules();
-        $this->app->make(NotificationRouter::class)->register();
 
         $this->app->make(ConfigValidator::class)->validate();
     }

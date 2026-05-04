@@ -9,7 +9,6 @@ use AdityaaCodes\LaravelCheckpoint\Services\EnvFileManager;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use RuntimeException;
-use Spatie\Backup\Notifications\Notifications\BackupHasFailedNotification;
 use Throwable;
 
 use function Laravel\Prompts\confirm;
@@ -35,7 +34,6 @@ final class MigrateFromSpatieCommand extends Command
         {--force : Skip all confirmation prompts.}
         {--skip-config : Skip writing configuration values to .env.}
         {--skip-schedule : Skip updating scheduler entries.}
-        {--skip-notifications : Skip mapping notifications configuration.}
         {--write-env : Persist mapped values into the environment file.}
         {--remove-spatie : Also remove spatie/laravel-backup from composer.json.}';
 
@@ -59,7 +57,6 @@ final class MigrateFromSpatieCommand extends Command
         'backup_disk' => ['config_path' => 'checkpoint.output.filesystem.disk', 'default' => '', 'label' => 'Output filesystem disk'],
         'backup_dir' => ['config_path' => 'checkpoint.drivers.shell.backup_dir', 'default' => '', 'label' => 'Backup destination directory'],
         'schedule_time' => ['config_path' => 'checkpoint.schedule.logical_backup_daily_at', 'default' => '', 'label' => 'Scheduled backup time'],
-        'notification_mail_to' => ['config_path' => 'checkpoint.notifications.mail.to', 'default' => '', 'label' => 'Notification mail recipients'],
         'retention_default_days' => ['config_path' => 'checkpoint.retention.default_days', 'default' => '', 'label' => 'Default retention (days)'],
     ];
 
@@ -83,7 +80,7 @@ final class MigrateFromSpatieCommand extends Command
                 intro('Spatie → Laravel Checkpoint Migration');
                 note('What: guided migration of backup configuration from spatie/laravel-backup to laravel-checkpoint.');
                 note('When: you want to replace Spatie\'s backup package with checkpoint\'s db-ops workflow.');
-                note('Scope: database backup, retention, health monitoring, and notifications.');
+                note('Scope: database backup, retention, and health monitoring.');
             }
 
             if (! $this->spatieIsInstalled()) {
@@ -210,32 +207,6 @@ final class MigrateFromSpatieCommand extends Command
                 'config_path' => 'checkpoint.drivers.shell.backup_prefix',
                 'value' => $backupFileNamePrefix,
                 'label' => 'Backup file prefix',
-            ];
-        }
-
-        $mailTo = $spatieConfig['backup']['notifications']['notifications'][BackupHasFailedNotification::class]['to']
-            ?? $spatieConfig['backup']['notifications']['mail']['to']
-            ?? null;
-
-        if (is_array($mailTo)) {
-            $mapped['notification_mail_to'] = [
-                'config_path' => 'checkpoint.notifications.mail.to',
-                'value' => implode(',', $mailTo),
-                'label' => self::ENV_MAP['notification_mail_to']['label'],
-            ];
-
-            $mapped['notification_enabled'] = [
-                'config_path' => 'checkpoint.notifications.enabled',
-                'value' => 'true',
-                'label' => 'Notifications enabled',
-            ];
-        }
-
-        if (isset($spatieConfig['backup']['notifications'])) {
-            $mapped['notification_enabled'] = [
-                'config_path' => 'checkpoint.notifications.enabled',
-                'value' => 'true',
-                'label' => 'Notifications enabled',
             ];
         }
 
@@ -444,25 +415,13 @@ final class MigrateFromSpatieCommand extends Command
             ];
         }
 
-        $mailTo = $spatieConfig['backup']['notifications']['notifications'][BackupHasFailedNotification::class]['to']
-            ?? $spatieConfig['backup']['notifications']['mail']['to']
-            ?? null;
-
-        if ($mailTo !== null) {
-            $to = is_array($mailTo) ? implode(', ', array_map('strval', $mailTo)) : (string) $mailTo;
-            $steps[] = [
-                'step' => '4. Map notifications',
-                'action' => sprintf('Set checkpoint.notifications.enabled = true, checkpoint.notifications.mail.to = [%s].', $to),
-            ];
-        }
-
         $steps[] = [
-            'step' => '5. Schedule migration',
+            'step' => '4. Schedule migration',
             'action' => 'Replace $schedule->command(\'backup:run\') with $schedule->command(\'checkpoint:enqueue-backup\').',
         ];
 
         $steps[] = [
-            'step' => '6. Retention',
+            'step' => '5. Retention',
             'action' => 'Map Spatie cleanup strategy → Checkpoint retention tiers (hot/warm/cold).',
         ];
 

@@ -26,9 +26,4 @@ return [
         ), static fn (string $v): bool => $v !== '')),
     ],
 
-    'notifications' => [
-        'webhook' => [
-            'url' => env('CP_NOTIFICATIONS_WEBHOOK_URL'),
-        ],
-    ],
 ];

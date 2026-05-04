@@ -77,7 +77,7 @@ final readonly class PostRestoreVerificationBuilder
             'logical_restore_latest',
             'logical_restore_file',
             'pitr_restore',
-            'pgbackrest_restore',
+            'physical_restore',
         ], true);
     }
 
