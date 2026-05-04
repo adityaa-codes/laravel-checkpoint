@@ -183,7 +183,7 @@ final readonly class OperationalReportBuilder
      */
     private function summarySnapshot(): array
     {
-        $restoreOperations = ['logical_restore_file', 'logical_restore_latest', 'pitr_restore', 'pgbackrest_restore'];
+        $restoreOperations = ['logical_restore_file', 'logical_restore_latest', 'pitr_restore', 'physical_restore'];
         $drillWindowDays = $this->backupDrillWindowDays();
 
         return [

@@ -35,7 +35,7 @@ final class OperatorCommandTestSupport
         ]);
 
         CommandRun::query()->create([
-            'operation' => 'pgbackrest_info',
+            'operation' => 'physical_backup',
             'backup_type' => 'full',
             'backup_label' => '20260311-010101F',
             'verification_state' => 'verified',
@@ -58,7 +58,7 @@ final class OperatorCommandTestSupport
         ]);
 
         CommandRun::query()->create([
-            'operation' => 'pgbackrest_backup_full',
+            'operation' => 'physical_backup',
             'backup_type' => 'full',
             'backup_label' => '20260311-010101F',
             'verification_state' => 'verified',
@@ -73,7 +73,7 @@ final class OperatorCommandTestSupport
 
         if ($includeRunningRun) {
             CommandRun::query()->create([
-                'operation' => 'pgbackrest_check',
+                'operation' => 'physical_backup',
                 'status' => CommandRunStatus::Running,
                 'attempts' => 1,
                 'created_at' => now()->subMinutes(2),
@@ -154,22 +154,22 @@ final class OperatorCommandTestSupport
 
         VerificationRun::query()->create([
             'command_run_id' => 2,
-            'verification_type' => 'pgbackrest_verify',
+            'verification_type' => 'physical_backup',
             'status' => 'verified',
             'verified_at' => now()->subMinutes(5),
             'metadata' => [
-                'driver' => 'pgbackrest',
+                'driver' => 'pgbasebackup',
                 'summary' => ['ok' => true],
             ],
         ]);
 
         VerificationRun::query()->create([
             'command_run_id' => 3,
-            'verification_type' => 'pgbackrest_check',
+            'verification_type' => 'physical_backup',
             'status' => 'failed',
             'verified_at' => now()->subMinutes(3),
             'metadata' => [
-                'driver' => 'pgbackrest',
+                'driver' => 'pgbasebackup',
             ],
             'error_detail' => 'Restore verification failed',
         ]);

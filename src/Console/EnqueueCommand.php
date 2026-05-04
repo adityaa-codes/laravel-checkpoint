@@ -138,9 +138,6 @@ final class EnqueueCommand extends Command
                 'logical_restore_file' => 'Logical Restore (Specific File)',
                 'pitr_restore' => 'PITR Restore',
                 'backup_drill' => 'Backup Drill',
-                'pgbackrest_check' => 'pgBackRest Check',
-                'pgbackrest_info' => 'pgBackRest Info',
-                'replication_sync' => 'Replication Sync',
                 default => str($operation)
                     ->replace('_', ' ')
                     ->title()

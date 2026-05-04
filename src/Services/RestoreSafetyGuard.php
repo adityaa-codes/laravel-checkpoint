@@ -107,7 +107,7 @@ final readonly class RestoreSafetyGuard
             'logical_restore_latest',
             'logical_restore_file',
             'pitr_restore',
-            'pgbackrest_restore',
+            'physical_restore',
         ], true);
     }
 
@@ -241,7 +241,6 @@ final readonly class RestoreSafetyGuard
         /** @var CommandRun|null $verifiedRun */
         $verifiedRun = match ($run->operation) {
             'logical_restore_file', 'logical_restore_latest' => $this->matchingLogicalRestoreVerification($query, $restoreTarget, $context),
-            'pgbackrest_restore' => $this->matchingPgBackRestRestoreVerification($query, $restoreTarget, $context),
             'pitr_restore' => $this->matchingPitrRestoreVerification($query, $context),
             default => $query->first(),
         };
@@ -278,20 +277,6 @@ final readonly class RestoreSafetyGuard
 
     /**
      * @param  Builder<CommandRun>  $query
-     */
-    private function requireExplicitPgBackRestBackupLabel(string $restoreTarget, Builder $query): void
-    {
-        if ($restoreTarget === '') {
-            throw new ConfigurationException(
-                'pgbackrest_restore requires an explicit backup set label when checkpoint.restore.require_verified_backup is enabled.',
-            );
-        }
-
-        $query->where('backup_label', $restoreTarget);
-    }
-
-    /**
-     * @param  Builder<CommandRun>  $query
      * @param  array<string, mixed>  $context
      */
     private function matchingLogicalRestoreVerification(
@@ -322,40 +307,6 @@ final readonly class RestoreSafetyGuard
 
     /**
      * @param  Builder<CommandRun>  $query
-     * @param  array<string, mixed>  $context
-     */
-    private function matchingPgBackRestRestoreVerification(
-        Builder $query,
-        string $restoreTarget,
-        array $context,
-    ): ?CommandRun {
-        $this->requireExplicitPgBackRestBackupLabel($restoreTarget, $query);
-
-        $query->whereIn('operation', [
-            'pgbackrest_check',
-            'pgbackrest_verify',
-        ]);
-        $query->where('verification_state', 'verified');
-
-        if (is_numeric($context['repository'] ?? null)) {
-            $query->where('repository', (int) $context['repository']);
-        }
-
-        if (is_string($context['stanza'] ?? null) && trim($context['stanza']) !== '') {
-            $query->where('stanza', trim($context['stanza']));
-        }
-
-        /** @var Collection<int, CommandRun> $candidates */
-        $candidates = $query->limit(10)->get();
-
-        return $candidates->first(
-            fn (CommandRun $candidate): bool => $this->provenanceMatches($candidate, $context),
-        );
-    }
-
-    /**
-     * @param  Builder<CommandRun>  $query
-     * @param  array<string, mixed>  $context
      */
     private function matchingPitrRestoreVerification(
         Builder $query,

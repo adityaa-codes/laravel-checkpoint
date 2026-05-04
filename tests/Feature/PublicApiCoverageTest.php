@@ -51,7 +51,7 @@ it('delegates execution through the public api wrapper', function (): void {
 
 it('delegates execution through the facade', function (): void {
     $expectedRun = CommandRun::factory()->make([
-        'operation' => 'pgbackrest_info',
+        'operation' => 'physical_backup',
     ]);
 
     $action = new class($expectedRun) extends EnqueueCommandRunAction
@@ -62,7 +62,7 @@ it('delegates execution through the facade', function (): void {
 
         public function execute(string $operation, ?string $argument = null, ?Model $requestedBy = null): CommandRun
         {
-            expect($operation)->toBe('pgbackrest_info');
+            expect($operation)->toBe('physical_backup');
             expect($argument)->toBeNull();
             expect($requestedBy)->toBeNull();
 
@@ -74,7 +74,7 @@ it('delegates execution through the facade', function (): void {
 
     Facade::clearResolvedInstance(LaravelCheckpoint::class);
 
-    expect(LaravelCheckpointFacade::execute('pgbackrest_info'))->toBe($expectedRun);
+    expect(LaravelCheckpointFacade::execute('physical_backup'))->toBe($expectedRun);
 });
 
 it('allows viewing command runs and creating new ones', function (): void {

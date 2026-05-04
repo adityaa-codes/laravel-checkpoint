@@ -68,7 +68,7 @@ final class InstallCommand extends Command
             ],
         ],
         'postgres-prod' => [
-            'description' => 'Production-oriented PostgreSQL preset using pgBackRest.',
+            'description' => 'Production-oriented PostgreSQL preset.',
             'env' => [
                 'CP_DRIVER' => 'postgres',
                 'CP_QUEUE_NAME' => 'db-ops',
@@ -314,10 +314,10 @@ final class InstallCommand extends Command
         $requirements = match ($driver) {
             'postgres' => [
                 [
-                    'binary' => (string) config('checkpoint.drivers.pgbackrest.binary', 'pgbackrest'),
-                    'env_key' => 'CP_PGBACKREST_BINARY',
-                    'config_path' => 'checkpoint.drivers.pgbackrest.binary',
-                    'required' => false,
+                    'binary' => (string) config('checkpoint.drivers.pgbasebackup.binary', 'pg_basebackup'),
+                    'env_key' => 'CP_PGBASEBACKUP_BINARY',
+                    'config_path' => 'checkpoint.drivers.pgbasebackup.binary',
+                    'required' => true,
                 ],
                 [
                     'binary' => (string) config('checkpoint.drivers.pgdump.dump_binary', 'pg_dump'),
@@ -332,11 +332,11 @@ final class InstallCommand extends Command
                     'required' => true,
                 ],
             ],
-            'pgbackrest' => [
+            'pgbasebackup' => [
                 [
-                    'binary' => (string) config('checkpoint.drivers.pgbackrest.binary', 'pgbackrest'),
-                    'env_key' => 'CP_PGBACKREST_BINARY',
-                    'config_path' => 'checkpoint.drivers.pgbackrest.binary',
+                    'binary' => (string) config('checkpoint.drivers.pgbasebackup.binary', 'pg_basebackup'),
+                    'env_key' => 'CP_PGBASEBACKUP_BINARY',
+                    'config_path' => 'checkpoint.drivers.pgbasebackup.binary',
                 ],
             ],
             'pgdump' => [
@@ -418,7 +418,7 @@ final class InstallCommand extends Command
                 $binary = (string) $entry['binary'];
 
                 $this->line(sprintf(
-                    'Optional binary [%s] not found. Install it and set %s for pgBackRest features.',
+                    'Optional binary [%s] not found. Install it and set %s for physical backup features.',
                     $binary !== '' ? $binary : '<empty>',
                     (string) $entry['env_key'],
                 ));

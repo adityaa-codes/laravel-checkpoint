@@ -71,7 +71,7 @@ final class DoctorCommandTestSupport
             'last_known_good_at' => now()->subHours(30),
         ]);
         CommandRun::query()->create([
-            'operation' => 'pgbackrest_backup_full',
+            'operation' => 'physical_backup',
             'backup_type' => 'full',
             'status' => 'succeeded',
             'attempts' => 0,
@@ -79,7 +79,7 @@ final class DoctorCommandTestSupport
             'last_known_good_at' => now()->subHours(32),
         ]);
         CommandRun::query()->create([
-            'operation' => 'pgbackrest_backup_diff',
+            'operation' => 'physical_backup',
             'backup_type' => 'diff',
             'status' => 'succeeded',
             'attempts' => 0,
@@ -87,7 +87,7 @@ final class DoctorCommandTestSupport
             'last_known_good_at' => now()->subHours(31),
         ]);
         CommandRun::query()->create([
-            'operation' => 'pgbackrest_backup_incr',
+            'operation' => 'physical_backup',
             'backup_type' => 'incr',
             'status' => 'succeeded',
             'attempts' => 0,

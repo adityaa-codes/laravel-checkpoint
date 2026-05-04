@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PgBaseBackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
@@ -281,10 +281,7 @@ return [
                 'logical_restore_file' => env('CP_CMD_RESTORE_FILE', ''),
                 'pitr_restore' => env('CP_CMD_PITR_RESTORE', ''),
                 'backup_drill' => env('CP_CMD_BACKUP_DRILL', ''),
-                'pgbackrest_check' => env('CP_CMD_PGBACKREST_CHECK', ''),
-                'pgbackrest_info' => env('CP_CMD_PGBACKREST_INFO', ''),
             ],
-            'pgbackrest_stanza' => env('CP_PGBACKREST_STANZA', 'main'),
             'backup_dir' => env('CP_BACKUP_DIR', storage_path('db-backups')),
             'backup_prefix' => env('CP_BACKUP_PREFIX', 'backup'),
             'pre_restore_snapshot' => (bool) env('CP_PRE_RESTORE_SNAPSHOT', true),
@@ -293,48 +290,11 @@ return [
         'postgres' => [
             'class' => PostgresDriver::class,
         ],
-        'pgbackrest' => [
-            'class' => PgBackRestDriver::class,
-            'binary' => env('CP_PGBACKREST_BINARY', 'pgbackrest'),
-            'stanza' => env('CP_PGBACKREST_STANZA', 'main'),
-            'repo' => (int) env('CP_PGBACKREST_REPO', 1),
-            'repositories' => [
-                1 => [
-                    'type' => env('CP_PGBACKREST_REPO1_TYPE', 'posix'),
-                    'path' => env('CP_PGBACKREST_REPO1_PATH', storage_path('app/checkpoint/pgbackrest/repo1')),
-                    's3' => [
-                        'bucket' => env('CP_PGBACKREST_REPO1_S3_BUCKET'),
-                        'endpoint' => env('CP_PGBACKREST_REPO1_S3_ENDPOINT'),
-                        'region' => env('CP_PGBACKREST_REPO1_S3_REGION'),
-                        'key' => env('CP_PGBACKREST_REPO1_S3_KEY'),
-                        'secret' => env('CP_PGBACKREST_REPO1_S3_SECRET'),
-                        'uri_style' => env('CP_PGBACKREST_REPO1_S3_URI_STYLE', 'host'),
-                    ],
-                    'tls' => [
-                        'verify' => (bool) env('CP_PGBACKREST_REPO1_TLS_VERIFY', true),
-                        'ca_file' => env('CP_PGBACKREST_REPO1_TLS_CA_FILE'),
-                    ],
-                    'encryption' => [
-                        'enabled' => (bool) env('CP_PGBACKREST_REPO1_ENCRYPTION_ENABLED', false),
-                        'cipher_type' => env('CP_PGBACKREST_REPO1_ENCRYPTION_CIPHER', 'aes-256-cbc'),
-                        'passphrase' => env('CP_PGBACKREST_REPO1_ENCRYPTION_PASSPHRASE'),
-                    ],
-                ],
-            ],
-            'process_max' => (int) env('CP_PGBACKREST_PROCESS_MAX', 2),
-            'resume' => (bool) env('CP_PGBACKREST_RESUME', true),
-            'start_fast' => (bool) env('CP_PGBACKREST_START_FAST', true),
-            'backup_standby' => (bool) env('CP_PGBACKREST_BACKUP_STANDBY', false),
-            'checksum_page' => (bool) env('CP_PGBACKREST_CHECKSUM_PAGE', false),
-            'delta' => (bool) env('CP_PGBACKREST_DELTA', false),
-            'command_timeout_seconds' => (int) env('CP_PGBACKREST_TIMEOUT', $timeoutBase),
-            'extra_args' => [
-                'backup' => [],
-                'restore' => [],
-                'verify' => [],
-                'check' => [],
-                'info' => [],
-            ],
+        'pgbasebackup' => [
+            'class' => PgBaseBackupDriver::class,
+            'binary' => env('CP_PGBASEBACKUP_BINARY', 'pg_basebackup'),
+            'output_dir' => env('CP_PGBASEBACKUP_DIR', storage_path('app/checkpoint/basebackups')),
+            'timeout' => (int) env('CP_PGBASEBACKUP_TIMEOUT', $timeoutBase),
         ],
         'pgdump' => [
             'class' => PgDumpDriver::class,

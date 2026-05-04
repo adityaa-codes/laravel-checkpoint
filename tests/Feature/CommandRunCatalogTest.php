@@ -11,7 +11,7 @@ it('validates built-in operations and their exclusivity rules', function (): voi
 
     expect($catalog->validate('logical_backup', '   '))
         ->toBeNull()
-        ->and($catalog->validate('pgbackrest_restore', ' 20260312-010101F '))
+        ->and($catalog->validate('physical_restore', ' 20260312-010101F '))
         ->toBe('20260312-010101F')
         ->and($catalog->validate('logical_restore_file', ' nightly.sql '))
         ->toBe('nightly.sql')
@@ -19,11 +19,10 @@ it('validates built-in operations and their exclusivity rules', function (): voi
         ->toBe('{"source":"profile:source","destination":"profile:destination","dry_run":true,"apply":false,"force":false,"overwrite_destination":false}')
         ->and($catalog->isDestructive('logical_restore_file'))->toBeTrue()
         ->and($catalog->isDestructive('replication_sync'))->toBeTrue()
-        ->and($catalog->isDestructive('pgbackrest_restore'))->toBeTrue()
-        ->and($catalog->isExclusive('pgbackrest_backup_full'))->toBeTrue()
+        ->and($catalog->isDestructive('physical_restore'))->toBeTrue()
+        ->and($catalog->isExclusive('physical_backup'))->toBeTrue()
         ->and($catalog->isExclusive('logical_backup'))->toBeTrue()
-        ->and($catalog->isExclusive('replication_sync'))->toBeTrue()
-        ->and($catalog->isExclusive('pgbackrest_info'))->toBeFalse();
+        ->and($catalog->isExclusive('replication_sync'))->toBeTrue();
 });
 
 it('throws for unsupported operations and missing required arguments', function (): void {

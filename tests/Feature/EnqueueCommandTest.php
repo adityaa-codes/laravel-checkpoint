@@ -12,13 +12,13 @@ it('queues the provided operation from the generic command', function (): void {
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    checkpoint_artisan('checkpoint:enqueue pgbackrest_info')
-        ->expectsOutput('Queued pgBackRest Info run #1.')
+    checkpoint_artisan('checkpoint:enqueue physical_backup')
+        ->expectsOutput('Queued Physical Backup run #1.')
         ->assertSuccessful();
 
     $run = CommandRun::query()->sole();
 
-    expect($run->operation)->toBe('pgbackrest_info')
+    expect($run->operation)->toBe('physical_backup')
         ->and($run->argument_text)->toBeNull();
 
     Bus::assertDispatched(fn (ProcessCommandRunJob $job): bool => $job->run->is($run));
@@ -38,13 +38,8 @@ it('prompts for the operation and argument when needed', function (): void {
                 'logical_restore_latest',
                 'logical_restore_file',
                 'backup_drill',
-                'pgbackrest_backup_full',
-                'pgbackrest_backup_diff',
-                'pgbackrest_backup_incr',
-                'pgbackrest_restore',
-                'pgbackrest_verify',
-                'pgbackrest_check',
-                'pgbackrest_info',
+                'physical_backup',
+                'physical_restore',
                 'pitr_restore',
                 'replication_sync',
             ],

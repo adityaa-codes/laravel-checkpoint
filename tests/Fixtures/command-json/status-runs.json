@@ -4,7 +4,7 @@
     "runs": [
         {
             "id": 2,
-            "operation": "pgbackrest_info",
+            "operation": "physical_backup",
             "status": "succeeded",
             "exit_code": 0,
             "backup": "full:20260311-010101F",

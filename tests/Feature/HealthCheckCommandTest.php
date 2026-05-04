@@ -30,7 +30,7 @@ it('marks timed-out running runs as failed and leaves recent runs untouched', fu
     ]);
 
     $healthyRun = CommandRun::query()->create([
-        'operation' => 'pgbackrest_info',
+        'operation' => 'physical_backup',
         'status' => CommandRunStatus::Running,
         'attempts' => 0,
         'started_at' => Date::now()->subMinutes(2),

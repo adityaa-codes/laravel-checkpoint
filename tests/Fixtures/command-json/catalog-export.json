@@ -38,8 +38,8 @@
         },
         {
             "command_run_id": 1,
-            "operation": "pgbackrest_backup_full",
-            "driver": "pgbackrest",
+            "operation": "physical_backup",
+            "driver": "pgbasebackup",
             "repository": 1,
             "stanza": "main",
             "type": "full",
@@ -55,13 +55,13 @@
             "last_known_good_at": "2026-03-11 11:56:00",
             "latest_verification": {
                 "id": 1,
-                "verification_type": "pgbackrest_verify",
+                "verification_type": "physical_backup",
                 "status": "verified",
                 "verified_at": "2026-03-11 11:55:00",
                 "error_detail": null
             },
             "metadata": {
-                "driver": "pgbackrest",
+                "driver": "pgbasebackup",
                 "flags": [
                     "nightly"
                 ],

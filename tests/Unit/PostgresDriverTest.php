@@ -19,7 +19,7 @@ it('routes logical operations to the pgdump delegate', function (): void {
         }
     };
 
-    $pgbackrest = new class implements BackupDriver
+    $pgbasebackup = new class implements BackupDriver
     {
         /** @var list<string> */
         public array $operations = [];
@@ -31,19 +31,19 @@ it('routes logical operations to the pgdump delegate', function (): void {
     };
 
     config()->set('checkpoint.drivers.pgdump.class', $pgdump::class);
-    config()->set('checkpoint.drivers.pgbackrest.class', $pgbackrest::class);
+    config()->set('checkpoint.drivers.pgbasebackup.class', $pgbasebackup::class);
     app()->instance($pgdump::class, $pgdump);
-    app()->instance($pgbackrest::class, $pgbackrest);
+    app()->instance($pgbasebackup::class, $pgbasebackup);
 
     (new PostgresDriver)->execute(CommandRun::factory()->make([
         'operation' => 'logical_backup',
     ]));
 
     expect($pgdump->operations)->toBe(['logical_backup'])
-        ->and($pgbackrest->operations)->toBeEmpty();
+        ->and($pgbasebackup->operations)->toBeEmpty();
 });
 
-it('routes pgbackrest-prefixed operations to the pgbackrest delegate', function (): void {
+it('routes pgbasebackup-prefixed operations to the pgbasebackup delegate', function (): void {
     $pgdump = new class implements BackupDriver
     {
         /** @var list<string> */
@@ -55,7 +55,7 @@ it('routes pgbackrest-prefixed operations to the pgbackrest delegate', function 
         }
     };
 
-    $pgbackrest = new class implements BackupDriver
+    $pgbasebackup = new class implements BackupDriver
     {
         /** @var list<string> */
         public array $operations = [];
@@ -67,21 +67,21 @@ it('routes pgbackrest-prefixed operations to the pgbackrest delegate', function 
     };
 
     config()->set('checkpoint.drivers.pgdump.class', $pgdump::class);
-    config()->set('checkpoint.drivers.pgbackrest.class', $pgbackrest::class);
+    config()->set('checkpoint.drivers.pgbasebackup.class', $pgbasebackup::class);
     app()->instance($pgdump::class, $pgdump);
-    app()->instance($pgbackrest::class, $pgbackrest);
+    app()->instance($pgbasebackup::class, $pgbasebackup);
 
     (new PostgresDriver)->execute(CommandRun::factory()->make([
-        'operation' => 'pgbackrest_check',
+        'operation' => 'physical_backup',
     ]));
 
-    expect($pgbackrest->operations)->toBe(['pgbackrest_check'])
+    expect($pgbasebackup->operations)->toBe(['physical_backup'])
         ->and($pgdump->operations)->toBeEmpty();
 });
 
 it('fails for operations that are not mapped by the postgres facade', function (): void {
     expect(fn () => (new PostgresDriver)->execute(CommandRun::factory()->make([
-        'operation' => 'backup_drill',
+        'operation' => 'unknown_operation',
     ])))
-        ->toThrow(ConfigurationException::class, 'Unsupported postgres facade operation [backup_drill].');
+        ->toThrow(ConfigurationException::class, 'Unsupported postgres facade operation [unknown_operation].');
 });

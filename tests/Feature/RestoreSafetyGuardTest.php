@@ -60,7 +60,7 @@ it('blocks restore execution in disallowed environments', function (): void {
     config()->set('checkpoint.restore.allowed_environments', ['staging']);
 
     $run = CommandRun::factory()->make([
-        'operation' => 'pgbackrest_restore',
+        'operation' => 'physical_restore',
         'argument_text' => '20260312-010101F',
     ]);
 
@@ -94,12 +94,12 @@ it('requires a verified backup signal when configured for restores', function ()
     config()->set('checkpoint.restore.require_verified_backup', true);
 
     $run = CommandRun::factory()->make([
-        'operation' => 'pgbackrest_restore',
+        'operation' => 'physical_restore',
         'argument_text' => '20260312-010101F',
     ]);
 
     expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run))
-        ->toThrow(ConfigurationException::class, 'Restore operation [pgbackrest_restore] requires a verified backup signal before execution.');
+        ->toThrow(ConfigurationException::class, 'Restore operation [physical_restore] requires a verified backup signal before execution.');
 });
 
 it('accepts restores when a matching verified backup signal exists', function (): void {
@@ -109,7 +109,7 @@ it('accepts restores when a matching verified backup signal exists', function ()
     config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
 
     CommandRun::query()->create([
-        'operation' => 'pgbackrest_check',
+        'operation' => 'physical_backup',
         'backup_label' => '20260312-010101F',
         'verification_state' => 'verified',
         'status' => CommandRunStatus::Succeeded,
@@ -120,7 +120,7 @@ it('accepts restores when a matching verified backup signal exists', function ()
     ]);
 
     $run = CommandRun::factory()->make([
-        'operation' => 'pgbackrest_restore',
+        'operation' => 'physical_restore',
         'argument_text' => '20260312-010101F',
     ]);
 
@@ -134,7 +134,7 @@ it('accepts restores when a matching verified backup signal exists', function ()
         ->and($audit['restore_audit']['confirmation_satisfied_via'])->toBe('token')
         ->and($audit['restore_audit']['verified_backup_required'])->toBeTrue()
         ->and($audit['restore_audit']['verified_signal_run_id'])->toBeInt()
-        ->and($audit['restore_audit']['verified_signal_operation'])->toBe('pgbackrest_check')
+        ->and($audit['restore_audit']['verified_signal_operation'])->toBe('physical_backup')
         ->and($audit['restore_audit']['verified_signal_backup_label'])->toBe('20260312-010101F')
         ->and($audit['restore_audit']['verified_signal_artifact_path'])->toBeNull()
         ->and($audit['restore_audit']['verified_signal_last_known_good_at'])->toBeString()
@@ -142,33 +142,6 @@ it('accepts restores when a matching verified backup signal exists', function ()
         ->and($audit['restore_audit']['blast_radius']['status'])->toBe('pass')
         ->and($audit['restore_audit']['blast_radius']['score'])->toBeInt()
         ->and($audit['restore_audit']['post_restore_verification'] ?? null)->toBeNull();
-});
-
-it('does not treat pgbackrest info runs as a verified restore signal', function (): void {
-    config()->set('checkpoint.restore.require_verified_backup', true);
-    config()->set('checkpoint.restore.require_confirmation', true);
-    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
-    config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
-
-    CommandRun::query()->create([
-        'operation' => 'pgbackrest_info',
-        'backup_label' => '20260312-010101F',
-        'status' => CommandRunStatus::Succeeded,
-        'attempts' => 0,
-        'repository' => 1,
-        'stanza' => 'main',
-        'last_known_good_at' => now(),
-    ]);
-
-    $run = CommandRun::factory()->make([
-        'operation' => 'pgbackrest_restore',
-        'argument_text' => '20260312-010101F',
-    ]);
-
-    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
-        'repository' => 1,
-        'stanza' => 'main',
-    ]))->toThrow(ConfigurationException::class, 'Restore operation [pgbackrest_restore] requires a verified backup signal before execution.');
 });
 
 it('requires a matching artifact snapshot for verified logical restores', function (): void {
@@ -219,35 +192,6 @@ it('requires a matching artifact snapshot for verified logical restores', functi
             'database' => ':memory:',
         ],
     ]))->toThrow(ConfigurationException::class, 'Restore operation [logical_restore_file] requires a verified backup signal before execution.');
-});
-
-it('requires pgbackrest verification to match the configured stanza and repository', function (): void {
-    config()->set('checkpoint.restore.require_verified_backup', true);
-    config()->set('checkpoint.restore.require_confirmation', true);
-    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
-    config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
-
-    CommandRun::query()->create([
-        'operation' => 'pgbackrest_check',
-        'backup_label' => '20260312-010101F',
-        'verification_state' => 'verified',
-        'driver_name' => 'pgbackrest',
-        'repository' => 2,
-        'stanza' => 'archive',
-        'status' => CommandRunStatus::Succeeded,
-        'attempts' => 0,
-        'last_known_good_at' => now(),
-    ]);
-
-    $run = CommandRun::factory()->make([
-        'operation' => 'pgbackrest_restore',
-        'argument_text' => '20260312-010101F',
-    ]);
-
-    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
-        'repository' => 1,
-        'stanza' => 'main',
-    ]))->toThrow(ConfigurationException::class, 'Restore operation [pgbackrest_restore] requires a verified backup signal before execution.');
 });
 
 it('requires logical restore verification to match the driver provenance', function (): void {
@@ -400,54 +344,6 @@ it('requires pitr verification to include a baseline artifact and binlog chain c
     ]))->toThrow(ConfigurationException::class, 'pitr_restore requires a non-empty binlog chain when checkpoint.restore.require_verified_backup is enabled.');
 });
 
-it('requires pgbackrest verification to match driver provenance', function (): void {
-    config()->set('checkpoint.restore.require_verified_backup', true);
-    config()->set('checkpoint.restore.require_confirmation', true);
-    config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
-    config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
-
-    CommandRun::query()->create([
-        'operation' => 'pgbackrest_check',
-        'backup_label' => '20260312-010101F',
-        'verification_state' => 'verified',
-        'driver_name' => 'pgdump',
-        'repository' => 1,
-        'stanza' => 'main',
-        'status' => CommandRunStatus::Succeeded,
-        'attempts' => 0,
-        'last_known_good_at' => now(),
-    ]);
-
-    $run = CommandRun::factory()->make([
-        'operation' => 'pgbackrest_restore',
-        'argument_text' => '20260312-010101F',
-    ]);
-
-    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run, [
-        'repository' => 1,
-        'stanza' => 'main',
-        'metadata' => [
-            'driver' => 'pgbackrest',
-            'database' => ':memory:',
-        ],
-    ]))->toThrow(ConfigurationException::class, 'Restore operation [pgbackrest_restore] requires a verified backup signal before execution.');
-});
-
-it('requires an explicit pgbackrest backup label when verified backup enforcement is enabled', function (): void {
-    config()->set('checkpoint.restore.require_verified_backup', true);
-
-    $run = CommandRun::factory()->make([
-        'operation' => 'pgbackrest_restore',
-        'argument_text' => null,
-    ]);
-
-    expect(fn (): mixed => resolve(RestoreSafetyGuard::class)->ensureSafe($run))
-        ->toThrow(
-            ConfigurationException::class,
-            'pgbackrest_restore requires an explicit backup set label when checkpoint.restore.require_verified_backup is enabled.',
-        );
-});
-
 it('records append-only restore decision evidence for blocked restore checks', function (): void {
     config()->set('app.env', 'production');
     config()->set('checkpoint.restore.allowed_environments', ['staging']);
@@ -482,23 +378,23 @@ it('records append-only restore decision evidence for successful restore checks'
     config()->set('checkpoint.restore.require_verified_backup', true);
 
     $verified = CommandRun::query()->create([
-        'operation' => 'pgbackrest_check',
+        'operation' => 'physical_backup',
         'backup_label' => '20260312-010101F',
         'verification_state' => 'verified',
-        'driver_name' => 'pgbackrest',
+        'driver_name' => 'pgbasebackup',
         'repository' => 1,
         'stanza' => 'main',
         'status' => CommandRunStatus::Succeeded,
         'attempts' => 0,
         'last_known_good_at' => now(),
         'metadata' => [
-            'driver' => 'pgbackrest',
+            'driver' => 'pgbasebackup',
             'database' => ':memory:',
         ],
     ]);
 
     $run = CommandRun::query()->create([
-        'operation' => 'pgbackrest_restore',
+        'operation' => 'physical_restore',
         'argument_text' => '20260312-010101F',
         'status' => CommandRunStatus::Pending,
         'attempts' => 0,
@@ -509,7 +405,7 @@ it('records append-only restore decision evidence for successful restore checks'
         'repository' => 1,
         'stanza' => 'main',
         'metadata' => [
-            'driver' => 'pgbackrest',
+            'driver' => 'pgbasebackup',
             'database' => ':memory:',
         ],
     ]);

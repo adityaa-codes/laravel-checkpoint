@@ -48,7 +48,7 @@ final readonly class ValidateOperationBinaries
      */
     private function binariesForOperation(string $operation, string $driver): array
     {
-        $pitrOps = ['pitr_restore', 'pgbackrest_restore'];
+        $pitrOps = ['pitr_restore', 'physical_restore'];
         $backupOps = ['logical_backup', 'logical_backup_full', 'logical_backup_incr', 'logical_backup_diff'];
         $restoreOps = ['logical_restore_file', 'logical_restore_latest'];
         $drillOps = ['backup_drill'];
@@ -73,18 +73,10 @@ final readonly class ValidateOperationBinaries
                     'label' => 'mysqlbinlog',
                 ] : null,
             ])),
-            'postgres', 'pgbackrest' => array_values(array_filter([
+            'postgres', 'pgbasebackup' => array_values(array_filter([
                 ($isBackup || $isDrill) ? [
-                    'binary' => (string) $this->config->get('checkpoint.drivers.pgdump.dump_binary', 'pg_dump'),
-                    'label' => 'pg_dump',
-                ] : null,
-                ($isRestore || $isDrill) ? [
-                    'binary' => (string) $this->config->get('checkpoint.drivers.pgdump.restore_binary', 'pg_restore'),
-                    'label' => 'pg_restore',
-                ] : null,
-                ($isPitr || $isDrill) ? [
-                    'binary' => (string) $this->config->get('checkpoint.drivers.pgbackrest.binary', 'pgbackrest'),
-                    'label' => 'pgbackrest',
+                    'binary' => (string) $this->config->get('checkpoint.drivers.pgbasebackup.binary', 'pg_basebackup'),
+                    'label' => 'pg_basebackup',
                 ] : null,
             ])),
             'pgdump' => [

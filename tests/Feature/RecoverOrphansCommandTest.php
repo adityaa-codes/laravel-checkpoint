@@ -42,7 +42,7 @@ it('re-dispatches stale pending runs and leaves recent pending runs untouched', 
     ]);
 
     $freshRun = CommandRun::query()->create([
-        'operation' => 'pgbackrest_info',
+        'operation' => 'physical_backup',
         'status' => CommandRunStatus::Pending,
         'attempts' => 0,
         'created_at' => Date::now()->subMinutes(5),
@@ -91,7 +91,7 @@ it('re-dispatches large stale batches with aggregate lag details', function (): 
     ]));
 
     CommandRun::query()->create([
-        'operation' => 'pgbackrest_info',
+        'operation' => 'physical_backup',
         'status' => CommandRunStatus::Pending,
         'attempts' => 0,
         'created_at' => Date::now()->subMinutes(5),

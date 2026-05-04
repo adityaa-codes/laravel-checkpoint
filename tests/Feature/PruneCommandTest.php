@@ -30,7 +30,7 @@ it('prunes old runs and expired backup drill records while retaining recent prot
     ]);
 
     $freshPending = CommandRun::query()->create([
-        'operation' => 'pgbackrest_info',
+        'operation' => 'physical_backup',
         'status' => CommandRunStatus::Pending,
         'attempts' => 0,
         'created_at' => Date::now()->subDays(5),

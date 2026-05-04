@@ -21,7 +21,7 @@ it('builds shared summary payloads with compatibility aliases', function (): voi
     config()->set('checkpoint.observability.backup_drill_pass_rate_window_days', 14);
 
     CommandRun::query()->create([
-        'operation' => 'pgbackrest_backup_full',
+        'operation' => 'physical_backup',
         'backup_type' => 'full',
         'backup_label' => '20260311-010101F',
         'verification_state' => 'verified',
@@ -115,10 +115,10 @@ it('builds a combined report payload from a shared snapshot', function (): void 
 
     VerificationRun::query()->create([
         'command_run_id' => 1,
-        'verification_type' => 'pgbackrest_verify',
+        'verification_type' => 'physical_backup',
         'status' => 'verified',
         'verified_at' => now(),
-        'metadata' => ['driver' => 'pgbackrest'],
+        'metadata' => ['driver' => 'pgbasebackup'],
     ]);
 
     $payload = resolve(OperationalReportBuilder::class)->reportPayload(5);
@@ -189,7 +189,7 @@ it('includes post-restore verification contract in recent run payloads', functio
 
 it('exposes verification health details in health checks', function (): void {
     CommandRun::query()->create([
-        'operation' => 'pgbackrest_check',
+        'operation' => 'physical_backup',
         'status' => CommandRunStatus::Failed,
         'attempts' => 1,
         'exit_code' => 1,
@@ -197,11 +197,11 @@ it('exposes verification health details in health checks', function (): void {
 
     VerificationRun::query()->create([
         'command_run_id' => 1,
-        'verification_type' => 'pgbackrest_check',
+        'verification_type' => 'physical_backup',
         'status' => 'failed',
         'verified_at' => now(),
         'error_detail' => 'Verification command failed',
-        'metadata' => ['driver' => 'pgbackrest'],
+        'metadata' => ['driver' => 'pgbasebackup'],
     ]);
 
     $checks = resolve(OperationalReportBuilder::class)->healthChecks();

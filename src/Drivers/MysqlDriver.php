@@ -1323,7 +1323,7 @@ final class MysqlDriver implements BackupDriver
 
     private function restoreDecisionEventCount(CommandRun $run): ?int
     {
-        if (! in_array($run->operation, ['logical_restore_latest', 'logical_restore_file', 'pitr_restore', 'pgbackrest_restore', 'replication_sync'], true)) {
+        if (! in_array($run->operation, ['logical_restore_latest', 'logical_restore_file', 'pitr_restore', 'physical_restore', 'replication_sync'], true)) {
             return null;
         }
 

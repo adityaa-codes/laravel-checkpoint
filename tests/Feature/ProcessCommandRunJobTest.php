@@ -22,14 +22,14 @@ it('uses the configured driver to process a command run', function (): void {
     ]);
 
     $driver = new FakeDriver;
-    $driver->succeed('pgbackrest_info', 0, 'info');
+    $driver->succeed('physical_backup', 0, 'info');
 
     app()->instance(FakeDriver::class, $driver);
     config()->set('checkpoint.driver', 'fake');
     config()->set('checkpoint.drivers.fake.class', FakeDriver::class);
 
     $run = CommandRun::query()->create([
-        'operation' => 'pgbackrest_info',
+        'operation' => 'physical_backup',
         'status' => CommandRunStatus::Pending,
         'attempts' => 0,
     ]);
@@ -83,7 +83,7 @@ it('skips duplicate delivery after the command run has already completed', funct
         ->once()
         ->with('ProcessCommandRunJob skipped duplicate delivery', Mockery::on(
             fn (array $context): bool => $context['run_id'] > 0
-                && $context['operation'] === 'pgbackrest_info'
+                && $context['operation'] === 'physical_backup'
                 && $context['driver'] === 'fake'
                 && $context['status'] === 'succeeded'
         ));
@@ -95,7 +95,7 @@ it('skips duplicate delivery after the command run has already completed', funct
     config()->set('checkpoint.drivers.fake.class', FakeDriver::class);
 
     $run = CommandRun::query()->create([
-        'operation' => 'pgbackrest_info',
+        'operation' => 'physical_backup',
         'status' => CommandRunStatus::Succeeded,
         'attempts' => 1,
         'exit_code' => 0,
@@ -132,7 +132,7 @@ it('uses the same unique key for concurrent exclusive backup runs', function ():
     ]);
 
     $fullBackup = CommandRun::query()->create([
-        'operation' => 'pgbackrest_backup_full',
+        'operation' => 'physical_backup',
         'status' => CommandRunStatus::Pending,
         'attempts' => 0,
     ]);
@@ -143,15 +143,15 @@ it('uses the same unique key for concurrent exclusive backup runs', function ():
         ->not->toBe(new ProcessCommandRunJob($logicalBackupA)->uniqueId());
 });
 
-it('returns a per-run unique id for non-exclusive operations', function (): void {
+it('returns an exclusive unique id for physical backup operations', function (): void {
     $run = CommandRun::query()->create([
-        'operation' => 'pgbackrest_check',
+        'operation' => 'physical_backup',
         'status' => CommandRunStatus::Pending,
         'attempts' => 0,
     ]);
 
     expect(new ProcessCommandRunJob($run)->uniqueId())
-        ->toBe('db-ops-run:'.$run->getKey());
+        ->toBe('db-ops-exclusive:physical_backup');
 });
 
 it('uses the configured unique lock duration and cache store', function (): void {
@@ -232,13 +232,13 @@ it('marks the run failed and emits the failure event in the failed callback', fu
         ->once()
         ->with('ProcessCommandRunJob failed', Mockery::on(
             fn (array $context): bool => $context['run_id'] > 0
-                && $context['operation'] === 'pgbackrest_info'
+                && $context['operation'] === 'physical_backup'
                 && $context['driver'] === 'shell'
                 && $context['error'] === 'boom'
         ));
 
     $run = CommandRun::query()->create([
-        'operation' => 'pgbackrest_info',
+        'operation' => 'physical_backup',
         'status' => CommandRunStatus::Pending,
         'attempts' => 0,
     ]);

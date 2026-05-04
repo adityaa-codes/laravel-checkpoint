@@ -37,23 +37,6 @@ it('supports the do install command alias', function (): void {
         ->assertSuccessful();
 });
 
-it('warns when optional binaries are missing but installs successfully', function (): void {
-    config()->set('checkpoint.drivers.pgbackrest.binary', 'missing-pgbackrest-binary');
-    config()->set('checkpoint.drivers.pgdump.dump_binary', PHP_BINARY);
-    config()->set('checkpoint.drivers.pgdump.restore_binary', PHP_BINARY);
-
-    $exitCode = Artisan::call('checkpoint:install', [
-        '--preset' => 'postgres-prod',
-        '--skip-publish' => true,
-        '--skip-migrate' => true,
-        '--skip-doctor' => true,
-    ]);
-
-    $output = Artisan::output();
-    $this->assertStringContainsString('pgbackrest', $output);
-    $this->assertEquals(0, $exitCode);
-});
-
 it('fails fast when required active driver binaries are missing', function (): void {
     config()->set('checkpoint.drivers.pgdump.dump_binary', 'missing-pg-dump-binary');
 
@@ -104,7 +87,7 @@ it('writes preset values into the configured environment file', function (): voi
 });
 
 it('fails readiness when missing active driver binaries cause blockers', function (): void {
-    config()->set('checkpoint.drivers.pgbackrest.binary', 'missing-pgbackrest-xyz');
+    config()->set('checkpoint.drivers.pgbasebackup.binary', 'missing-pgbasebackup-xyz');
 
     checkpoint_artisan('checkpoint:install --preset=postgres-prod --skip-publish --skip-migrate')
         ->assertFailed();

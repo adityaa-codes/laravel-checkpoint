@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Tests;
 
 use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PgBaseBackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
@@ -240,7 +240,7 @@ class TestCase extends Orchestra
                 'shell' => [
                     'class' => ShellCommandDriver::class,
                     'commands' => [],
-                    'pgbackrest_stanza' => 'main',
+                    'pgbasebackup_stanza' => 'main',
                     'backup_dir' => '/tmp/checkpoint-tests',
                     'backup_prefix' => 'backup',
                     'pre_restore_snapshot' => true,
@@ -249,15 +249,15 @@ class TestCase extends Orchestra
                 'postgres' => [
                     'class' => PostgresDriver::class,
                 ],
-                'pgbackrest' => [
-                    'class' => PgBackRestDriver::class,
-                    'binary' => 'pgbackrest',
+                'pgbasebackup' => [
+                    'class' => PgBaseBackupDriver::class,
+                    'binary' => 'pg_basebackup',
                     'stanza' => 'main',
                     'repo' => 1,
                     'repositories' => [
                         1 => [
                             'type' => 'posix',
-                            'path' => sys_get_temp_dir().'/checkpoint-pgbackrest-repo1',
+                            'path' => sys_get_temp_dir().'/checkpoint-pgbasebackup-repo1',
                             's3' => [
                                 'bucket' => null,
                                 'endpoint' => null,

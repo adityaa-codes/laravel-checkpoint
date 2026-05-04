@@ -18,13 +18,8 @@ it('renders the doctor health table', function (): void {
     checkpoint_artisan('checkpoint:doctor -v')
         ->expectsOutputToContain('Config: driver')
         ->expectsOutputToContain('Config: queue.name')
-        ->expectsOutputToContain('Config: pgbackrest.stanza')
-        ->expectsOutputToContain('Config: pgbackrest.repositories')
-        ->expectsOutputToContain('Repo: pgbackrest.active')
-        ->expectsOutputToContain('Repo: pgbackrest.target')
-        ->expectsOutputToContain('Repo: pgbackrest.tls')
-        ->expectsOutputToContain('Repo: pgbackrest.encryption')
-        ->expectsOutputToContain('Binary: pgBackRest')
+        ->expectsOutputToContain('Binary: pg_basebackup')
+        ->expectsOutputToContain('Binary: gzip')
         ->expectsOutputToContain('DB: command_runs table')
         ->expectsOutputToContain('DB: backup_drill_runs table')
         ->expectsOutputToContain('DB: verification_runs table')
@@ -186,8 +181,8 @@ it('surfaces post-restore verification health posture in machine-readable doctor
 });
 
 it('fails when active driver binary is missing and includes remediation commands', function (): void {
-    config()->set('checkpoint.driver', 'pgbackrest');
-    config()->set('checkpoint.drivers.pgbackrest.binary', 'missing-pgbackrest-binary');
+    config()->set('checkpoint.driver', 'pgbasebackup');
+    config()->set('checkpoint.drivers.pgbasebackup.binary', 'missing-pgbasebackup-binary');
 
     $exitCode = Artisan::call('checkpoint:doctor', ['--format' => 'json']);
     $report = json_decode(Artisan::output(), true);
@@ -195,57 +190,24 @@ it('fails when active driver binary is missing and includes remediation commands
     expect($exitCode)->toBe(10)
         ->and($report)->toBeArray()
         ->and(collect($report['checks'])->contains(
-            fn (array $check): bool => $check['code'] === 'driver.binary.pgbackrest'
+            fn (array $check): bool => $check['code'] === 'driver.binary.pgbasebackup'
                 && $check['status'] === 'fail'
-                && ($check['data']['binary'] ?? null) === 'missing-pgbackrest-binary'
+                && ($check['data']['binary'] ?? null) === 'missing-pgbasebackup-binary'
                 && is_array($check['data']['remediation_commands'] ?? null)
-                && in_array('command -v missing-pgbackrest-binary', $check['data']['remediation_commands'], true),
+                && in_array('command -v missing-pgbasebackup-binary', $check['data']['remediation_commands'], true),
         ))->toBeTrue();
-});
-
-it('shows selected remote repo hardening details without secrets', function (): void {
-    config()->set('checkpoint.drivers.pgbackrest.repositories.1', [
-        'type' => 's3',
-        'path' => null,
-        's3' => [
-            'bucket' => 'checkpoint-backups',
-            'endpoint' => 's3.example.com',
-            'region' => 'ap-south-1',
-            'key' => 'hidden-key',
-            'secret' => 'hidden-secret',
-            'uri_style' => 'host',
-        ],
-        'tls' => [
-            'verify' => false,
-            'ca_file' => '/etc/ssl/checkpoint.pem',
-        ],
-        'encryption' => [
-            'enabled' => true,
-            'cipher_type' => 'aes-256-cbc',
-            'passphrase' => 'hidden-passphrase',
-        ],
-    ]);
-
-    checkpoint_artisan('checkpoint:doctor -v')
-        ->expectsOutputToContain('s3://checkpoint-backups via s3.example.com')
-        ->expectsOutputToContain('verify disabled')
-        ->expectsOutputToContain('enabled (aes-256-cbc)')
-        ->doesntExpectOutputToContain('hidden-key')
-        ->doesntExpectOutputToContain('hidden-secret')
-        ->doesntExpectOutputToContain('hidden-passphrase')
-        ->assertSuccessful();
 });
 
 it('renders a machine-readable json report', function (): void {
     CommandRun::query()->create([
-        'operation' => 'pgbackrest_check',
+        'operation' => 'physical_backup',
         'status' => 'succeeded',
         'attempts' => 1,
         'exit_code' => 0,
     ]);
     VerificationRun::query()->create([
         'command_run_id' => 1,
-        'verification_type' => 'pgbackrest_check',
+        'verification_type' => 'physical_backup',
         'status' => 'failed',
         'verified_at' => now(),
         'error_detail' => 'verification failed',

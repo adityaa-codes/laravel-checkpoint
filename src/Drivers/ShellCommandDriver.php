@@ -194,7 +194,6 @@ final class ShellCommandDriver implements BackupDriver
 
         $replacements = [
             '{db}' => (string) config('database.connections.'.config('database.default').'.database', ''),
-            '{stanza}' => (string) config('checkpoint.drivers.shell.pgbackrest_stanza', 'main'),
             '{target}' => $argument,
             '{output}' => $backupDir.'/'.$backupPrefix.'-'.$run->getKey().'.sql',
             '{file}' => $argument,
@@ -388,7 +387,7 @@ final class ShellCommandDriver implements BackupDriver
 
     private function restoreDecisionEventCount(CommandRun $run): ?int
     {
-        if (! in_array($run->operation, ['logical_restore_latest', 'logical_restore_file', 'pitr_restore', 'pgbackrest_restore'], true)) {
+        if (! in_array($run->operation, ['logical_restore_latest', 'logical_restore_file', 'pitr_restore', 'physical_restore'], true)) {
             return null;
         }
 

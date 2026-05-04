@@ -45,7 +45,7 @@ final class CommandJsonFixtureSupport
         ]);
 
         CommandRun::query()->create([
-            'operation' => 'pgbackrest_info',
+            'operation' => 'physical_backup',
             'backup_type' => 'full',
             'backup_label' => '20260311-010101F',
             'verification_state' => 'verified',
@@ -68,7 +68,7 @@ final class CommandJsonFixtureSupport
         ]);
 
         CommandRun::query()->create([
-            'operation' => 'pgbackrest_backup_full',
+            'operation' => 'physical_backup',
             'backup_type' => 'full',
             'backup_label' => '20260311-010101F',
             'verification_state' => 'verified',
@@ -153,22 +153,22 @@ final class CommandJsonFixtureSupport
 
         VerificationRun::query()->create([
             'command_run_id' => 2,
-            'verification_type' => 'pgbackrest_verify',
+            'verification_type' => 'physical_backup',
             'status' => 'verified',
             'verified_at' => now()->subMinutes(5),
             'metadata' => [
-                'driver' => 'pgbackrest',
+                'driver' => 'pgbasebackup',
                 'summary' => ['ok' => true],
             ],
         ]);
 
         VerificationRun::query()->create([
             'command_run_id' => 3,
-            'verification_type' => 'pgbackrest_check',
+            'verification_type' => 'physical_backup',
             'status' => 'failed',
             'verified_at' => now()->subMinutes(3),
             'metadata' => [
-                'driver' => 'pgbackrest',
+                'driver' => 'pgbasebackup',
             ],
             'error_detail' => 'Restore verification failed',
         ]);
@@ -184,8 +184,8 @@ final class CommandJsonFixtureSupport
     public static function seedCatalogExports(): void
     {
         CommandRun::query()->create([
-            'operation' => 'pgbackrest_backup_full',
-            'driver_name' => 'pgbackrest',
+            'operation' => 'physical_backup',
+            'driver_name' => 'pgbasebackup',
             'repository' => 1,
             'stanza' => 'main',
             'backup_type' => 'full',
@@ -199,7 +199,7 @@ final class CommandJsonFixtureSupport
             'attempts' => 1,
             'exit_code' => 0,
             'metadata' => [
-                'driver' => 'pgbackrest',
+                'driver' => 'pgbasebackup',
                 'flags' => ['nightly'],
                 'storage' => ['class' => 'warm'],
             ],
@@ -211,11 +211,11 @@ final class CommandJsonFixtureSupport
 
         VerificationRun::query()->create([
             'command_run_id' => 1,
-            'verification_type' => 'pgbackrest_verify',
+            'verification_type' => 'physical_backup',
             'status' => 'verified',
             'verified_at' => now()->subMinutes(5),
             'metadata' => [
-                'driver' => 'pgbackrest',
+                'driver' => 'pgbasebackup',
             ],
         ]);
 

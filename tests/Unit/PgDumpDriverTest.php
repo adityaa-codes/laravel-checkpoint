@@ -430,11 +430,11 @@ it('rejects restore commands when a validated directory export changes before ex
 
 it('rejects unsupported pg_dump operations', function (): void {
     $run = CommandRun::factory()->make([
-        'operation' => 'pgbackrest_info',
+        'operation' => 'physical_backup',
     ]);
 
     expect(fn (): Process => buildPgDumpProcess(new PgDumpDriver, $run))
-        ->toThrow(ConfigurationException::class, 'Unsupported pg_dump operation [pgbackrest_info].');
+        ->toThrow(ConfigurationException::class, 'Unsupported pg_dump operation [physical_backup].');
 });
 
 it('plans replication_sync metadata with explicit default safety gates', function (): void {

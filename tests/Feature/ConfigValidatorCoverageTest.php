@@ -197,68 +197,6 @@ it('rejects replication profile engines outside pgsql or mysql', function (): vo
         ->toThrow(ConfigurationException::class, 'checkpoint.replication.profiles.invalid.engine must be pgsql or mysql.');
 });
 
-it('rejects an empty pgbackrest stanza', function (): void {
-    config()->set('checkpoint.drivers.pgbackrest.stanza', '');
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.stanza must be a non-empty string.');
-});
-
-it('rejects non-array pgbackrest extra args', function (): void {
-    config()->set('checkpoint.drivers.pgbackrest.extra_args.info', '--output=json');
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.extra_args.info must be an array.');
-});
-
-it('rejects a pgbackrest config without repositories', function (): void {
-    config()->set('checkpoint.drivers.pgbackrest.repositories', []);
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.repositories must be a non-empty array.');
-});
-
-it('rejects a selected pgbackrest repo that is not configured', function (): void {
-    config()->set('checkpoint.drivers.pgbackrest.repo', 2);
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.repositories must define selected repo [2].');
-});
-
-it('rejects an s3 pgbackrest repo without required remote settings', function (): void {
-    config()->set('checkpoint.drivers.pgbackrest.repositories.1', [
-        'type' => 's3',
-        's3' => [
-            'bucket' => 'checkpoint-backups',
-            'endpoint' => '',
-            'region' => 'ap-south-1',
-            'key' => 'key-id',
-            'secret' => 'top-secret',
-            'uri_style' => 'host',
-        ],
-        'tls' => [
-            'verify' => true,
-            'ca_file' => null,
-        ],
-        'encryption' => [
-            'enabled' => false,
-            'cipher_type' => 'aes-256-cbc',
-            'passphrase' => null,
-        ],
-    ]);
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.repositories.1.s3.endpoint must be a non-empty string.');
-});
-
-it('rejects an encrypted pgbackrest repo without a passphrase', function (): void {
-    config()->set('checkpoint.drivers.pgbackrest.repositories.1.encryption.enabled', true);
-    config()->set('checkpoint.drivers.pgbackrest.repositories.1.encryption.passphrase', '');
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.drivers.pgbackrest.repositories.1.encryption.passphrase must be a non-empty string when encryption is enabled.');
-});
-
 it('rejects non-array restore safety environment lists', function (): void {
     config()->set('checkpoint.restore.allowed_environments', 'testing');
 
@@ -712,17 +650,6 @@ it('rejects shell command timeouts that exceed the queue timeout budget', functi
         );
 });
 
-it('rejects pgbackrest command timeouts that exceed the queue timeout budget', function (): void {
-    config()->set('checkpoint.queue.timeout', 3600);
-    config()->set('checkpoint.drivers.pgbackrest.command_timeout_seconds', 3601);
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(
-            ConfigurationException::class,
-            'checkpoint.drivers.pgbackrest.command_timeout_seconds [3601] must be less than or equal to checkpoint.queue.timeout [3600] so queued jobs are not terminated before the driver command finishes.',
-        );
-});
-
 it('rejects pgdump command timeouts that exceed the queue timeout budget', function (): void {
     config()->set('checkpoint.queue.timeout', 3600);
     config()->set('checkpoint.drivers.pgdump.command_timeout_seconds', 3601);
@@ -750,7 +677,6 @@ it('accepts the shipped timeout defaults', function (): void {
 
     config()->set('checkpoint.queue.timeout', $packageConfig['queue']['timeout']);
     config()->set('checkpoint.drivers.shell.command_timeout_seconds', $packageConfig['drivers']['shell']['command_timeout_seconds']);
-    config()->set('checkpoint.drivers.pgbackrest.command_timeout_seconds', $packageConfig['drivers']['pgbackrest']['command_timeout_seconds']);
     config()->set('checkpoint.drivers.pgdump.command_timeout_seconds', $packageConfig['drivers']['pgdump']['command_timeout_seconds']);
     config()->set('checkpoint.drivers.mysql.command_timeout_seconds', $packageConfig['drivers']['mysql']['command_timeout_seconds']);
 

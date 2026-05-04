@@ -32,7 +32,7 @@ it('computes status summary correctly with high command-run volume', function ()
     ]);
 
     CommandRun::factory()->count(15)->running()->create([
-        'operation' => 'pgbackrest_check',
+        'operation' => 'physical_backup',
         'created_at' => now()->subMinutes(20),
         'updated_at' => now()->subMinutes(2),
     ]);
@@ -44,7 +44,7 @@ it('computes status summary correctly with high command-run volume', function ()
     ]);
 
     CommandRun::query()->create([
-        'operation' => 'pgbackrest_backup_full',
+        'operation' => 'physical_backup',
         'backup_type' => 'full',
         'backup_label' => '20260315-010101F',
         'verification_state' => 'verified',

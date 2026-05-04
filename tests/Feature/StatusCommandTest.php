@@ -27,7 +27,7 @@ it('shows recent command runs in descending order with the requested limit', fun
             ['ID', 'Operation', 'Status', 'Exit', 'Backup', 'Verify', 'Last Good', 'Started', 'Finished'],
             [
                 ['3', 'logical_restore_file', 'Failed', '1', '-', 'failed', '-', '-', '-'],
-                ['2', 'pgbackrest_info', 'Succeeded', '0', 'full:20260311-010101F', 'verified', '2026-03-11 11:50:00', '-', '-'],
+                ['2', 'physical_backup', 'Succeeded', '0', 'full:20260311-010101F', 'verified', '2026-03-11 11:50:00', '-', '-'],
             ],
         )
         ->assertSuccessful();
@@ -100,7 +100,7 @@ it('renders recent runs as machine-readable json', function (): void {
         ->and($report['runs'])->toHaveCount(1)
         ->and($report['runs'][0])->toMatchArray([
             'id' => 2,
-            'operation' => 'pgbackrest_info',
+            'operation' => 'physical_backup',
             'status' => 'succeeded',
             'exit_code' => 0,
             'backup' => 'full:20260311-010101F',
@@ -147,7 +147,7 @@ it('renders summary signals as machine-readable json', function (): void {
         ->and($report['summary']['last_known_good_backup'])->toMatchArray([
             'label' => 'full:20260311-010101F at 2026-03-11 11:50:00',
             'timestamp' => '2026-03-11 11:50:00',
-            'operation' => 'pgbackrest_backup_full',
+            'operation' => 'physical_backup',
         ])
         ->and($report['summary']['latest_backup_drill'])->toMatchArray([
             'label' => 'drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00',

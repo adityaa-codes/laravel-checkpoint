@@ -274,8 +274,8 @@ it('provides driver repository and stanza breakdown groups in json report output
     OperatorCommandTestSupport::freezeTime();
 
     CommandRun::query()->create([
-        'operation' => 'pgbackrest_backup_full',
-        'driver_name' => 'pgbackrest',
+        'operation' => 'physical_backup',
+        'driver_name' => 'pgbasebackup',
         'repository' => 1,
         'stanza' => 'main',
         'status' => CommandRunStatus::Succeeded,
@@ -288,8 +288,8 @@ it('provides driver repository and stanza breakdown groups in json report output
     ]);
 
     CommandRun::query()->create([
-        'operation' => 'pgbackrest_backup_full',
-        'driver_name' => 'pgbackrest',
+        'operation' => 'physical_backup',
+        'driver_name' => 'pgbasebackup',
         'repository' => 1,
         'stanza' => 'main',
         'status' => CommandRunStatus::Failed,
@@ -319,14 +319,14 @@ it('provides driver repository and stanza breakdown groups in json report output
             'runs' => 3,
             'failed_runs_24h' => 1,
         ])
-        ->and($report['breakdown']['by_target']['driver:pgbackrest|repo:1|stanza:main'])->toMatchArray([
-            'driver' => 'pgbackrest',
+        ->and($report['breakdown']['by_target']['driver:pgbasebackup|repo:1|stanza:main'])->toMatchArray([
+            'driver' => 'pgbasebackup',
             'repository' => 1,
             'stanza' => 'main',
             'failure_rate_percent' => 50.0,
             'health_status' => 'fail',
         ])
-        ->and($report['breakdown']['by_target']['driver:pgbackrest|repo:1|stanza:main']['runs'])->toMatchArray([
+        ->and($report['breakdown']['by_target']['driver:pgbasebackup|repo:1|stanza:main']['runs'])->toMatchArray([
             'total' => 2,
             'succeeded' => 1,
             'failed' => 1,

@@ -26,7 +26,7 @@ use AdityaaCodes\LaravelCheckpoint\Console\TestCommand;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Contracts\ReplicationEndpointParser;
 use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PgBaseBackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
@@ -107,11 +107,7 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
                 driver: (string) $config->get('checkpoint.driver', 'shell'),
                 queueName: (string) $config->get('checkpoint.queue.name', 'db-ops'),
                 logChannel: (string) $config->get('checkpoint.log_channel', 'stack'),
-                pgbackrestStanza: (string) $config->get('checkpoint.drivers.pgbackrest.stanza', 'main'),
-                pgbackrestRepo: (int) $config->get('checkpoint.drivers.pgbackrest.repo', 1),
-                pgbackrestRepositories: (array) $config->get('checkpoint.drivers.pgbackrest.repositories', []),
-                pgbackrestProcessMax: (int) $config->get('checkpoint.drivers.pgbackrest.process_max', 1),
-                pgbackrestBinary: (string) $config->get('checkpoint.drivers.pgbackrest.binary', 'pgbackrest'),
+                pgbasebackupBinary: (string) $config->get('checkpoint.drivers.pgbasebackup.binary', 'pg_basebackup'),
                 orphanThreshold: max(1, (int) $config->get('checkpoint.queue.orphan_threshold', 10)),
                 drillWindowDays: max(1, (int) $config->get('checkpoint.observability.backup_drill_pass_rate_window_days', 30)),
                 backupDrillMinPassRate: max(0.0, min(100.0, (float) $config->get('checkpoint.observability.backup_drill_min_pass_rate', 100.0))),
@@ -269,7 +265,7 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
         return match ($driver) {
             'shell' => ShellCommandDriver::class,
             'postgres' => PostgresDriver::class,
-            'pgbackrest' => PgBackRestDriver::class,
+            'pgbasebackup' => PgBaseBackupDriver::class,
             'pgdump' => PgDumpDriver::class,
             'mysql' => MysqlDriver::class,
             default => null,

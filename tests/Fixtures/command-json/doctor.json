@@ -41,90 +41,6 @@
       "severity": "info"
     },
     {
-      "code": "config.pgbackrest_stanza",
-      "check": "Config: pgbackrest.stanza",
-      "status": "pass",
-      "notes": "main",
-      "data": {
-        "stanza": "main"
-      },
-      "severity": "info"
-    },
-    {
-      "code": "config.pgbackrest_repo",
-      "check": "Config: pgbackrest.repo",
-      "status": "pass",
-      "notes": "1",
-      "data": {
-        "repository": 1
-      },
-      "severity": "info"
-    },
-    {
-      "code": "config.pgbackrest_repositories",
-      "check": "Config: pgbackrest.repositories",
-      "status": "pass",
-      "notes": "1",
-      "data": {
-        "repository_count": 1
-      },
-      "severity": "info"
-    },
-    {
-      "code": "config.pgbackrest_process_max",
-      "check": "Config: pgbackrest.process_max",
-      "status": "pass",
-      "notes": "2",
-      "data": {
-        "process_max": 2
-      },
-      "severity": "info"
-    },
-    {
-      "code": "repo.pgbackrest_active",
-      "check": "Repo: pgbackrest.active",
-      "status": "pass",
-      "notes": "repo1 (posix)",
-      "data": {
-        "repository": 1,
-        "type": "posix"
-      },
-      "severity": "info"
-    },
-    {
-      "code": "repo.pgbackrest_target",
-      "check": "Repo: pgbackrest.target",
-      "status": "pass",
-      "notes": "/tmp/checkpoint-pgbackrest-repo1",
-      "data": {
-        "type": "posix",
-        "path": "/tmp/checkpoint-pgbackrest-repo1"
-      },
-      "severity": "info"
-    },
-    {
-      "code": "repo.pgbackrest_tls",
-      "check": "Repo: pgbackrest.tls",
-      "status": "pass",
-      "notes": "verify enabled",
-      "data": {
-        "verify": true,
-        "ca_file": null
-      },
-      "severity": "info"
-    },
-    {
-      "code": "repo.pgbackrest_encryption",
-      "check": "Repo: pgbackrest.encryption",
-      "status": "warn",
-      "notes": "disabled",
-      "data": {
-        "enabled": false,
-        "cipher_type": "aes-256-cbc"
-      },
-      "severity": "warning"
-    },
-    {
       "code": "binary.pg_dump",
       "check": "Binary: pg_dump",
       "status": "warn",
@@ -139,12 +55,12 @@
       "severity": "warning"
     },
     {
-      "code": "binary.pgbackrest",
-      "check": "Binary: pgBackRest",
+      "code": "binary.pgbasebackup",
+      "check": "Binary: pg_basebackup",
       "status": "warn",
-      "notes": "pgbackrest not found on PATH",
+      "notes": "pg_basebackup not found on PATH",
       "data": {
-        "binary": "pgbackrest",
+        "binary": "pg_basebackup",
         "required": false,
         "found": false,
         "path": null,
@@ -476,7 +392,7 @@
         "latest": {
           "id": 2,
           "command_run_id": 3,
-          "verification_type": "pgbackrest_check",
+          "verification_type": "physical_backup",
           "status": "failed",
           "verified_at": "2026-03-11 11:57:00"
         },

@@ -18,12 +18,12 @@ final class PostgresDriver implements BackupDriver
 
     private function delegateForOperation(string $operation): BackupDriver
     {
-        if (in_array($operation, ['logical_backup', 'logical_restore_latest', 'logical_restore_file', 'replication_sync'], true)) {
+        if (in_array($operation, ['logical_backup', 'logical_restore_latest', 'logical_restore_file', 'backup_drill', 'replication_sync'], true)) {
             return $this->resolveNamedDriver('pgdump');
         }
 
-        if (str_starts_with($operation, 'pgbackrest_')) {
-            return $this->resolveNamedDriver('pgbackrest');
+        if (str_starts_with($operation, 'physical_')) {
+            return $this->resolveNamedDriver('pgbasebackup');
         }
 
         throw new ConfigurationException(
@@ -61,7 +61,7 @@ final class PostgresDriver implements BackupDriver
     private function defaultNamedDriverClass(string $driver): ?string
     {
         return match ($driver) {
-            'pgbackrest' => PgBackRestDriver::class,
+            'pgbasebackup' => PgBaseBackupDriver::class,
             'pgdump' => PgDumpDriver::class,
             default => null,
         };

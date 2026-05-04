@@ -19,11 +19,11 @@ class VerificationRunFactory extends Factory
     {
         return [
             'command_run_id' => CommandRun::factory(),
-            'verification_type' => fake()->randomElement(['pgbackrest_check', 'pgbackrest_verify']),
+            'verification_type' => fake()->randomElement(['physical_backup', 'physical_backup']),
             'status' => 'verified',
             'verified_at' => now(),
             'metadata' => [
-                'driver' => 'pgbackrest',
+                'driver' => 'pgbasebackup',
             ],
             'error_detail' => null,
         ];

@@ -6,7 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Jobs;
 
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\PgBackRestDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\PgBaseBackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
@@ -145,7 +145,7 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
         return match ($driver) {
             'shell' => ShellCommandDriver::class,
             'postgres' => PostgresDriver::class,
-            'pgbackrest' => PgBackRestDriver::class,
+            'pgbasebackup' => PgBaseBackupDriver::class,
             'pgdump' => PgDumpDriver::class,
             'mysql' => MysqlDriver::class,
             default => null,
@@ -174,7 +174,7 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
 
     private function restoreDecisionEventCount(CommandRun $run): ?int
     {
-        if (! in_array($run->operation, ['logical_restore_latest', 'logical_restore_file', 'pitr_restore', 'pgbackrest_restore'], true)) {
+        if (! in_array($run->operation, ['logical_restore_latest', 'logical_restore_file', 'pitr_restore', 'physical_restore'], true)) {
             return null;
         }
 

@@ -25,11 +25,7 @@ final readonly class HealthCheckComposer
         private string $driver,
         private string $queueName,
         private string $logChannel,
-        private string $pgbackrestStanza,
-        private int $pgbackrestRepo,
-        private array $pgbackrestRepositories,
-        private int $pgbackrestProcessMax,
-        private string $pgbackrestBinary,
+        private string $pgbasebackupBinary,
         private int $orphanThreshold,
         private int $drillWindowDays,
         private float $backupDrillMinPassRate,
@@ -71,22 +67,6 @@ final readonly class HealthCheckComposer
             $this->checkRow('config.log_channel', 'Config: log_channel', 'pass', $this->logChannel, [
                 'log_channel' => $this->logChannel,
             ]),
-            $this->checkRow('config.pgbackrest_stanza', 'Config: pgbackrest.stanza', 'pass', $this->pgbackrestStanza, [
-                'stanza' => $this->pgbackrestStanza,
-            ]),
-            $this->checkRow('config.pgbackrest_repo', 'Config: pgbackrest.repo', 'pass', (string) $this->pgbackrestRepo, [
-                'repository' => $this->pgbackrestRepo,
-            ]),
-            $this->checkRow('config.pgbackrest_repositories', 'Config: pgbackrest.repositories', 'pass', (string) count($this->pgbackrestRepositories), [
-                'repository_count' => count($this->pgbackrestRepositories),
-            ]),
-            $this->checkRow('config.pgbackrest_process_max', 'Config: pgbackrest.process_max', 'pass', (string) $this->pgbackrestProcessMax, [
-                'process_max' => $this->pgbackrestProcessMax,
-            ]),
-            $this->selectedPgBackRestRepositoryRow(),
-            $this->selectedPgBackRestTargetRow(),
-            $this->selectedPgBackRestTlsRow(),
-            $this->selectedPgBackRestEncryptionRow(),
             $this->configuredBinaryRow(
                 code: 'binary.pg_dump',
                 label: 'Binary: pg_dump',
@@ -98,13 +78,13 @@ final readonly class HealthCheckComposer
                 includeRemediation: false,
             ),
             $this->configuredBinaryRow(
-                code: 'binary.pgbackrest',
-                label: 'Binary: pgBackRest',
-                binary: $this->pgbackrestBinary,
-                configPath: 'checkpoint.drivers.pgbackrest.binary',
-                envKey: 'CP_PGBACKREST_BINARY',
+                code: 'binary.pgbasebackup',
+                label: 'Binary: pg_basebackup',
+                binary: $this->pgbasebackupBinary,
+                configPath: 'checkpoint.drivers.pgbasebackup.binary',
+                envKey: 'CP_PGBASEBACKUP_BINARY',
                 driver: $this->driver,
-                required: $this->driver === 'pgbackrest',
+                required: false,
                 includeRemediation: false,
             ),
             $this->configuredBinaryRow(
@@ -697,108 +677,16 @@ final readonly class HealthCheckComposer
     /**
      * @return array<int|string, mixed>
      */
-    private function pgBackRestRepositories(): array
-    {
-        return $this->pgbackrestRepositories;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function selectedPgBackRestRepository(): array
-    {
-        $repository = $this->pgbackrestRepositories[$this->pgbackrestRepo] ?? [];
-
-        return is_array($repository) ? $repository : [];
-    }
-
-    /**
-     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
-     */
-    private function selectedPgBackRestRepositoryRow(): array
-    {
-        $type = (string) ($this->selectedPgBackRestRepository()['type'] ?? 'unknown');
-
-        return $this->checkRow('repo.pgbackrest_active', 'Repo: pgbackrest.active', 'pass', sprintf('repo%d (%s)', $this->pgbackrestRepo, $type), [
-            'repository' => $this->pgbackrestRepo,
-            'type' => $type,
-        ]);
-    }
-
-    /**
-     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
-     */
-    private function selectedPgBackRestTargetRow(): array
-    {
-        $repository = $this->selectedPgBackRestRepository();
-        $type = (string) ($repository['type'] ?? 'unknown');
-
-        if ($type === 's3') {
-            $s3 = is_array($repository['s3'] ?? null) ? $repository['s3'] : [];
-
-            return $this->checkRow('repo.pgbackrest_target', 'Repo: pgbackrest.target', 'pass', sprintf('s3://%s via %s', (string) ($s3['bucket'] ?? '-'), (string) ($s3['endpoint'] ?? '-')), [
-                'type' => 's3',
-                'bucket' => (string) ($s3['bucket'] ?? '-'),
-                'endpoint' => (string) ($s3['endpoint'] ?? '-'),
-            ]);
-        }
-
-        return $this->checkRow('repo.pgbackrest_target', 'Repo: pgbackrest.target', 'pass', (string) ($repository['path'] ?? '-'), [
-            'type' => $type,
-            'path' => (string) ($repository['path'] ?? '-'),
-        ]);
-    }
-
-    /**
-     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
-     */
-    private function selectedPgBackRestTlsRow(): array
-    {
-        $tls = $this->selectedPgBackRestRepository()['tls'] ?? [];
-        $tls = is_array($tls) ? $tls : [];
-        $verify = (bool) ($tls['verify'] ?? true);
-        $caFile = $tls['ca_file'] ?? null;
-        $notes = $verify ? 'verify enabled' : 'verify disabled';
-
-        if (is_string($caFile) && trim($caFile) !== '') {
-            $notes .= sprintf(' (ca: %s)', $caFile);
-        }
-
-        return $this->checkRow('repo.pgbackrest_tls', 'Repo: pgbackrest.tls', $verify ? 'pass' : 'warn', $notes, [
-            'verify' => $verify,
-            'ca_file' => is_string($caFile) && trim($caFile) !== '' ? $caFile : null,
-        ]);
-    }
-
-    /**
-     * @return array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}
-     */
-    private function selectedPgBackRestEncryptionRow(): array
-    {
-        $encryption = $this->selectedPgBackRestRepository()['encryption'] ?? [];
-        $encryption = is_array($encryption) ? $encryption : [];
-        $enabled = (bool) ($encryption['enabled'] ?? false);
-        $cipherType = (string) ($encryption['cipher_type'] ?? 'unknown');
-
-        return $this->checkRow('repo.pgbackrest_encryption', 'Repo: pgbackrest.encryption', $enabled ? 'pass' : 'warn', $enabled ? sprintf('enabled (%s)', $cipherType) : 'disabled', [
-            'enabled' => $enabled,
-            'cipher_type' => $cipherType,
-        ]);
-    }
-
-    /**
-     * @return list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>
-     */
     private function activeDriverBinaryChecks(): array
     {
         return match ($this->driver) {
             'postgres' => [
                 $this->configuredBinaryRow(
-                    code: 'driver.binary.postgres.pgbackrest',
-                    label: 'Driver binary: pgbackrest',
-                    binary: $this->pgbackrestBinary,
-                    configPath: 'checkpoint.drivers.pgbackrest.binary',
-                    envKey: 'CP_PGBACKREST_BINARY',
+                    code: 'driver.binary.postgres.pgbasebackup',
+                    label: 'Driver binary: pg_basebackup',
+                    binary: $this->pgbasebackupBinary,
+                    configPath: 'checkpoint.drivers.pgbasebackup.binary',
+                    envKey: 'CP_PGBASEBACKUP_BINARY',
                     driver: $this->driver,
                 ),
                 $this->configuredBinaryRow(
@@ -818,13 +706,13 @@ final readonly class HealthCheckComposer
                     driver: $this->driver,
                 ),
             ],
-            'pgbackrest' => [
+            'pgbasebackup' => [
                 $this->configuredBinaryRow(
-                    code: 'driver.binary.pgbackrest',
-                    label: 'Driver binary: pgbackrest',
-                    binary: $this->pgbackrestBinary,
-                    configPath: 'checkpoint.drivers.pgbackrest.binary',
-                    envKey: 'CP_PGBACKREST_BINARY',
+                    code: 'driver.binary.pgbasebackup',
+                    label: 'Driver binary: pg_basebackup',
+                    binary: $this->pgbasebackupBinary,
+                    configPath: 'checkpoint.drivers.pgbasebackup.binary',
+                    envKey: 'CP_PGBASEBACKUP_BINARY',
                     driver: $this->driver,
                 ),
             ],

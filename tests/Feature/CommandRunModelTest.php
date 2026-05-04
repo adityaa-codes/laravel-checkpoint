@@ -91,25 +91,25 @@ it('denormalizes hot operator fields from metadata payloads', function (): void 
 
     $run->recordMetadata([
         'metadata' => [
-            'driver' => 'pgbackrest',
+            'driver' => 'pgbasebackup',
             'restore_audit' => [
                 'confirmation_satisfied_via' => 'token',
                 'verified_signal_run_id' => 42,
                 'post_restore_verification' => [
                     'aggregate_result' => 'pass',
                 ],
-                'verified_signal_operation' => 'pgbackrest_info',
+                'verified_signal_operation' => 'physical_backup',
             ],
         ],
     ]);
 
     $run->refresh();
 
-    expect($run->driver_name)->toBe('pgbackrest')
+    expect($run->driver_name)->toBe('pgbasebackup')
         ->and($run->restore_confirmation_satisfied_via)->toBe('token')
         ->and($run->restore_verified_signal_run_id)->toBe(42)
         ->and($run->restore_post_verification_result)->toBe('pass')
-        ->and($run->resolvedDriverName('shell'))->toBe('pgbackrest')
+        ->and($run->resolvedDriverName('shell'))->toBe('pgbasebackup')
         ->and($run->restoreAuditSummary())->toBe([
             'confirmation_satisfied_via' => 'token',
             'verified_signal_run_id' => 42,
@@ -121,14 +121,14 @@ it('denormalizes hot operator fields from metadata payloads', function (): void 
 
 it('persists verification rows from verification metadata transitions', function (): void {
     $run = CommandRun::factory()->pending()->create([
-        'operation' => 'pgbackrest_verify',
+        'operation' => 'physical_backup',
     ]);
 
     $run->recordMetadata([
         'verification_state' => 'verified',
         'verified_at' => Date::now(),
         'metadata' => [
-            'driver' => 'pgbackrest',
+            'driver' => 'pgbasebackup',
             'summary' => ['ok' => true],
         ],
     ]);
@@ -136,19 +136,19 @@ it('persists verification rows from verification metadata transitions', function
     $verification = VerificationRun::query()->first();
 
     expect($verification)->not->toBeNull()
-        ->and($verification?->verification_type)->toBe('pgbackrest_verify')
+        ->and($verification?->verification_type)->toBe('physical_backup')
         ->and($verification?->status)->toBe('verified')
         ->and($run->fresh()?->verificationRuns()->count())->toBe(1);
 });
 
 it('clears denormalized operator fields when metadata no longer carries them', function (): void {
     $run = CommandRun::factory()->pending()->create([
-        'driver_name' => 'pgbackrest',
+        'driver_name' => 'pgbasebackup',
         'restore_confirmation_satisfied_via' => 'token',
         'restore_verified_signal_run_id' => 42,
         'restore_post_verification_result' => 'pass',
         'metadata' => [
-            'driver' => 'pgbackrest',
+            'driver' => 'pgbasebackup',
             'restore_audit' => [
                 'confirmation_satisfied_via' => 'token',
                 'verified_signal_run_id' => 42,

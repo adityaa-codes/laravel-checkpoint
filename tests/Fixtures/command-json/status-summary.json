@@ -7,12 +7,12 @@
     "last_known_good_backup": {
       "label": "full:20260311-010101F at 2026-03-11 11:50:00",
       "timestamp": "2026-03-11 11:50:00",
-      "operation": "pgbackrest_backup_full"
+      "operation": "physical_backup"
     },
     "latest_verified_backup": {
       "label": "full:20260311-010101F at 2026-03-11 11:55:00",
       "timestamp": "2026-03-11 11:55:00",
-      "operation": "pgbackrest_backup_full"
+      "operation": "physical_backup"
     },
     "latest_backup_drill": {
       "label": "drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00",

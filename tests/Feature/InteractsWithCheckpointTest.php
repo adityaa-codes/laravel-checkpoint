@@ -39,7 +39,7 @@ it('asserts queued and failed backup events through the testing trait', function
     event(new BackupFailed($failedRun, 1, 'failed'));
 
     $this->assertBackupQueued('logical_restore_file', 'nightly.sql')
-        ->assertBackupNotQueued('pgbackrest_info')
+        ->assertBackupNotQueued('physical_backup')
         ->assertBackupFailed('logical_backup');
 });
 
