@@ -845,30 +845,10 @@ final readonly class ConfigValidator
 
     private function validateRetentionSettings(): void
     {
-        $config = $this->config->get('checkpoint.cleanup', []);
+        $days = $this->config->get('checkpoint.retention_days', 30);
 
-        if (! is_array($config)) {
-            throw new ConfigurationException('checkpoint.cleanup must be an array.');
-        }
-
-        $keys = [
-            'keep_all_backups_for_days',
-            'keep_daily_backups_for_days',
-            'keep_weekly_backups_for_weeks',
-            'keep_monthly_backups_for_months',
-            'keep_yearly_backups_for_years',
-        ];
-
-        foreach ($keys as $key) {
-            if (array_key_exists($key, $config) && (! is_int($config[$key]) || $config[$key] < 0)) {
-                throw new ConfigurationException(sprintf('checkpoint.cleanup.%s must be zero or greater.', $key));
-            }
-        }
-
-        $maxMb = $config['delete_oldest_when_using_more_megabytes_than'] ?? null;
-
-        if ($maxMb !== null && (! is_int($maxMb) || $maxMb < 0)) {
-            throw new ConfigurationException('checkpoint.cleanup.delete_oldest_when_using_more_megabytes_than must be null or zero or greater.');
+        if (! is_int($days) || $days < 0) {
+            throw new ConfigurationException('checkpoint.retention_days must be zero or greater.');
         }
     }
 

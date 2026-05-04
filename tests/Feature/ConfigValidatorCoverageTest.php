@@ -204,10 +204,16 @@ it('rejects a non-positive backup drill prune retention', function (): void {
 });
 
 it('rejects negative retention values', function (): void {
-    config()->set('checkpoint.cleanup.keep_all_backups_for_days', -1);
+    config()->set('checkpoint.retention_days', -1);
 
     expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.cleanup.keep_all_backups_for_days must be zero or greater.');
+        ->toThrow(ConfigurationException::class, 'checkpoint.retention_days must be zero or greater.');
+});
+
+it('accepts valid retention configuration', function (): void {
+    config()->set('checkpoint.retention_days', 30);
+
+    expect(fn () => resolve(ConfigValidator::class)->validate())->not->toThrow(ConfigurationException::class);
 });
 
 it('accepts valid GFS retention configuration', function (): void {

@@ -25,7 +25,7 @@ final readonly class BackupArtifactUploader
             return [];
         }
 
-        $encryption = (bool) config('checkpoint.encryption.enabled', false);
+        $encrypt = (bool) config('checkpoint.encryption.enabled', false);
         $timestamp = now()->format('Ymd_His');
         $results = [];
 
@@ -33,14 +33,13 @@ final readonly class BackupArtifactUploader
             $filesystem = Storage::disk($disk);
 
             if (is_dir($localPath)) {
-                $results[] = $this->uploadDirectory($filesystem, $localPath, $disk, 'checkpoint-basebackups/'.$timestamp, $encryption);
+                $results[] = $this->uploadDirectory($filesystem, $localPath, $disk, 'checkpoint-basebackups/'.$timestamp, $encrypt);
             } else {
                 $remotePath = 'checkpoint-exports/'.$timestamp.'_'.basename($localPath);
-                $results[] = $this->uploadFile($filesystem, $localPath, $disk, $remotePath, $encryption);
+                $results[] = $this->uploadFile($filesystem, $localPath, $disk, $remotePath, $encrypt);
             }
         }
 
-        File::delete(is_dir($localPath) ? $localPath : $localPath);
         is_file($localPath) && File::delete($localPath);
         is_dir($localPath) && File::deleteDirectory($localPath);
 
@@ -58,25 +57,19 @@ final readonly class BackupArtifactUploader
             throw new RuntimeException(sprintf('Cannot open backup artifact [%s] for streaming.', $localPath));
         }
 
-        try {
-            if ($encrypt) {
-                $encryptedStream = $this->encryptStream($stream);
-                $filesystem->writeStream($remotePath.'.enc', $encryptedStream);
-                fclose($encryptedStream);
-            } else {
-                $filesystem->writeStream($remotePath, $stream);
-            }
-        } finally {
-            fclose($stream);
-        }
-
         $finalPath = $encrypt ? $remotePath.'.enc' : $remotePath;
 
-        return [
-            'disk' => $disk,
-            'path' => $finalPath,
-            'encrypted' => $encrypt,
-        ];
+        if ($encrypt) {
+            $encryptedStream = $this->encryptStream($stream);
+            $filesystem->writeStream($finalPath, $encryptedStream);
+            fclose($encryptedStream);
+        } else {
+            $filesystem->writeStream($finalPath, $stream);
+        }
+
+        fclose($stream);
+
+        return ['disk' => $disk, 'path' => $finalPath, 'encrypted' => $encrypt];
     }
 
     /**
@@ -85,36 +78,30 @@ final readonly class BackupArtifactUploader
     private function uploadDirectory($filesystem, string $localDir, string $disk, string $remotePath, bool $encrypt): array
     {
         $files = File::allFiles($localDir);
+        $count = 0;
 
         foreach ($files as $file) {
-            $relativePath = $file->getRelativePathname();
             $stream = fopen($file->getRealPath(), 'r');
 
             if ($stream === false) {
                 continue;
             }
 
-            try {
-                $targetPath = $remotePath.'/'.$relativePath;
+            $targetPath = $remotePath.'/'.$file->getRelativePathname();
 
-                if ($encrypt) {
-                    $encryptedStream = $this->encryptStream($stream);
-                    $filesystem->writeStream($targetPath.'.enc', $encryptedStream);
-                    fclose($encryptedStream);
-                } else {
-                    $filesystem->writeStream($targetPath, $stream);
-                }
-            } finally {
-                fclose($stream);
+            if ($encrypt) {
+                $encryptedStream = $this->encryptStream($stream);
+                $filesystem->writeStream($targetPath.'.enc', $encryptedStream);
+                fclose($encryptedStream);
+            } else {
+                $filesystem->writeStream($targetPath, $stream);
             }
+
+            fclose($stream);
+            $count++;
         }
 
-        return [
-            'disk' => $disk,
-            'path' => $remotePath,
-            'encrypted' => $encrypt,
-            'files' => count($files),
-        ];
+        return ['disk' => $disk, 'path' => $remotePath, 'encrypted' => $encrypt, 'files' => $count];
     }
 
     /**
@@ -123,7 +110,17 @@ final readonly class BackupArtifactUploader
      */
     private function encryptStream($stream)
     {
-        $key = $this->encryptionKey();
+        $appKey = (string) config('app.key', '');
+
+        if ($appKey === '') {
+            throw new RuntimeException('APP_KEY must be set to enable backup encryption.');
+        }
+
+        $key = substr($appKey, 0, 7) === 'base64:'
+            ? base64_decode(substr($appKey, 7))
+            : $appKey;
+
+        $encryptionKey = hash('sha256', $key, true);
         $iv = random_bytes(16);
         $encrypted = fopen('php://temp', 'w+b');
 
@@ -136,26 +133,11 @@ final readonly class BackupArtifactUploader
                 break;
             }
 
-            fwrite($encrypted, openssl_encrypt($chunk, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv));
+            fwrite($encrypted, openssl_encrypt($chunk, 'aes-256-cbc', $encryptionKey, OPENSSL_RAW_DATA, $iv));
         }
 
         rewind($encrypted);
 
         return $encrypted;
-    }
-
-    private function encryptionKey(): string
-    {
-        $appKey = (string) config('app.key', '');
-
-        if ($appKey === '') {
-            throw new RuntimeException('APP_KEY must be set to enable backup encryption.');
-        }
-
-        $key = substr($appKey, 0, 7) === 'base64:'
-            ? base64_decode(substr($appKey, 7))
-            : $appKey;
-
-        return hash('sha256', $key, true);
     }
 }

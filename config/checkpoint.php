@@ -47,16 +47,29 @@ return [
     |
     | Laravel filesystem disks where backups are streamed after creation.
     | Backups are created on local storage first (for speed), then uploaded
-    | to ALL configured disks simultaneously. Local files are cleaned up
-    | after successful upload.
+    | to ALL configured disks. Local files are cleaned up after upload.
     |
-    | Use any disk defined in config/filesystems.php — local, s3, spaces,
-    | gcs, sftp, etc. Set to an empty array to keep backups local only.
+    | Use any disk from config/filesystems.php — local, s3, spaces, gcs.
+    | Set to an empty array to keep backups local only.
     |
     */
     'destination' => [
         'disks' => [],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cleanup / Retention
+    |--------------------------------------------------------------------------
+    |
+    | Number of days to retain successful backups. Failed backups are kept
+    | for 365 days regardless. The newest backup is always retained.
+    |
+    | Pruning runs weekly via the scheduler. Run checkpoint:prune manually
+    | to trigger immediate cleanup.
+    |
+    */
+    'retention_days' => 30,
 
     /*
     |--------------------------------------------------------------------------

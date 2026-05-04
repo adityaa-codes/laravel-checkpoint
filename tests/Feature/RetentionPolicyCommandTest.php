@@ -11,13 +11,7 @@ use Illuminate\Support\Facades\Storage;
 it('evaluates retention policy in dry-run mode with tiered windows', function (): void {
     Date::setTestNow('2026-03-11 12:00:00');
 
-    config()->set('checkpoint.cleanup', [
-        'keep_all_backups_for_days' => 7,
-        'keep_daily_backups_for_days' => 16,
-        'keep_weekly_backups_for_weeks' => 8,
-        'keep_monthly_backups_for_months' => 4,
-        'keep_yearly_backups_for_years' => 2,
-    ]);
+    config()->set('checkpoint.retention_days', 7);
 
     CommandRun::query()->create([
         'operation' => 'logical_backup',
@@ -54,9 +48,9 @@ it('evaluates retention policy in dry-run mode with tiered windows', function ()
         ->and($payload['version'])->toBe(1)
         ->and($payload['mode'])->toBe('dry_run')
         ->and($payload['retention_enabled'])->toBeTrue()
-        ->and($payload['totals']['eligible'])->toBe(1)
+        ->and($payload['totals']['eligible'])->toBe(3)
         ->and($payload['totals']['deleted'])->toBe(0)
-        ->and($payload['by_policy'])->toHaveKeys(['failed']);
+        ->and($payload['by_policy'])->toHaveKeys(['retention', 'failed']);
 
     Date::setTestNow();
 });
@@ -68,13 +62,7 @@ it('applies retention policy and prunes matching rows and externalized output', 
     config()->set('checkpoint.output.storage', 'filesystem');
     config()->set('checkpoint.output.filesystem.disk', 'local');
     config()->set('checkpoint.output.filesystem.path_prefix', 'checkpoint/retention-policy');
-    config()->set('checkpoint.cleanup', [
-        'keep_all_backups_for_days' => 7,
-        'keep_daily_backups_for_days' => 0,
-        'keep_weekly_backups_for_weeks' => 0,
-        'keep_monthly_backups_for_months' => 0,
-        'keep_yearly_backups_for_years' => 0,
-    ]);
+    config()->set('checkpoint.retention_days', 7);
 
     $prunable = CommandRun::query()->create([
         'operation' => 'logical_backup',

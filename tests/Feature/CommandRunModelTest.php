@@ -283,13 +283,7 @@ it('records heartbeats only when due for running runs', function (): void {
 });
 
 it('selects prunable records using the configured retention windows', function (): void {
-    config()->set('checkpoint.cleanup', [
-        'keep_all_backups_for_days' => 1,
-        'keep_daily_backups_for_days' => 0,
-        'keep_weekly_backups_for_weeks' => 0,
-        'keep_monthly_backups_for_months' => 0,
-        'keep_yearly_backups_for_years' => 0,
-    ]);
+    config()->set('checkpoint.retention_days', 1);
 
     $prunableSucceeded = CommandRun::factory()->succeeded()->create([
         'created_at' => Date::now()->subDays(45),
@@ -330,13 +324,7 @@ it('prunes externalized command output artifacts with the command run rows', fun
     config()->set('checkpoint.output.storage', 'filesystem');
     config()->set('checkpoint.output.filesystem.disk', 'local');
     config()->set('checkpoint.output.filesystem.path_prefix', 'checkpoint/pruned-output');
-    config()->set('checkpoint.cleanup', [
-        'keep_all_backups_for_days' => 1,
-        'keep_daily_backups_for_days' => 0,
-        'keep_weekly_backups_for_weeks' => 0,
-        'keep_monthly_backups_for_months' => 0,
-        'keep_yearly_backups_for_years' => 0,
-    ]);
+    config()->set('checkpoint.retention_days', 1);
 
     $prunable = CommandRun::factory()->succeeded()->create([
         'created_at' => Date::now()->subDays(45),
