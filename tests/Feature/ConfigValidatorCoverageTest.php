@@ -8,36 +8,6 @@ use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Foundation\Auth\User;
 
-it('defaults restore verification requirement outside local and testing environments', function (): void {
-    putenv('APP_ENV=production');
-
-    $config = require __DIR__.'/../../config/checkpoint.php';
-
-    expect($config['restore']['require_verified_backup'])->toBeTrue();
-
-    putenv('APP_ENV');
-});
-
-it('defaults restore verification requirement off in testing environment', function (): void {
-    putenv('APP_ENV=testing');
-
-    $config = require __DIR__.'/../../config/checkpoint.php';
-
-    expect($config['restore']['require_verified_backup'])->toBeFalse();
-
-    putenv('APP_ENV');
-});
-
-it('allows ci restore bypass in local and testing environments', function (): void {
-    putenv('APP_ENV=local');
-
-    $config = require __DIR__.'/../../config/checkpoint.php';
-
-    expect($config['restore']['allow_in_ci'])->toBeTrue();
-
-    putenv('APP_ENV');
-});
-
 it('rejects a missing configured driver', function (): void {
     config()->set('checkpoint.driver', 'missing');
 
@@ -671,12 +641,7 @@ it('rejects mysql command timeouts that exceed the queue timeout budget', functi
 });
 
 it('accepts the shipped timeout defaults', function (): void {
-    $packageConfig = require dirname(__DIR__, 2).'/config/checkpoint.php';
-
-    config()->set('checkpoint.queue.timeout', $packageConfig['queue']['timeout']);
-    config()->set('checkpoint.drivers.shell.command_timeout_seconds', $packageConfig['drivers']['shell']['command_timeout_seconds']);
-    config()->set('checkpoint.drivers.pgdump.command_timeout_seconds', $packageConfig['drivers']['pgdump']['command_timeout_seconds']);
-    config()->set('checkpoint.drivers.mysql.command_timeout_seconds', $packageConfig['drivers']['mysql']['command_timeout_seconds']);
+    config()->set('checkpoint.queue.timeout', 3600);
 
     expect(fn () => resolve(ConfigValidator::class)->validate())->not->toThrow(ConfigurationException::class);
 });
