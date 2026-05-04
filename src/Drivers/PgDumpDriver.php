@@ -1313,23 +1313,17 @@ final class PgDumpDriver implements BackupDriver
 
     private function uploadArtifact(CommandRun $run): void
     {
-        $disk = (string) config('checkpoint.disk', '');
-
-        if ($disk === '') {
-            return;
-        }
-
         $format = trim((string) config('checkpoint.drivers.pgdump.format', 'directory'));
         $artifactPath = $format === 'directory'
             ? $this->outputDir().'/'.$this->outputPrefix().'-'.$run->getKey()
             : $this->outputDir().'/'.$this->outputPrefix().'-'.$run->getKey().'.'.$this->fileExtension();
 
-        $uploadMetadata = (new BackupArtifactUploader)->upload($artifactPath, $disk, 'checkpoint/logical-exports');
+        $results = (new BackupArtifactUploader)->upload($artifactPath);
 
-        if ($uploadMetadata !== null) {
+        if ($results !== []) {
             $run->recordMetadata([
                 'metadata' => [
-                    'upload' => $uploadMetadata,
+                    'uploads' => $results,
                 ],
             ]);
         }

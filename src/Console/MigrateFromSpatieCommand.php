@@ -57,7 +57,7 @@ final class MigrateFromSpatieCommand extends Command
         'backup_disk' => ['config_path' => 'checkpoint.output.filesystem.disk', 'default' => '', 'label' => 'Output filesystem disk'],
         'backup_dir' => ['config_path' => 'checkpoint.drivers.shell.backup_dir', 'default' => '', 'label' => 'Backup destination directory'],
         'schedule_time' => ['config_path' => 'checkpoint.schedule.logical_backup_daily_at', 'default' => '', 'label' => 'Scheduled backup time'],
-        'retention_default_days' => ['config_path' => 'checkpoint.retention.default_days', 'default' => '', 'label' => 'Default retention (days)'],
+        'retention_default_days' => ['config_path' => 'checkpoint.cleanup.keep_all_backups_for_days', 'default' => '', 'label' => 'Keep all backups (days)'],
     ];
 
     /**
@@ -216,7 +216,7 @@ final class MigrateFromSpatieCommand extends Command
 
         if (is_int($retentionDays) && $retentionDays > 0) {
             $mapped['retention_hot_days'] = [
-                'config_path' => 'checkpoint.retention.tiers.hot',
+                'config_path' => 'checkpoint.cleanup.keep_all_backups_for_days',
                 'value' => (string) $retentionDays,
                 'label' => self::ENV_MAP['retention_hot_days']['label'],
             ];
@@ -237,7 +237,7 @@ final class MigrateFromSpatieCommand extends Command
 
         if ($longestRetention > 0) {
             $mapped['retention_default_days'] = [
-                'config_path' => 'checkpoint.retention.default_days',
+                'config_path' => 'checkpoint.cleanup.keep_all_backups_for_days',
                 'value' => (string) $longestRetention,
                 'label' => self::ENV_MAP['retention_default_days']['label'],
             ];

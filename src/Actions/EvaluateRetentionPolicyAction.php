@@ -25,25 +25,13 @@ final readonly class EvaluateRetentionPolicyAction
      */
     public function execute(int $limit = 100): array
     {
-        if (! $this->retentionEnabled()) {
-            return [
-                'totals' => [
-                    'eligible' => 0,
-                    'command_runs' => 0,
-                    'externalized_output' => 0,
-                ],
-                'by_policy' => [],
-                'sample' => [],
-            ];
-        }
-
         $now = now();
         $runs = CommandRun::query()
             ->select(['id', 'operation', 'status', 'created_at', 'metadata'])
             ->whereNotNull('created_at')
-            ->where(function (\Illuminate\Contracts\Database\Query\Builder $query) use ($now): void {
+            ->where(function (Builder $query) use ($now): void {
                 $this->applyEligibleRetentionPredicate($query, $now);
-            })->oldest()
+            })->latest()
             ->orderBy('id')
             ->limit(max(1, $limit * 3))
             ->get();
@@ -64,14 +52,14 @@ final readonly class EvaluateRetentionPolicyAction
                 continue;
             }
 
-            $ageDays = max(0, $run->created_at->diffInDays($now));
+            $ageDays = max(0, (int) $run->created_at->diffInDays($now));
 
             $sample[] = [
                 'id' => (int) $run->getKey(),
                 'operation' => (string) $run->operation,
                 'status' => $run->status->value,
                 'created_at' => $run->created_at->format('Y-m-d H:i:s'),
-                'age_days' => (int) $ageDays,
+                'age_days' => $ageDays,
                 'policy' => $decision['policy'],
                 'keep_days' => $decision['keep_days'],
                 'reason' => $decision['reason'],
@@ -81,15 +69,9 @@ final readonly class EvaluateRetentionPolicyAction
                 $externalizedOutput++;
             }
 
-            if (! array_key_exists($decision['policy'], $byPolicy)) {
-                $byPolicy[$decision['policy']] = [
-                    'label' => $decision['reason'],
-                    'keep_days' => $decision['keep_days'],
-                    'count' => 0,
-                ];
-            }
-
-            $byPolicy[$decision['policy']]['count']++;
+            $key = $decision['policy'];
+            $byPolicy[$key] ??= ['label' => $decision['reason'], 'keep_days' => $decision['keep_days'], 'count' => 0];
+            $byPolicy[$key]['count']++;
 
             if (count($sample) >= $limit) {
                 break;
@@ -109,14 +91,14 @@ final readonly class EvaluateRetentionPolicyAction
 
     public function retentionEnabled(): bool
     {
-        return (bool) $this->config->get('checkpoint.retention.enabled', true);
+        $config = $this->config->get('checkpoint.cleanup', []);
+
+        return is_array($config) && $config !== [];
     }
 
     public function keepDaysForRun(CommandRun $run): int
     {
-        $decision = $this->decisionForRun($run);
-
-        return $decision['keep_days'];
+        return $this->decisionForRun($run)['keep_days'];
     }
 
     /**
@@ -124,32 +106,41 @@ final readonly class EvaluateRetentionPolicyAction
      */
     public function applyEligibleRetentionPredicate(Builder $query, Carbon $now): void
     {
-        $query->where(function (Builder $where) use ($now): void {
-            $where->where(function (Builder $failed) use ($now): void {
+        $failedCutoff = $now->copy()->subDays(365);
+
+        $query->where(function (Builder $where) use ($now, $failedCutoff): void {
+            $where->where(function (Builder $failed) use ($failedCutoff): void {
                 $failed
                     ->where('status', CommandRunStatus::Failed)
-                    ->where('created_at', '<=', $now->copy()->subDays($this->failedDays()));
+                    ->where('created_at', '<=', $failedCutoff);
             });
 
-            $candidateNonFailedDays = $this->candidateNonFailedDays();
-            $defaultCutoff = $now->copy()->subDays($candidateNonFailedDays);
+            $gfsDays = $this->gfsTotalDays();
+            $defaultCutoff = $now->copy()->subDays($gfsDays);
 
             $where->orWhere(function (Builder $others) use ($defaultCutoff): void {
                 $others
-                    ->whereIn('status', [
-                        CommandRunStatus::Succeeded,
-                        CommandRunStatus::Cancelled,
-                    ])
+                    ->whereIn('status', [CommandRunStatus::Succeeded, CommandRunStatus::Cancelled])
                     ->where('created_at', '<=', $defaultCutoff);
             });
         });
     }
 
-    public function candidateNonFailedDays(): int
+    public function gfsTotalDays(): int
     {
-        $days = [$this->defaultDays(), ...array_values($this->tierDays())];
+        $config = $this->config->get('checkpoint.cleanup', []);
 
-        return max(1, min($days));
+        if (! is_array($config)) {
+            return 90;
+        }
+
+        $keepAll = max(1, (int) ($config['keep_all_backups_for_days'] ?? 7));
+        $keepDaily = max(0, (int) ($config['keep_daily_backups_for_days'] ?? 16));
+        $keepWeekly = max(0, (int) ($config['keep_weekly_backups_for_weeks'] ?? 8));
+        $keepMonthly = max(0, (int) ($config['keep_monthly_backups_for_months'] ?? 4));
+        $keepYearly = max(0, (int) ($config['keep_yearly_backups_for_years'] ?? 2));
+
+        return $keepAll + $keepDaily + ($keepWeekly * 7) + ($keepMonthly * 30) + ($keepYearly * 365);
     }
 
     /**
@@ -160,90 +151,58 @@ final readonly class EvaluateRetentionPolicyAction
         if ($run->status === CommandRunStatus::Failed) {
             return [
                 'policy' => 'failed',
-                'keep_days' => $this->failedDays(),
-                'reason' => 'failed runs retention policy',
+                'keep_days' => 365,
+                'reason' => 'Failed runs: 365 days retention',
             ];
         }
 
-        $tier = $this->storageTier($run);
-        $tiers = $this->tierDays();
+        $config = $this->config->get('checkpoint.cleanup', []);
+        $keepAll = max(1, (int) ($config['keep_all_backups_for_days'] ?? 7));
+        $keepDaily = max(0, (int) ($config['keep_daily_backups_for_days'] ?? 16));
+        $keepWeekly = max(0, (int) ($config['keep_weekly_backups_for_weeks'] ?? 8));
+        $keepMonthly = max(0, (int) ($config['keep_monthly_backups_for_months'] ?? 4));
+        $keepYearly = max(0, (int) ($config['keep_yearly_backups_for_years'] ?? 2));
 
-        if ($tier !== null && array_key_exists($tier, $tiers)) {
+        $totalDays = $this->gfsTotalDays();
+        $age = max(0, (int) $run->created_at?->diffInDays(now()));
+
+        if ($age <= $keepAll) {
             return [
-                'policy' => 'tier:'.$tier,
-                'keep_days' => $tiers[$tier],
-                'reason' => sprintf('tiered retention policy for %s storage', $tier),
+                'policy' => 'keep_all',
+                'keep_days' => $keepAll,
+                'reason' => sprintf('Keep all backups (%d days)', $keepAll),
+            ];
+        }
+
+        if ($age <= $keepAll + $keepDaily) {
+            return [
+                'policy' => 'keep_daily',
+                'keep_days' => $keepAll + $keepDaily,
+                'reason' => sprintf('Keep daily backups (%d days)', $keepAll + $keepDaily),
+            ];
+        }
+
+        if ($age <= $keepAll + $keepDaily + ($keepWeekly * 7)) {
+            return [
+                'policy' => 'keep_weekly',
+                'keep_days' => $keepAll + $keepDaily + ($keepWeekly * 7),
+                'reason' => sprintf('Keep weekly backups (%d days)', $keepAll + $keepDaily + ($keepWeekly * 7)),
+            ];
+        }
+
+        if ($age <= $totalDays) {
+            return [
+                'policy' => 'keep_monthly',
+                'keep_days' => $totalDays,
+                'reason' => sprintf('Keep monthly/yearly backups (%d days)', $totalDays),
             ];
         }
 
         return [
-            'policy' => 'default',
-            'keep_days' => $this->defaultDays(),
-            'reason' => 'default retention policy',
+            'policy' => 'expired',
+            'keep_days' => 0,
+            'reason' => sprintf('Expired — beyond %d day retention window', $totalDays),
         ];
-    }
-
-    private function failedDays(): int
-    {
-        return max(1, (int) $this->config->get('checkpoint.retention.failed_days', 365));
-    }
-
-    private function defaultDays(): int
-    {
-        return max(1, (int) $this->config->get('checkpoint.retention.default_days', 90));
-    }
-
-    /**
-     * @return array<string,int>
-     */
-    private function tierDays(): array
-    {
-        $configured = $this->config->get('checkpoint.retention.tiers', []);
-
-        if (! is_array($configured)) {
-            return [];
-        }
-
-        $tiers = [];
-
-        foreach ($configured as $tier => $days) {
-            if (! is_string($tier)) {
-                continue;
-            }
-
-            $normalizedTier = strtolower(trim($tier));
-            if ($normalizedTier === '') {
-                continue;
-            }
-            if (! preg_match('/^[a-z][a-z0-9_-]*$/', $normalizedTier)) {
-                continue;
-            }
-            if (! is_int($days)) {
-                continue;
-            }
-            if ($days < 1) {
-                continue;
-            }
-
-            $tiers[$normalizedTier] = $days;
-        }
-
-        return $tiers;
-    }
-
-    private function storageTier(CommandRun $run): ?string
-    {
-        $metadata = is_array($run->metadata) ? $run->metadata : [];
-        $storage = is_array($metadata['storage'] ?? null) ? $metadata['storage'] : [];
-        $class = $storage['class'] ?? null;
-
-        if (! is_string($class)) {
-            return null;
-        }
-
-        $normalized = strtolower(trim($class));
-
-        return $normalized === '' ? null : $normalized;
     }
 
     private function hasExternalizedOutput(CommandRun $run): bool

@@ -1369,20 +1369,14 @@ final class MysqlDriver implements BackupDriver
 
     private function uploadArtifact(CommandRun $run): void
     {
-        $disk = (string) config('checkpoint.disk', '');
-
-        if ($disk === '') {
-            return;
-        }
-
         $artifactPath = $this->backupTarget($run);
 
-        $uploadMetadata = (new BackupArtifactUploader)->upload($artifactPath, $disk, 'checkpoint/mysql-exports');
+        $results = (new BackupArtifactUploader)->upload($artifactPath);
 
-        if ($uploadMetadata !== null) {
+        if ($results !== []) {
             $run->recordMetadata([
                 'metadata' => [
-                    'upload' => $uploadMetadata,
+                    'uploads' => $results,
                 ],
             ]);
         }

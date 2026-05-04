@@ -845,42 +845,30 @@ final readonly class ConfigValidator
 
     private function validateRetentionSettings(): void
     {
-        $config = $this->config->get('checkpoint.retention', []);
+        $config = $this->config->get('checkpoint.cleanup', []);
 
         if (! is_array($config)) {
-            throw new ConfigurationException('checkpoint.retention must be an array.');
+            throw new ConfigurationException('checkpoint.cleanup must be an array.');
         }
 
-        if (! is_bool($config['enabled'] ?? null)) {
-            throw new ConfigurationException('checkpoint.retention.enabled must be a boolean.');
-        }
+        $keys = [
+            'keep_all_backups_for_days',
+            'keep_daily_backups_for_days',
+            'keep_weekly_backups_for_weeks',
+            'keep_monthly_backups_for_months',
+            'keep_yearly_backups_for_years',
+        ];
 
-        foreach (['default_days', 'failed_days'] as $key) {
-            if (! is_int($config[$key] ?? null) || $config[$key] < 1) {
-                throw new ConfigurationException(sprintf('checkpoint.retention.%s must be greater than zero.', $key));
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $config) && (! is_int($config[$key]) || $config[$key] < 0)) {
+                throw new ConfigurationException(sprintf('checkpoint.cleanup.%s must be zero or greater.', $key));
             }
         }
 
-        $tiers = $config['tiers'] ?? [];
+        $maxMb = $config['delete_oldest_when_using_more_megabytes_than'] ?? null;
 
-        if (! is_array($tiers)) {
-            throw new ConfigurationException('checkpoint.retention.tiers must be an array.');
-        }
-
-        foreach ($tiers as $tier => $days) {
-            if (! is_string($tier) || trim($tier) === '') {
-                throw new ConfigurationException('checkpoint.retention.tiers keys must be non-empty strings.');
-            }
-
-            $normalizedTier = strtolower(trim($tier));
-
-            if (preg_match('/^[a-z][a-z0-9_-]*$/', $normalizedTier) !== 1) {
-                throw new ConfigurationException(sprintf('checkpoint.retention.tiers.%s key must use lowercase alphanumeric, underscore, or hyphen characters.', $tier));
-            }
-
-            if (! is_int($days) || $days < 1) {
-                throw new ConfigurationException(sprintf('checkpoint.retention.tiers.%s must be greater than zero.', $normalizedTier));
-            }
+        if ($maxMb !== null && (! is_int($maxMb) || $maxMb < 0)) {
+            throw new ConfigurationException('checkpoint.cleanup.delete_oldest_when_using_more_megabytes_than must be null or zero or greater.');
         }
     }
 

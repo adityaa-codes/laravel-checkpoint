@@ -335,12 +335,6 @@ final class PgBaseBackupDriver implements BackupDriver
 
     private function uploadArtifact(CommandRun $run): void
     {
-        $disk = (string) config('checkpoint.disk', '');
-
-        if ($disk === '') {
-            return;
-        }
-
         $backupDirs = glob($this->outputDir().'/backup_*', GLOB_ONLYDIR);
 
         if ($backupDirs === false || $backupDirs === []) {
@@ -349,12 +343,12 @@ final class PgBaseBackupDriver implements BackupDriver
 
         $artifactPath = $backupDirs[array_key_last($backupDirs)];
 
-        $uploadMetadata = (new BackupArtifactUploader)->upload($artifactPath, $disk, 'checkpoint/basebackups');
+        $results = (new BackupArtifactUploader)->upload($artifactPath);
 
-        if ($uploadMetadata !== null) {
+        if ($results !== []) {
             $run->recordMetadata([
                 'metadata' => [
-                    'upload' => $uploadMetadata,
+                    'uploads' => $results,
                 ],
             ]);
         }

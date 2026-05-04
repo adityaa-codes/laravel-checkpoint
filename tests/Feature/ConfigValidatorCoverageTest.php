@@ -203,34 +203,23 @@ it('rejects a non-positive backup drill prune retention', function (): void {
         ->toThrow(ConfigurationException::class, 'checkpoint.schedule.prune_keep_backup_drill_days must be greater than zero.');
 });
 
-it('rejects retention defaults that are not positive integers', function (): void {
-    config()->set('checkpoint.retention.default_days', 0);
+it('rejects negative retention values', function (): void {
+    config()->set('checkpoint.cleanup.keep_all_backups_for_days', -1);
 
     expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.retention.default_days must be greater than zero.');
-
-    config()->set('checkpoint.retention.default_days', 90);
-    config()->set('checkpoint.retention.failed_days', 0);
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.retention.failed_days must be greater than zero.');
+        ->toThrow(ConfigurationException::class, 'checkpoint.cleanup.keep_all_backups_for_days must be zero or greater.');
 });
 
-it('rejects malformed retention tiers', function (): void {
-    config()->set('checkpoint.retention.tiers', ['' => 30]);
+it('accepts valid GFS retention configuration', function (): void {
+    config()->set('checkpoint.cleanup', [
+        'keep_all_backups_for_days' => 7,
+        'keep_daily_backups_for_days' => 16,
+        'keep_weekly_backups_for_weeks' => 8,
+        'keep_monthly_backups_for_months' => 4,
+        'keep_yearly_backups_for_years' => 2,
+    ]);
 
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.retention.tiers keys must be non-empty strings.');
-
-    config()->set('checkpoint.retention.tiers', ['Warm Tier' => 30]);
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.retention.tiers.Warm Tier key must use lowercase alphanumeric, underscore, or hyphen characters.');
-
-    config()->set('checkpoint.retention.tiers', ['warm' => 0]);
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.retention.tiers.warm must be greater than zero.');
+    expect(fn () => resolve(ConfigValidator::class)->validate())->not->toThrow(ConfigurationException::class);
 });
 
 it('rejects backup drill retention shorter than the drill freshness window', function (): void {
