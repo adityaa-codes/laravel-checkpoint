@@ -21,7 +21,7 @@ trait UsesLaravelPrompts
             return false;
         }
 
-        return $this->input->isInteractive() && ! $this->runningUnitTests();
+        return $this->input->isInteractive() && ! app()->runningUnitTests();
     }
 
     /**
@@ -36,7 +36,7 @@ trait UsesLaravelPrompts
             return;
         }
 
-        $this->interactiveTable($headers, $rows);
+        table(headers: $headers, rows: $rows);
     }
 
     protected function promptInfo(string $message): void
@@ -47,7 +47,7 @@ trait UsesLaravelPrompts
             return;
         }
 
-        $this->interactiveInfo($message);
+        info($message);
     }
 
     protected function promptWarning(string $message): void
@@ -58,7 +58,7 @@ trait UsesLaravelPrompts
             return;
         }
 
-        $this->interactiveWarning($message);
+        warning($message);
     }
 
     protected function promptError(string $message): void
@@ -69,12 +69,7 @@ trait UsesLaravelPrompts
             return;
         }
 
-        $this->interactiveError($message);
-    }
-
-    protected function runningUnitTests(): bool
-    {
-        return app()->runningUnitTests();
+        error($message);
     }
 
     protected function stringOption(string $key): ?string
@@ -86,13 +81,7 @@ trait UsesLaravelPrompts
 
     protected function policyProfileOverride(): ?string
     {
-        $override = $this->stringOption('policy-profile');
-
-        if (! is_string($override)) {
-            return null;
-        }
-
-        $override = trim($override);
+        $override = trim((string) ($this->stringOption('policy-profile') ?? ''));
 
         return $override !== '' ? $override : null;
     }
@@ -123,26 +112,17 @@ trait UsesLaravelPrompts
      */
     protected function orderedChecksForDisplay(array $checks): array
     {
-        usort($checks, static function (array $left, array $right): int {
-            $rank = [
-                'fail' => 0,
-                'warn' => 1,
-                'pass' => 2,
-            ];
+        $rank = [
+            'fail' => 0,
+            'warn' => 1,
+            'pass' => 2,
+        ];
 
-            $leftStatus = (string) ($left['status'] ?? 'pass');
-            $rightStatus = (string) ($right['status'] ?? 'pass');
-            $leftRank = $rank[$leftStatus] ?? 3;
-            $rightRank = $rank[$rightStatus] ?? 3;
-
-            if ($leftRank !== $rightRank) {
-                return $leftRank <=> $rightRank;
-            }
-
-            return strcmp((string) ($left['check'] ?? ''), (string) ($right['check'] ?? ''));
-        });
-
-        return $checks;
+        return collect($checks)
+            ->sort(fn (array $left, array $right): int => ($rank[(string) ($left['status'] ?? 'pass')] ?? 3) <=> ($rank[(string) ($right['status'] ?? 'pass')] ?? 3)
+                ?: ((string) ($left['check'] ?? '') <=> (string) ($right['check'] ?? '')))
+            ->values()
+            ->all();
     }
 
     /**
@@ -150,16 +130,14 @@ trait UsesLaravelPrompts
      */
     protected function overallSloStatus(array $indicators): string
     {
-        foreach ($indicators as $indicator) {
-            if ($indicator['status'] === 'fail') {
-                return 'fail';
-            }
+        $indicators = collect($indicators);
+
+        if ($indicators->contains('status', 'fail')) {
+            return 'fail';
         }
 
-        foreach ($indicators as $indicator) {
-            if ($indicator['status'] === 'warn') {
-                return 'warn';
-            }
+        if ($indicators->contains('status', 'warn')) {
+            return 'warn';
         }
 
         return 'pass';
@@ -184,35 +162,6 @@ trait UsesLaravelPrompts
         $value = (string) __($key, $replace);
 
         return $value !== $key ? $value : $default;
-    }
-
-    /**
-     * @param  list<string>  $headers
-     * @param  list<array<int, mixed>>  $rows
-     */
-    protected function interactiveTable(array $headers, array $rows): void
-    {
-        table(headers: $headers, rows: $rows);
-    }
-
-    protected function interactiveNote(string $message): void
-    {
-        note($message);
-    }
-
-    protected function interactiveInfo(string $message): void
-    {
-        info($message);
-    }
-
-    protected function interactiveWarning(string $message): void
-    {
-        warning($message);
-    }
-
-    protected function interactiveError(string $message): void
-    {
-        error($message);
     }
 
     protected function resolveOutputMode(string $format, bool $agentMode): string
