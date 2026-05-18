@@ -5,14 +5,10 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
-use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
-use Illuminate\Console\Command;
 use Throwable;
 
-final class DrillCommand extends Command
+final class DrillCommand extends CheckpointCommand
 {
-    use UsesLaravelPrompts;
-
     protected $signature = 'checkpoint:drill';
 
     protected $description = 'Run a backup drill.';
@@ -25,7 +21,7 @@ final class DrillCommand extends Command
             $this->promptInfo(sprintf('Queued Backup Drill run #%d.', (int) $run->getKey()));
 
             if ($this->enhancedInteractiveMode()) {
-                \Laravel\Prompts\note('Monitor progress: php artisan checkpoint:report');
+                \Laravel\Prompts\note('Monitor progress: php artisan checkpoint:doctor --full');
             }
 
             return self::SUCCESS;

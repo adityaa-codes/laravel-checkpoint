@@ -6,9 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\BuildReplicationCommandPayloadAction;
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
-use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
-use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -18,10 +16,8 @@ use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 use function Laravel\Prompts\warning;
 
-final class ReplicateCommand extends Command
+final class ReplicateCommand extends CheckpointCommand
 {
-    use UsesLaravelPrompts;
-
     protected $signature = 'checkpoint:replicate
         {source? : Source endpoint (profile:<id>, DSN, or key=value pairs)}
         {destination? : Destination endpoint (profile:<id>, DSN, or key=value pairs)}

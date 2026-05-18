@@ -48,7 +48,7 @@ it('shows an operator-facing summary of recent checkpoint health signals', funct
                 ['Failed runs (24h)', '1'],
                 ['Latest failed run', 'logical_restore_file [failed] (exit: 1) at 2026-03-11 11:42:00'],
                 ['Latest failed reason', 'Command exited with code 1.'],
-                ['Latest failed next action', 'Run php artisan checkpoint:report --limit=10 --format=json for full failure context.'],
+                ['Latest failed next action', 'Run php artisan checkpoint:doctor --full --limit=10 --format=json for full failure context.'],
                 ['Last known good backup', 'full:20260311-010101F at 2026-03-11 11:50:00'],
                 ['Latest verified backup', 'full:20260311-010101F at 2026-03-11 11:55:00'],
                 ['Latest backup drill', 'drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00'],
@@ -73,7 +73,7 @@ it('renders triage-first brief status output with cause and action', function ()
         ->expectsOutputToContain('Checkpoint triage (brief)')
         ->expectsOutputToContain('Failed (24h): 1 | Pending: 1 | Running: 1')
         ->expectsOutputToContain('Cause: Command exited with code 1.')
-        ->expectsOutputToContain('Action now: Run php artisan checkpoint:report --limit=10 --format=json for full failure context.')
+        ->expectsOutputToContain('Action now: Run php artisan checkpoint:doctor --full --limit=10 --format=json for full failure context.')
         ->assertSuccessful();
 
     OperatorCommandTestSupport::resetTime();
@@ -142,7 +142,7 @@ it('renders summary signals as machine-readable json', function (): void {
             'status' => 'failed',
             'exit_code' => 1,
             'failure_reason' => 'Command exited with code 1.',
-            'next_action' => 'Run php artisan checkpoint:report --limit=10 --format=json for full failure context.',
+            'next_action' => 'Run php artisan checkpoint:doctor --full --limit=10 --format=json for full failure context.',
         ])
         ->and($report['summary']['last_known_good_backup'])->toMatchArray([
             'label' => 'full:20260311-010101F at 2026-03-11 11:50:00',

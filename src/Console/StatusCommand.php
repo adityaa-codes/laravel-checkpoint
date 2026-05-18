@@ -4,30 +4,28 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
-use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
+use AdityaaCodes\LaravelCheckpoint\Actions\BuildBackupCatalogExportAction;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
 use AdityaaCodes\LaravelCheckpoint\Services\GatePolicyEvaluator;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
-use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
 
 use function Laravel\Prompts\intro;
 use function Laravel\Prompts\note;
 
-final class StatusCommand extends Command
+final class StatusCommand extends CheckpointCommand
 {
-    use UsesLaravelPrompts;
+    protected $signature = 'checkpoint:status {--limit=10} {--summary : Show an operator-facing summary instead of recent runs.} {--brief : Show triage-first status output with cause and next action.} {--format=table : Output format: table or json.} {--agent : Emit compact AI-agent friendly JSON output.} {--policy-profile= : Override gate policy profile for CI/automation.} {--watch= : Poll every N seconds until all running jobs complete.} {--catalog : Export backup catalog instead of showing status.} {--output= : Destination file path for catalog export.} {--driver= : Filter catalog by driver name.} {--repository= : Filter catalog by repository id.} {--stanza= : Filter catalog by stanza.} {--window= : Filter catalog to runs within last N hours.}';
 
-    protected $signature = 'checkpoint:status {--limit=10} {--summary : Show an operator-facing summary instead of recent runs.} {--brief : Show triage-first status output with cause and next action.} {--format=table : Output format: table or json.} {--agent : Emit compact AI-agent friendly JSON output.} {--policy-profile= : Override gate policy profile for CI/automation.} {--watch= : Poll every N seconds until all running jobs complete.}';
-
-    protected $description = 'Show recent checkpoint command runs.';
+    protected $description = 'Show recent checkpoint command runs or export backup catalog.';
 
     public function __construct(
         private readonly OperationalReportBuilder $reportBuilder,
         private readonly CommandJsonContract $jsonContract,
         private readonly GatePolicyEvaluator $gatePolicyEvaluator,
+        private readonly BuildBackupCatalogExportAction $buildCatalogExport,
         private readonly Repository $config,
     ) {
         parent::__construct();
@@ -35,16 +33,66 @@ final class StatusCommand extends Command
 
     public function handle(): int
     {
+        if ((bool) $this->option('catalog')) {
+            return $this->handleCatalogExport();
+        }
+
+        return $this->handleStatus();
+    }
+
+    private function handleCatalogExport(): int
+    {
+        if ($this->enhancedInteractiveMode()) {
+            note('What: export catalog rows for audits, tooling, and external analysis.');
+            note('When: compliance reporting and integration pipelines.');
+            note('Next: feed exported data into your downstream governance/reporting systems.');
+        }
+
+        $format = $this->stringOption('format') ?? 'table';
+
+        if ($format === 'table') {
+            $format = 'json';
+        }
+
+        $validationError = $this->validateCatalogExportOptions($format);
+
+        if ($validationError !== null) {
+            return $validationError;
+        }
+
+        ['requested' => $requestedLimit, 'effective' => $effectiveLimit] = $this->recentRunLimits();
+
+        $export = $this->buildCatalogExport->execute(
+            driverFilter: $this->normalizedCatalogTextFilter($this->stringOption('driver')),
+            repositoryFilter: $this->normalizedCatalogRepositoryFilter(),
+            stanzaFilter: $this->normalizedCatalogTextFilter($this->stringOption('stanza')),
+            windowHours: $this->catalogWindowHours(),
+            limit: $effectiveLimit,
+        );
+
+        if ($format === 'json') {
+            return $this->renderCatalogJsonOutput($requestedLimit, $effectiveLimit, $export);
+        }
+
+        return $this->renderCatalogCsvOutput($export['rows']);
+    }
+
+    private function evaluatePolicyGate(): array
+    {
+        return $this->gatePolicyEvaluator->evaluate(
+            $this->reportBuilder->healthChecks(),
+            $this->reportBuilder->summary(),
+            $this->policyProfileOverride(),
+        );
+    }
+
+    private function handleStatus(): int
+    {
         $format = $this->stringOption('format') ?? 'table';
         $agentMode = (bool) $this->option('agent');
         $summaryMode = (bool) $this->option('summary');
         $briefMode = (bool) $this->option('brief');
-        $policyProfile = $this->policyProfileOverride();
-        $gateDecision = $this->gatePolicyEvaluator->evaluate(
-            $this->reportBuilder->healthChecks(),
-            $this->reportBuilder->summary(),
-            $policyProfile,
-        );
+        $gateDecision = $this->evaluatePolicyGate();
 
         if ($this->enhancedInteractiveMode() && ! $agentMode && $format === 'table') {
             intro($summaryMode ? 'Checkpoint Status Summary' : 'Checkpoint Status: Recent Runs');
@@ -75,45 +123,278 @@ final class StatusCommand extends Command
         $runs = $this->reportBuilder->recentRuns($limit);
 
         if ($agentMode) {
-            $failedRuns = count(array_filter($runs, static fn (array $run): bool => (string) ($run['status'] ?? '') === 'failed'));
-            $runCount = count($runs);
-            $this->line(json_encode($this->jsonContract->envelope('status', [
-                'result' => $failedRuns > 0 ? 'failed' : 'passed',
-                'code' => $failedRuns > 0 ? 'status.runs.failed' : 'status.runs.ok',
-                'summary' => sprintf('%d failed run(s) in the latest %d run(s).', $failedRuns, $runCount),
-                'data' => [
-                    'mode' => 'runs',
-                    'limit' => $limit,
-                    'run_count' => $runCount,
-                    'failed_run_count' => $failedRuns,
-                    'runs' => $runs,
-                    'slo' => $this->runsSlo($runCount, $failedRuns),
-                    'gates' => $gateDecision,
-                ],
-                'suggestions' => $this->replicationFailureSuggestions($runs),
-            ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
-
-            return $gateDecision['exit_code'];
+            return $this->renderRunsAgent($runs, $limit, $gateDecision);
         }
 
         if ($format === 'json' || $format === 'compact-json') {
-            $compactJson = $format === 'compact-json';
-            $payload = [
-                'mode' => 'runs',
-                'limit' => $limit,
-                'runs' => $runs,
-                'gates' => $this->machineGateDecision($gateDecision),
-            ];
-
-            $payload = $compactJson
-                ? $this->jsonContract->compactEnvelope('status', $payload)
-                : $this->jsonContract->envelope('status', $payload);
-
-            $this->line(json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
-
-            return $gateDecision['exit_code'];
+            return $this->renderRunsJson($format, $runs, $limit, $gateDecision);
         }
 
+        return $this->renderRunsTable($runs, $gateDecision);
+    }
+
+    private function validateCatalogExportOptions(string $format): ?int
+    {
+        if (! in_array($format, ['json', 'csv'], true)) {
+            $this->promptError('With --catalog, the --format option must be json or csv.');
+
+            return self::FAILURE;
+        }
+
+        $outputPath = $this->stringOption('output');
+
+        if ($outputPath !== null && trim($outputPath) === '') {
+            $this->promptError('The --output option must not be empty.');
+
+            return self::FAILURE;
+        }
+
+        $repositoryFilter = $this->normalizedCatalogRepositoryFilter();
+        $windowHours = $this->catalogWindowHours();
+
+        if ($repositoryFilter === null && $this->option('repository') !== null) {
+            $this->promptError('The --repository option must be an integer or "none".');
+
+            return self::FAILURE;
+        }
+
+        if ($windowHours === null && $this->option('window') !== null) {
+            $this->promptError('The --window option must be a positive integer.');
+
+            return self::FAILURE;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $export
+     */
+    private function renderCatalogJsonOutput(int $requestedLimit, int $effectiveLimit, array $export): int
+    {
+        $payload = json_encode($this->jsonContract->envelope('catalog_export', [
+            'generated_at' => now()->toIso8601String(),
+            'driver' => (string) $this->config->get('checkpoint.driver'),
+            'format' => 'json',
+            'limit_requested' => $requestedLimit,
+            'limit' => $effectiveLimit,
+            'filters' => $export['filters'],
+            'count' => count($export['rows']),
+            'rows' => $export['rows'],
+        ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+
+        if (! $this->writeCatalogExportFile($payload)) {
+            $this->line($payload);
+        }
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function renderCatalogCsvOutput(array $rows): int
+    {
+        $payload = $this->catalogCsvPayload($rows);
+
+        if (! $this->writeCatalogExportFile($payload)) {
+            $this->line($payload);
+        }
+
+        return self::SUCCESS;
+    }
+
+    private function normalizedCatalogRepositoryFilter(): int|string|null
+    {
+        $repository = $this->stringOption('repository');
+
+        if ($repository === null) {
+            return null;
+        }
+
+        if ($repository === 'none') {
+            return 'none';
+        }
+
+        if (! preg_match('/^\d+$/', $repository)) {
+            return null;
+        }
+
+        return (int) $repository;
+    }
+
+    private function catalogWindowHours(): ?int
+    {
+        $window = $this->stringOption('window');
+
+        if ($window === null || $window === '') {
+            return null;
+        }
+
+        if (! preg_match('/^\d+$/', $window)) {
+            return null;
+        }
+
+        $hours = (int) $window;
+
+        if ($hours < 1) {
+            return null;
+        }
+
+        return $hours;
+    }
+
+    private function normalizedCatalogTextFilter(?string $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+
+        if ($trimmed === '') {
+            return null;
+        }
+
+        return $trimmed;
+    }
+
+    private function writeCatalogExportFile(string $payload): bool
+    {
+        $outputPath = $this->stringOption('output');
+
+        if ($outputPath === null) {
+            return false;
+        }
+
+        $trimmed = trim($outputPath);
+
+        if (file_put_contents($trimmed, $payload) === false) {
+            throw new ConfigurationException(sprintf('Unable to write catalog export to [%s].', $trimmed));
+        }
+
+        $this->promptInfo(sprintf('Catalog export written to %s', $trimmed));
+
+        return true;
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $rows
+     */
+    private function catalogCsvPayload(array $rows): string
+    {
+        $lines = [$this->catalogCsvLine([
+            'command_run_id',
+            'operation',
+            'driver',
+            'repository',
+            'stanza',
+            'type',
+            'label',
+            'path',
+            'size_bytes',
+            'status',
+            'verification_state',
+            'created_at',
+            'started_at',
+            'finished_at',
+            'verified_at',
+            'last_known_good_at',
+            'latest_verification_json',
+            'metadata_json',
+        ])];
+
+        foreach ($rows as $row) {
+            $lines[] = $this->catalogCsvLine([
+                $row['command_run_id'] ?? null,
+                $row['operation'] ?? null,
+                $row['driver'] ?? null,
+                $row['repository'] ?? null,
+                $row['stanza'] ?? null,
+                $row['type'] ?? null,
+                $row['label'] ?? null,
+                $row['path'] ?? null,
+                $row['size_bytes'] ?? null,
+                $row['status'] ?? null,
+                $row['verification_state'] ?? null,
+                $row['created_at'] ?? null,
+                $row['started_at'] ?? null,
+                $row['finished_at'] ?? null,
+                $row['verified_at'] ?? null,
+                $row['last_known_good_at'] ?? null,
+                json_encode($row['latest_verification'] ?? null, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+                json_encode($row['metadata'] ?? null, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+            ]);
+        }
+
+        return implode(PHP_EOL, $lines);
+    }
+
+    /**
+     * @param  list<mixed>  $values
+     */
+    private function catalogCsvLine(array $values): string
+    {
+        return implode(',', array_map(function (mixed $value): string {
+            $text = $value === null ? '' : (string) $value;
+
+            return '"'.str_replace('"', '""', $text).'"';
+        }, $values));
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $runs
+     */
+    private function renderRunsAgent(array $runs, int $limit, array $gateDecision): int
+    {
+        $failedRuns = count(array_filter($runs, static fn (array $run): bool => (string) ($run['status'] ?? '') === 'failed'));
+        $runCount = count($runs);
+        $this->line(json_encode($this->jsonContract->envelope('status', [
+            'result' => $failedRuns > 0 ? 'failed' : 'passed',
+            'code' => $failedRuns > 0 ? 'status.runs.failed' : 'status.runs.ok',
+            'summary' => sprintf('%d failed run(s) in the latest %d run(s).', $failedRuns, $runCount),
+            'data' => [
+                'mode' => 'runs',
+                'limit' => $limit,
+                'run_count' => $runCount,
+                'failed_run_count' => $failedRuns,
+                'runs' => $runs,
+                'slo' => $this->runsSlo($runCount, $failedRuns),
+                'gates' => $gateDecision,
+            ],
+            'suggestions' => $this->replicationFailureSuggestions($runs),
+        ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
+        return $gateDecision['exit_code'];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $runs
+     */
+    private function renderRunsJson(string $format, array $runs, int $limit, array $gateDecision): int
+    {
+        $compactJson = $format === 'compact-json';
+        $payload = [
+            'mode' => 'runs',
+            'limit' => $limit,
+            'runs' => $runs,
+            'gates' => $this->machineGateDecision($gateDecision),
+        ];
+
+        $payload = $compactJson
+            ? $this->jsonContract->compactEnvelope('status', $payload)
+            : $this->jsonContract->envelope('status', $payload);
+
+        $this->line(json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+
+        return $gateDecision['exit_code'];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $runs
+     */
+    private function renderRunsTable(array $runs, array $gateDecision): int
+    {
         $this->promptTable([
             'ID', 'Operation', 'Status', 'Exit', 'Backup', 'Verify', 'Last Good', 'Started', 'Finished',
         ], array_map(fn (array $run): array => [
@@ -143,44 +424,68 @@ final class StatusCommand extends Command
         $failedRuns24h = (int) ($summary['failed_runs_24h'] ?? 0);
 
         if ($agentMode) {
-            $this->line(json_encode($this->jsonContract->envelope('status', [
-                'result' => $failedRuns24h > 0 ? 'partial' : 'passed',
-                'code' => $failedRuns24h > 0 ? 'status.summary.degraded' : 'status.summary.ok',
-                'summary' => sprintf(
-                    'Pending: %d, Running: %d, Failed (24h): %d.',
-                    (int) ($summary['pending_runs'] ?? 0),
-                    (int) ($summary['running_runs'] ?? 0),
-                    $failedRuns24h,
-                ),
-                'data' => [
-                    'mode' => 'summary',
-                    'summary' => $summary,
-                    'slo' => $this->summarySlo($summary),
-                    'gates' => $gateDecision,
-                ],
-                'suggestions' => $this->summarySuggestions($summary),
-            ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            $this->renderSummaryAgent($summary, $failedRuns24h, $gateDecision);
 
             return;
         }
 
         if ($format === 'json' || $format === 'compact-json') {
-            $compactJson = $format === 'compact-json';
-            $payload = [
-                'mode' => 'summary',
-                'summary' => $summary,
-                'gates' => $this->machineGateDecision($gateDecision),
-            ];
-
-            $payload = $compactJson
-                ? $this->jsonContract->compactEnvelope('status', $payload)
-                : $this->jsonContract->envelope('status', $payload);
-
-            $this->line(json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            $this->renderSummaryJson($format, $summary, $gateDecision);
 
             return;
         }
 
+        $this->renderSummaryTable($summary);
+    }
+
+    /**
+     * @param  array<string, mixed>  $summary
+     */
+    private function renderSummaryAgent(array $summary, int $failedRuns24h, array $gateDecision): void
+    {
+        $this->line(json_encode($this->jsonContract->envelope('status', [
+            'result' => $failedRuns24h > 0 ? 'partial' : 'passed',
+            'code' => $failedRuns24h > 0 ? 'status.summary.degraded' : 'status.summary.ok',
+            'summary' => sprintf(
+                'Pending: %d, Running: %d, Failed (24h): %d.',
+                (int) ($summary['pending_runs'] ?? 0),
+                (int) ($summary['running_runs'] ?? 0),
+                $failedRuns24h,
+            ),
+            'data' => [
+                'mode' => 'summary',
+                'summary' => $summary,
+                'slo' => $this->summarySlo($summary),
+                'gates' => $gateDecision,
+            ],
+            'suggestions' => $this->summarySuggestions($summary),
+        ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * @param  array<string, mixed>  $summary
+     */
+    private function renderSummaryJson(string $format, array $summary, array $gateDecision): void
+    {
+        $compactJson = $format === 'compact-json';
+        $payload = [
+            'mode' => 'summary',
+            'summary' => $summary,
+            'gates' => $this->machineGateDecision($gateDecision),
+        ];
+
+        $payload = $compactJson
+            ? $this->jsonContract->compactEnvelope('status', $payload)
+            : $this->jsonContract->envelope('status', $payload);
+
+        $this->line(json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * @param  array<string, mixed>  $summary
+     */
+    private function renderSummaryTable(array $summary): void
+    {
         $windowDays = (int) ($summary['backup_drill_pass_rate']['window_days'] ?? 30);
 
         $this->promptTable(['Signal', 'Value'], [
@@ -211,55 +516,77 @@ final class StatusCommand extends Command
         $latestFailedRun = is_array($summary['latest_failed_run'] ?? null) ? $summary['latest_failed_run'] : [];
         $label = (string) ($latestFailedRun['label'] ?? '-');
         $reason = (string) ($latestFailedRun['failure_reason'] ?? 'No recent failed run reason available.');
-        $actionNow = (string) ($latestFailedRun['next_action'] ?? 'Run php artisan checkpoint:report --limit=10 --format=json for full failure context.');
+        $actionNow = (string) ($latestFailedRun['next_action'] ?? 'Run php artisan checkpoint:doctor --full --limit=10 --format=json for full failure context.');
 
         if ($agentMode) {
-            $this->line(json_encode($this->jsonContract->envelope('status', [
-                'result' => $failedRuns24h > 0 ? 'partial' : 'passed',
-                'code' => $failedRuns24h > 0 ? 'status.brief.degraded' : 'status.brief.ok',
-                'summary' => sprintf('Failed (24h): %d, Pending: %d, Running: %d.', $failedRuns24h, $pendingRuns, $runningRuns),
-                'data' => [
-                    'mode' => 'brief',
-                    'failed_runs_24h' => $failedRuns24h,
-                    'pending_runs' => $pendingRuns,
-                    'running_runs' => $runningRuns,
-                    'last_failed_run' => $latestFailedRun,
-                    'action_now' => $actionNow,
-                    'gates' => $gateDecision,
-                ],
-                'suggestions' => $this->summarySuggestions($summary),
-            ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            $this->renderBriefAgent($failedRuns24h, $pendingRuns, $runningRuns, $latestFailedRun, $actionNow, $summary, $gateDecision);
 
             return;
         }
 
         if ($format === 'json' || $format === 'compact-json') {
-            $compactJson = $format === 'compact-json';
-            $payload = [
+            $this->renderBriefJson($format, $failedRuns24h, $pendingRuns, $runningRuns, $latestFailedRun, $actionNow, $gateDecision);
+
+            return;
+        }
+
+        $this->renderBriefTable($failedRuns24h, $pendingRuns, $runningRuns, $label, $reason, $actionNow);
+    }
+
+    /**
+     * @param  array<string, mixed>  $latestFailedRun
+     * @param  array<string, mixed>  $summary
+     */
+    private function renderBriefAgent(int $failedRuns24h, int $pendingRuns, int $runningRuns, array $latestFailedRun, string $actionNow, array $summary, array $gateDecision): void
+    {
+        $this->line(json_encode($this->jsonContract->envelope('status', [
+            'result' => $failedRuns24h > 0 ? 'partial' : 'passed',
+            'code' => $failedRuns24h > 0 ? 'status.brief.degraded' : 'status.brief.ok',
+            'summary' => sprintf('Failed (24h): %d, Pending: %d, Running: %d.', $failedRuns24h, $pendingRuns, $runningRuns),
+            'data' => [
                 'mode' => 'brief',
                 'failed_runs_24h' => $failedRuns24h,
                 'pending_runs' => $pendingRuns,
                 'running_runs' => $runningRuns,
                 'last_failed_run' => $latestFailedRun,
                 'action_now' => $actionNow,
-                'gates' => $this->machineGateDecision($gateDecision),
-            ];
+                'gates' => $gateDecision,
+            ],
+            'suggestions' => $this->summarySuggestions($summary),
+        ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+    }
 
-            $payload = $compactJson
-                ? $this->jsonContract->compactEnvelope('status', $payload)
-                : $this->jsonContract->envelope('status', $payload);
+    /**
+     * @param  array<string, mixed>  $latestFailedRun
+     */
+    private function renderBriefJson(string $format, int $failedRuns24h, int $pendingRuns, int $runningRuns, array $latestFailedRun, string $actionNow, array $gateDecision): void
+    {
+        $compactJson = $format === 'compact-json';
+        $payload = [
+            'mode' => 'brief',
+            'failed_runs_24h' => $failedRuns24h,
+            'pending_runs' => $pendingRuns,
+            'running_runs' => $runningRuns,
+            'last_failed_run' => $latestFailedRun,
+            'action_now' => $actionNow,
+            'gates' => $this->machineGateDecision($gateDecision),
+        ];
 
-            $this->line(json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        $payload = $compactJson
+            ? $this->jsonContract->compactEnvelope('status', $payload)
+            : $this->jsonContract->envelope('status', $payload);
 
-            return;
-        }
+        $this->line(json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+    }
 
+    private function renderBriefTable(int $failedRuns24h, int $pendingRuns, int $runningRuns, string $label, string $reason, string $actionNow): void
+    {
         $this->line('Checkpoint triage (brief)');
         $this->line(sprintf('Failed (24h): %d | Pending: %d | Running: %d', $failedRuns24h, $pendingRuns, $runningRuns));
         $this->line('Last failed: '.$label);
         $this->line('Cause: '.$reason);
         $this->line('Action now: '.$actionNow);
-        $this->line('Deep dive: php artisan checkpoint:report --limit=10 --format=json');
+        $this->line('Deep dive: php artisan checkpoint:doctor --full --limit=10 --format=json');
 
         if ($this->output->isVerbose()) {
             $this->renderBriefPassingRuns();
@@ -289,7 +616,7 @@ final class StatusCommand extends Command
         $label = __('messages.status.'.$status);
 
         if ($label !== 'messages.status.'.$status) {
-            return (string) $label;
+            return $label;
         }
 
         return str($status)->title()->toString();

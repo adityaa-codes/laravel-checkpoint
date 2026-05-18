@@ -2,22 +2,15 @@
 
 declare(strict_types=1);
 
-namespace AdityaaCodes\LaravelCheckpoint\Console\Concerns;
+namespace AdityaaCodes\LaravelCheckpoint\Console;
 
-use function Laravel\Prompts\error;
-use function Laravel\Prompts\info;
-use function Laravel\Prompts\table;
-use function Laravel\Prompts\warning;
+use Illuminate\Console\Command;
 
-trait UsesLaravelPrompts
+abstract class CheckpointCommand extends Command
 {
     protected function enhancedInteractiveMode(): bool
     {
         if ($this->input === null) {
-            return false;
-        }
-
-        if ($this->input->hasOption('no-interaction') && $this->input->getOption('no-interaction')) {
             return false;
         }
 
@@ -30,46 +23,22 @@ trait UsesLaravelPrompts
      */
     protected function promptTable(array $headers, array $rows): void
     {
-        if (! $this->enhancedInteractiveMode()) {
-            $this->table($headers, $rows);
-
-            return;
-        }
-
-        table(headers: $headers, rows: $rows);
+        $this->table($headers, $rows);
     }
 
     protected function promptInfo(string $message): void
     {
-        if (! $this->enhancedInteractiveMode()) {
-            $this->info($message);
-
-            return;
-        }
-
-        info($message);
+        $this->info($message);
     }
 
     protected function promptWarning(string $message): void
     {
-        if (! $this->enhancedInteractiveMode()) {
-            $this->warn($message);
-
-            return;
-        }
-
-        warning($message);
+        $this->warn($message);
     }
 
     protected function promptError(string $message): void
     {
-        if (! $this->enhancedInteractiveMode()) {
-            $this->error($message);
-
-            return;
-        }
-
-        error($message);
+        $this->error($message);
     }
 
     protected function stringOption(string $key): ?string
@@ -81,7 +50,7 @@ trait UsesLaravelPrompts
 
     protected function policyProfileOverride(): ?string
     {
-        $override = trim((string) ($this->stringOption('policy-profile') ?? ''));
+        $override = trim($this->stringOption('policy-profile') ?? '');
 
         return $override !== '' ? $override : null;
     }
@@ -93,10 +62,10 @@ trait UsesLaravelPrompts
     protected function machineGateDecision(array $gateDecision): array
     {
         return [
-            'profile' => (string) ($gateDecision['profile'] ?? 'unknown'),
-            'profile_source' => (string) ($gateDecision['profile_source'] ?? 'default'),
-            'verdict' => (string) ($gateDecision['verdict'] ?? 'fail'),
-            'failed_gate' => (string) ($gateDecision['failed_gate'] ?? 'policy'),
+            'profile' => $gateDecision['profile'] ?? 'unknown',
+            'profile_source' => $gateDecision['profile_source'] ?? 'default',
+            'verdict' => $gateDecision['verdict'] ?? 'fail',
+            'failed_gate' => $gateDecision['failed_gate'] ?? 'policy',
             'exit_code' => (int) ($gateDecision['exit_code'] ?? 12),
         ];
     }
@@ -118,11 +87,11 @@ trait UsesLaravelPrompts
             'pass' => 2,
         ];
 
-        return collect($checks)
-            ->sort(fn (array $left, array $right): int => ($rank[(string) ($left['status'] ?? 'pass')] ?? 3) <=> ($rank[(string) ($right['status'] ?? 'pass')] ?? 3)
-                ?: ((string) ($left['check'] ?? '') <=> (string) ($right['check'] ?? '')))
+        return array_values(collect($checks)
+            ->sort(fn (array $left, array $right): int => ($rank[$left['status'] ?? 'pass'] ?? 3) <=> ($rank[$right['status'] ?? 'pass'] ?? 3)
+                ?: (($left['check'] ?? '') <=> ($right['check'] ?? '')))
             ->values()
-            ->all();
+            ->all());
     }
 
     /**
@@ -149,7 +118,7 @@ trait UsesLaravelPrompts
     protected function recentRunLimits(): array
     {
         $requestedLimit = max(1, (int) $this->option('limit'));
-        $configuredCap = max(1, (int) $this->config->get('checkpoint.reporting.max_recent_runs', 100));
+        $configuredCap = max(1, (int) config('checkpoint.reporting.max_recent_runs', 100));
 
         return [
             'requested' => $requestedLimit,
@@ -157,9 +126,12 @@ trait UsesLaravelPrompts
         ];
     }
 
+    /**
+     * @param  array<string, mixed>  $replace
+     */
     protected function translatedOr(string $key, string $default, array $replace = []): string
     {
-        $value = (string) __($key, $replace);
+        $value = __($key, $replace);
 
         return $value !== $key ? $value : $default;
     }

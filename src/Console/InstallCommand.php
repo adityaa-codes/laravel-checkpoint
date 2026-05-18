@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
-use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
-use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Laravel\Prompts\Prompt;
 use RuntimeException;
@@ -16,10 +14,8 @@ use function Laravel\Prompts\intro;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 
-final class InstallCommand extends Command
+final class InstallCommand extends CheckpointCommand
 {
-    use UsesLaravelPrompts;
-
     protected $signature = 'checkpoint:install
         {--skip-publish : Skip publishing package config and migrations.}
         {--skip-migrate : Skip running migrations.}
@@ -82,8 +78,8 @@ final class InstallCommand extends Command
             report($exception);
 
             foreach (preg_split('/\r\n|\r|\n/', $exception->getMessage()) ?: [] as $line) {
-                if (trim((string) $line) !== '') {
-                    $this->promptError((string) $line);
+                if (trim($line) !== '') {
+                    $this->promptError($line);
                 }
             }
 
@@ -130,13 +126,13 @@ final class InstallCommand extends Command
         $configCode = Artisan::call('vendor:publish', $this->publishParameters('checkpoint-config', $force));
 
         if ($configCode !== self::SUCCESS) {
-            throw new RuntimeException(trim((string) Artisan::output()) ?: 'Failed publishing checkpoint-config.');
+            throw new RuntimeException(trim(Artisan::output()) ?: 'Failed publishing checkpoint-config.');
         }
 
         $migrationCode = Artisan::call('vendor:publish', $this->publishParameters('checkpoint-migrations', $force));
 
         if ($migrationCode !== self::SUCCESS) {
-            throw new RuntimeException(trim((string) Artisan::output()) ?: 'Failed publishing checkpoint-migrations.');
+            throw new RuntimeException(trim(Artisan::output()) ?: 'Failed publishing checkpoint-migrations.');
         }
     }
 
@@ -159,7 +155,7 @@ final class InstallCommand extends Command
         $code = Artisan::call('migrate', ['--force' => true]);
 
         if ($code !== self::SUCCESS) {
-            throw new RuntimeException(trim((string) Artisan::output()) ?: 'Migration command failed.');
+            throw new RuntimeException(trim(Artisan::output()) ?: 'Migration command failed.');
         }
     }
 
@@ -169,7 +165,7 @@ final class InstallCommand extends Command
     private function runDoctor(): array
     {
         $code = Artisan::call('checkpoint:doctor', ['--format' => 'json']);
-        $report = json_decode((string) Artisan::output(), true);
+        $report = json_decode(Artisan::output(), true);
 
         if (! is_array($report)) {
             return [
@@ -209,7 +205,7 @@ final class InstallCommand extends Command
             return false;
         }
 
-        return in_array((string) ($check['code'] ?? ''), [
+        return in_array($check['code'] ?? '', [
             'backup_drill.latest_run',
             'backup_drill.pass_rate',
             'backup_drill.trend',

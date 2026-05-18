@@ -43,6 +43,7 @@ arch('package classes are final by default')
         'AdityaaCodes\\LaravelCheckpoint\\Models\\VerificationRun',
         'AdityaaCodes\\LaravelCheckpoint\\Models\\RestoreDecisionEvent',
         'AdityaaCodes\\LaravelCheckpoint\\Models\\BackupDrillRun',
+        'AdityaaCodes\\LaravelCheckpoint\\Console\\CheckpointCommand',
     ]);
 
 arch('it will not use debugging functions')

@@ -359,7 +359,7 @@
       "status": "failed",
       "exit_code": 1,
       "failure_reason": "Command exited with code 1.",
-      "next_action": "Run php artisan checkpoint:report --limit=10 --format=json for full failure context."
+      "next_action": "Run php artisan checkpoint:doctor --full --limit=10 --format=json for full failure context."
     }
   },
   "breakdown": {
@@ -810,6 +810,6 @@
     "status": "failed",
     "exit_code": 1,
     "failure_reason": "Command exited with code 1.",
-    "next_action": "Run php artisan checkpoint:report --limit=10 --format=json for full failure context."
+    "next_action": "Run php artisan checkpoint:doctor --full --limit=10 --format=json for full failure context."
   }
 }

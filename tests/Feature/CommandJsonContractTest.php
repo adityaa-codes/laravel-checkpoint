@@ -50,7 +50,7 @@ it('adds compact block to agent contract payloads', function (): void {
         'data' => [
             'last_failed_run' => [
                 'failure_reason' => 'Command exited with code 1.',
-                'next_action' => 'Run php artisan checkpoint:report --limit=10 --format=json',
+                'next_action' => 'Run php artisan checkpoint:doctor --full --limit=10 --format=json',
             ],
         ],
         'suggestions' => ['Run checkpoint:doctor --format=json'],
@@ -61,7 +61,7 @@ it('adds compact block to agent contract payloads', function (): void {
             'verdict' => 'WARN',
             'severity' => 'P1',
             'top_issue' => 'Command exited with code 1.',
-            'next_action' => 'Run php artisan checkpoint:report --limit=10 --format=json',
+            'next_action' => 'Run php artisan checkpoint:doctor --full --limit=10 --format=json',
             'exit_code' => 2,
         ]);
 });

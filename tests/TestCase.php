@@ -331,7 +331,6 @@ class TestCase extends Orchestra
                 'backup_drill_daily_at' => '03:00',
                 'backup_drill_timezone' => 'UTC',
                 'health_check_enabled' => true,
-                'recover_orphans_enabled' => true,
                 'prune_enabled' => true,
                 'without_overlapping' => true,
                 'overlap_expires_at' => 180,

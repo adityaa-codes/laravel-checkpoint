@@ -4,30 +4,32 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
-use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
+use AdityaaCodes\LaravelCheckpoint\Events\OrphanRunRedispatched;
+use AdityaaCodes\LaravelCheckpoint\Events\QueueLagDetected;
+use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
-use Illuminate\Console\Command;
+use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Log\LogManager;
+use Throwable;
 
 use function Laravel\Prompts\intro;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 
-final class HealthCheckCommand extends Command
+final class HealthCheckCommand extends CheckpointCommand
 {
-    use UsesLaravelPrompts;
-
     protected $signature = 'checkpoint:health-check';
 
-    protected $description = 'Mark timed-out running command runs as failed.';
+    protected $description = 'Mark timed-out running command runs as failed and re-dispatch stale pending runs.';
 
     public function __construct(
         private readonly Repository $config,
         private readonly Dispatcher $events,
         private readonly LogManager $logs,
+        private readonly BusDispatcher $bus,
     ) {
         parent::__construct();
     }
@@ -35,12 +37,24 @@ final class HealthCheckCommand extends Command
     public function handle(): int
     {
         if ($this->enhancedInteractiveMode()) {
-            intro('Health Check: Running Command Timeout Sweep');
-            note('What: detect and fail stale running runs based on heartbeat/timeout.');
+            intro('Health Check: Running Timeout + Orphan Recovery Sweep');
+            note('What: detect and fail stale running runs, re-dispatch stale pending runs.');
             note('When: scheduled maintenance or investigating stuck running jobs.');
-            note('Next: run checkpoint:recover-orphans if jobs were marked stale.');
+            note('Next: run checkpoint:status to confirm recovery.');
         }
 
+        $this->sweepTimedOutRuns();
+        $this->sweepOrphanedRuns();
+
+        if ($this->enhancedInteractiveMode()) {
+            outro('Health check completed.');
+        }
+
+        return self::SUCCESS;
+    }
+
+    private function sweepTimedOutRuns(): void
+    {
         $timeoutSeconds = max(1, (int) $this->config->get('checkpoint.queue.timeout', 3600));
         $threshold = now()->subSeconds($timeoutSeconds);
         $graceSeconds = max(0, (int) $this->config->get('checkpoint.queue.heartbeat_grace_seconds', 60));
@@ -75,12 +89,98 @@ final class HealthCheckCommand extends Command
 
                 $this->promptInfo($this->recoveryMessage((int) $run->getKey(), $timeoutSeconds));
             });
+    }
 
-        if ($this->enhancedInteractiveMode()) {
-            outro('Health check completed.');
+    private function sweepOrphanedRuns(): void
+    {
+        $thresholdMinutes = max(1, (int) $this->config->get('checkpoint.queue.orphan_threshold', 10));
+        $threshold = now()->subMinutes($thresholdMinutes);
+        $claimTimeoutMinutes = max(1, (int) $this->config->get('checkpoint.queue.orphan_claim_timeout', 1));
+        $claimExpiresBefore = now()->subMinutes($claimTimeoutMinutes);
+        $claimedAt = now();
+        $batchSize = max(1, (int) $this->config->get('checkpoint.queue.orphan_batch_size', 100));
+        $eventMaxIds = max(1, (int) $this->config->get('checkpoint.queue.orphan_event_max_ids', 50));
+        $queue = (string) $this->config->get('checkpoint.queue.name', 'db-ops');
+        $claimedRunIds = [];
+        $claimedRunCount = 0;
+        $oldestStaleAgeMinutes = 0;
+
+        CommandRun::query()
+            ->pending()
+            ->where('updated_at', '<', $threshold)
+            ->where(function ($query) use ($claimExpiresBefore): void {
+                $query
+                    ->whereNull('orphan_recovery_claimed_at')
+                    ->orWhere('orphan_recovery_claimed_at', '<', $claimExpiresBefore);
+            })
+            ->orderBy('id')
+            ->chunkById($batchSize, function ($staleRuns) use (
+                $claimedAt,
+                $claimExpiresBefore,
+                $threshold,
+                $queue,
+                &$claimedRunCount,
+                &$claimedRunIds,
+                &$oldestStaleAgeMinutes,
+                $eventMaxIds,
+                $thresholdMinutes,
+            ): void {
+                $staleRuns->each(function (CommandRun $staleRun) use (
+                    $claimedAt,
+                    $claimExpiresBefore,
+                    $threshold,
+                    $queue,
+                    &$claimedRunCount,
+                    &$claimedRunIds,
+                    &$oldestStaleAgeMinutes,
+                    $eventMaxIds,
+                    $thresholdMinutes,
+                ): void {
+                    if (! $staleRun->claimForOrphanRecovery($threshold, $claimExpiresBefore, $claimedAt, refresh: false)) {
+                        return;
+                    }
+
+                    try {
+                        $this->bus->dispatch((new ProcessCommandRunJob($staleRun))->onQueue($queue));
+                    } catch (Throwable $exception) {
+                        report($exception);
+                        $staleRun->releaseOrphanRecoveryClaim($claimedAt, refresh: false);
+
+                        return;
+                    }
+
+                    $claimedRunCount++;
+                    $staleAgeMinutes = max(0, (int) ($staleRun->updated_at?->diffInMinutes(now()) ?? 0));
+                    $oldestStaleAgeMinutes = max($oldestStaleAgeMinutes, $staleAgeMinutes);
+
+                    if (count($claimedRunIds) < $eventMaxIds) {
+                        $claimedRunIds[] = (int) $staleRun->getKey();
+                    }
+
+                    $this->events->dispatch(new OrphanRunRedispatched($staleRun, $queue, $thresholdMinutes, $staleAgeMinutes));
+                    $this->promptInfo($this->redispatchedMessage((int) $staleRun->getKey()));
+                });
+            });
+
+        if ($claimedRunCount > 0) {
+            $this->events->dispatch(new QueueLagDetected(
+                $queue,
+                $claimedRunCount,
+                $thresholdMinutes,
+                $oldestStaleAgeMinutes,
+                $claimedRunIds,
+                $claimedRunCount > count($claimedRunIds),
+            ));
         }
+    }
 
-        return self::SUCCESS;
+    private function redispatchedMessage(int $runId): string
+    {
+        return $this->translatedOr(
+            'messages.cli.orphan_redispatched',
+            sprintf('Re-dispatched orphaned run #%d.', $runId),
+            ['id' => $runId],
+        );
     }
 
     private function recoveryMessage(int $runId, int $timeoutSeconds): string

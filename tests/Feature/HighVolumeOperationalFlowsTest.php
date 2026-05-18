@@ -11,7 +11,6 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Log;
 
 it('computes status summary correctly with high command-run volume', function (): void {
     Date::setTestNow('2026-03-15 12:00:00');
@@ -80,7 +79,7 @@ it('returns bounded recent report results for high command-run volume', function
         'updated_at' => now()->subHours(6),
     ]);
 
-    Artisan::call('checkpoint:report', ['--limit' => 50, '--format' => 'json']);
+    Artisan::call('checkpoint:doctor', ['--full' => true, '--limit' => 50, '--format' => 'json']);
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
@@ -127,7 +126,6 @@ it('re-dispatches stale orphan batches with correct aggregate metadata at scale'
 
     Bus::fake();
     Event::fake([QueueLagDetected::class, OrphanRunRedispatched::class]);
-    Log::shouldReceive('channel->warning')->times(120);
 
     config()->set('checkpoint.queue.orphan_threshold', 10);
     config()->set('checkpoint.queue.orphan_batch_size', 25);
@@ -139,7 +137,7 @@ it('re-dispatches stale orphan batches with correct aggregate metadata at scale'
         'updated_at' => now()->subMinutes(35),
     ]);
 
-    checkpoint_artisan('checkpoint:recover-orphans')->assertSuccessful();
+    checkpoint_artisan('checkpoint:health-check')->assertSuccessful();
 
     Bus::assertDispatchedTimes(ProcessCommandRunJob::class, 120);
     Event::assertDispatchedTimes(OrphanRunRedispatched::class, 120);

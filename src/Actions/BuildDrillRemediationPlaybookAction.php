@@ -98,7 +98,7 @@ final readonly class BuildDrillRemediationPlaybookAction
                 title: 'Backup drill trend is degrading',
                 summary: 'Recent drill outcomes show a degrading trajectory. Investigate repeated failure patterns before the next restore event.',
                 recommendedCommands: [
-                    'checkpoint:report --format=json',
+                    'checkpoint:doctor --full --format=json',
                     'checkpoint:doctor --agent',
                 ],
                 steps: [
@@ -136,7 +136,7 @@ final readonly class BuildDrillRemediationPlaybookAction
                 title: 'Latest backup drill failed',
                 summary: 'The most recent drill run failed even though aggregate trend and pass-rate are currently acceptable.',
                 recommendedCommands: [
-                    'checkpoint:report --format=json',
+                    'checkpoint:doctor --full --format=json',
                 ],
                 steps: [
                     'Review the latest drill failure reason and remediation notes.',

@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
-use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
-use Illuminate\Console\Command;
 use Laravel\Prompts\Prompt;
 
 use function Laravel\Prompts\confirm;
@@ -16,26 +14,19 @@ use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 use function Laravel\Prompts\warning;
 
-final class PruneCommand extends Command
+final class PruneCommand extends CheckpointCommand
 {
-    use UsesLaravelPrompts;
-
     protected $signature = 'checkpoint:prune
         {--dry-run : Preview what would be pruned without deleting records.}
         {--force : Skip confirmation prompt for non-interactive environments.}';
 
     protected $description = 'Prune old checkpoint runs and backup drill records.';
 
-    private readonly CommandRun $commandRun;
-
-    private readonly BackupDrillRun $backupDrillRun;
-
-    public function __construct()
-    {
+    public function __construct(
+        private readonly CommandRun $commandRun,
+        private readonly BackupDrillRun $backupDrillRun,
+    ) {
         parent::__construct();
-
-        $this->commandRun = app()->make(CommandRun::class);
-        $this->backupDrillRun = app()->make(BackupDrillRun::class);
     }
 
     public function handle(): int
@@ -48,7 +39,7 @@ final class PruneCommand extends Command
             intro($dryRun ? 'Prune Checkpoint Records (Dry Run)' : 'Prune Checkpoint Records');
             note('What: remove aged operational rows according to prune model rules.');
             note('When: periodic maintenance to keep operational tables lean.');
-            note('Next: run checkpoint:report to confirm retained history looks healthy.');
+            note('Next: run checkpoint:doctor --full to confirm retained history looks healthy.');
         }
 
         if ($dryRun) {

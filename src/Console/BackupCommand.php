@@ -5,16 +5,12 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
-use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
-use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Bus;
 use Throwable;
 
-final class BackupCommand extends Command
+final class BackupCommand extends CheckpointCommand
 {
-    use UsesLaravelPrompts;
-
     protected $signature = 'checkpoint:backup
                             {--sync : Run the backup inline instead of queueing.}';
 

@@ -388,7 +388,7 @@ final readonly class OperationalReportBuilder
             return 'Set CP_CMD_LOGICAL_BACKUP, then run php artisan checkpoint:backup.';
         }
 
-        return 'Run php artisan checkpoint:report --limit=10 --format=json for full failure context.';
+        return 'Run php artisan checkpoint:doctor --full --limit=10 --format=json for full failure context.';
     }
 
     /**
