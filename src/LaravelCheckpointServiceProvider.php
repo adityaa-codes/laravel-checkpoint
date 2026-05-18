@@ -17,7 +17,6 @@ use AdityaaCodes\LaravelCheckpoint\Console\BackupCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\CatalogExportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DrillCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\EnqueueCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\HealthCheckCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\MakeDriverCommand;
@@ -28,9 +27,7 @@ use AdityaaCodes\LaravelCheckpoint\Console\RecordDrillRunCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecoverOrphansCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ReplicateCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ReportCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\RetentionPolicyCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\StatusCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\TestCommand;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Contracts\ReplicationEndpointParser;
 use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
@@ -79,7 +76,6 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             ->hasMigration('create_checkpoint_tables')
             ->hasCommands([
                 DoctorCommand::class,
-                EnqueueCommand::class,
                 HealthCheckCommand::class,
                 InstallCommand::class,
                 MakeDriverCommand::class,
@@ -88,14 +84,12 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
                 ReportCommand::class,
                 CatalogExportCommand::class,
                 PitrReadinessCommand::class,
-                RetentionPolicyCommand::class,
                 StatusCommand::class,
                 RecordDrillRunCommand::class,
                 DrillCommand::class,
                 BackupCommand::class,
                 MigrateFromSpatieCommand::class,
                 ReplicateCommand::class,
-                TestCommand::class,
             ]);
     }
 

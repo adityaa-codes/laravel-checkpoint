@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\EnqueueCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\HealthCheckCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
@@ -45,7 +44,6 @@ use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
 it('keeps package internals final by default with explicit seams', function (): void {
     $finalClasses = [
         DoctorCommand::class,
-        EnqueueCommand::class,
         HealthCheckCommand::class,
         InstallCommand::class,
         PruneCommand::class,

@@ -55,7 +55,6 @@ it('registers the public report and catalog commands', function (): void {
         ->toHaveKey('checkpoint:catalog-export')
         ->toHaveKey('checkpoint:install')
         ->toHaveKey('checkpoint:pitr-readiness')
-        ->toHaveKey('checkpoint:retention-policy')
         ->toHaveKey('checkpoint:drill');
 });
 
