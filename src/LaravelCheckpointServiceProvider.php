@@ -23,7 +23,6 @@ use AdityaaCodes\LaravelCheckpoint\Console\MakeDriverCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\MigrateFromSpatieCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PitrReadinessCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\RecordDrillRunCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecoverOrphansCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ReplicateCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ReportCommand;
@@ -85,7 +84,6 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
                 CatalogExportCommand::class,
                 PitrReadinessCommand::class,
                 StatusCommand::class,
-                RecordDrillRunCommand::class,
                 DrillCommand::class,
                 BackupCommand::class,
                 MigrateFromSpatieCommand::class,

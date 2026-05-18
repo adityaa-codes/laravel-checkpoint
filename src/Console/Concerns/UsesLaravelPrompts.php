@@ -214,4 +214,22 @@ trait UsesLaravelPrompts
     {
         error($message);
     }
+
+    protected function resolveOutputMode(string $format, bool $agentMode): string
+    {
+        if ($agentMode) {
+            return 'agent';
+        }
+
+        return in_array($format, ['table', 'json', 'compact-json'], true) ? $format : 'table';
+    }
+
+    protected function priorityLabel(string $status): string
+    {
+        return match ($status) {
+            'fail' => 'P0',
+            'warn' => 'P1',
+            default => 'P3',
+        };
+    }
 }

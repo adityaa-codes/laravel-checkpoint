@@ -37,7 +37,7 @@ final class DoctorCommand extends Command
         $agentMode = (bool) $this->option('agent');
         $briefMode = (bool) $this->option('brief');
         $policyProfile = $this->policyProfileOverride();
-        $outputMode = $agentMode ? 'agent' : (in_array($format, ['table', 'json', 'compact-json'], true) ? $format : 'table');
+        $outputMode = $this->resolveOutputMode($format, $agentMode);
 
         if ($this->enhancedInteractiveMode() && $outputMode === 'table') {
             intro('Checkpoint Doctor: Health Checks');
@@ -408,7 +408,7 @@ final class DoctorCommand extends Command
                 fn (array $check): array => [
                     $check['check'],
                     $this->statusWord($check['status']),
-                    $this->priorityLabel($check),
+                    $this->priorityLabel((string) ($check['status'] ?? 'pass')),
                     strtoupper($check['severity']),
                     $check['notes'],
                 ],
@@ -477,18 +477,6 @@ final class DoctorCommand extends Command
         $issues = $this->orderedChecksForDisplay($issues);
 
         return array_slice($issues, 0, max(1, $limit));
-    }
-
-    /**
-     * @param  array{status:string,severity:string}  $check
-     */
-    private function priorityLabel(array $check): string
-    {
-        return match ($check['status']) {
-            'fail' => 'P0',
-            'warn' => 'P1',
-            default => 'P3',
-        };
     }
 
     /**

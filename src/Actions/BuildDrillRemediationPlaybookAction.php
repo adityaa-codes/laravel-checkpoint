@@ -62,7 +62,6 @@ final readonly class BuildDrillRemediationPlaybookAction
                 summary: 'No backup drill run is recorded. Schedule and record a drill run before relying on restore readiness.',
                 recommendedCommands: [
                     'checkpoint:drill',
-                    'checkpoint:record-drill --run-uuid=<uuid> --overall-result=pass --executed-at="<iso-8601>"',
                 ],
                 steps: [
                     'Queue and execute a backup drill immediately.',

@@ -517,18 +517,9 @@ final class ReportCommand extends Command
         }
     }
 
-    private function priorityLabel(string $status): string
-    {
-        return match ($status) {
-            'fail' => 'P0',
-            'warn' => 'P1',
-            default => 'P3',
-        };
-    }
-
     /**
-     * @param  list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>  $checks
-     * @return list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>
+     * @param  list<array<string,mixed>>  $checks
+     * @return list<array<string,mixed>>
      */
     private function prioritizeChecks(array $checks): array
     {

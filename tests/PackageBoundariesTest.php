@@ -7,7 +7,6 @@ use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\HealthCheckCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\RecordDrillRunCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\RecoverOrphansCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ReportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\StatusCommand;
@@ -47,7 +46,6 @@ it('keeps package internals final by default with explicit seams', function (): 
         HealthCheckCommand::class,
         InstallCommand::class,
         PruneCommand::class,
-        RecordDrillRunCommand::class,
         RecoverOrphansCommand::class,
         ReportCommand::class,
         StatusCommand::class,
