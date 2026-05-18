@@ -23,7 +23,7 @@ class VerificationRunFactory extends Factory
             'status' => 'verified',
             'verified_at' => now(),
             'metadata' => [
-                'driver' => 'pgbasebackup',
+                'driver' => 'postgres',
             ],
             'error_detail' => null,
         ];

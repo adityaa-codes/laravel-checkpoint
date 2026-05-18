@@ -37,14 +37,10 @@ final readonly class BreakdownAggregator
             $driver = is_string($run->driver_name) && $run->driver_name !== '' ? $run->driver_name : 'unknown';
             $repository = $run->repository;
             $stanza = is_string($run->stanza) && $run->stanza !== '' ? $run->stanza : null;
-            $key = sprintf(
-                'driver:%s|repo:%s%s',
-                $driver,
-                $repository === null ? 'none' : (string) $repository,
-                $stanza !== null ? '|stanza:'.$stanza : '',
-            );
+            $key = 'driver:'.$driver.'|repo:'.($repository === null ? 'none' : (string) $repository)
+                .($stanza !== null ? '|stanza:'.$stanza : '');
 
-            if (! array_key_exists($key, $groups)) {
+            if (! isset($groups[$key])) {
                 $groups[$key] = [
                     'driver' => $driver,
                     'repository' => $repository,
@@ -68,7 +64,7 @@ final readonly class BreakdownAggregator
             $groups[$key]['runs']['total']++;
             $totalRuns++;
 
-            $status = (string) $run->status->value;
+            $status = $run->status->value;
 
             if ($status === CommandRunStatus::Succeeded->value) {
                 $groups[$key]['runs']['succeeded']++;

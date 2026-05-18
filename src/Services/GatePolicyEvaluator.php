@@ -36,19 +36,19 @@ final readonly class GatePolicyEvaluator
             ['profile' => $profile, 'source' => $profileSource] = $this->resolvedProfile($profileOverride);
 
             if (! $this->hasProfile($profile)) {
-                throw new \RuntimeException(sprintf('Unknown gate profile [%s].', $profile));
+                throw new \RuntimeException("Unknown gate profile [{$profile}].");
             }
 
             $policy = $this->profilePolicy($profile);
             $codeMap = $this->codeMap();
             $normalizedChecks = $this->normalizeChecks($checks);
 
-            $failedCount = count(array_filter($normalizedChecks, static fn (array $check): bool => $check['status'] === 'fail'));
-            $warningCount = count(array_filter($normalizedChecks, static fn (array $check): bool => $check['status'] === 'warn'));
+            $failedCount = collect($normalizedChecks)->filter(static fn (array $check): bool => $check['status'] === 'fail')->count();
+            $warningCount = collect($normalizedChecks)->filter(static fn (array $check): bool => $check['status'] === 'warn')->count();
 
             $safetyFailed = $this->safetyFailed($normalizedChecks, $policy);
             $evidenceFailed = $this->evidenceFailed($normalizedChecks, $summary, $policy);
-            $warnExit = (bool) ($policy['exit_on_warn'] ?? false) && ! $safetyFailed && ! $evidenceFailed && $warningCount > 0;
+            $warnExit = ($policy['exit_on_warn'] ?? false) && ! $safetyFailed && ! $evidenceFailed && $warningCount > 0;
 
             if ($safetyFailed) {
                 return [
@@ -136,8 +136,8 @@ final readonly class GatePolicyEvaluator
         $map = $this->config->environmentProfileMap;
         $mappedProfile = $map[$this->config->environment] ?? null;
 
-        if (is_string($mappedProfile) && trim($mappedProfile) !== '') {
-            return ['profile' => trim($mappedProfile), 'source' => 'environment'];
+        if (is_string($mappedProfile) && str($mappedProfile)->trim()->isNotEmpty()) {
+            return ['profile' => str($mappedProfile)->trim()->value(), 'source' => 'environment'];
         }
 
         return ['profile' => $this->defaultProfile(), 'source' => 'default'];
@@ -145,7 +145,7 @@ final readonly class GatePolicyEvaluator
 
     private function defaultProfile(): string
     {
-        $profile = trim($this->config->defaultProfile);
+        $profile = str($this->config->defaultProfile)->trim()->value();
 
         return $profile !== '' ? $profile : 'production';
     }
@@ -154,7 +154,7 @@ final readonly class GatePolicyEvaluator
     {
         $candidate = $profileOverride;
 
-        if (! is_string($candidate) || trim($candidate) === '') {
+        if (! is_string($candidate) || str($candidate)->trim()->isEmpty()) {
             $candidate = $this->config->overrideProfile;
         }
 
@@ -162,14 +162,14 @@ final readonly class GatePolicyEvaluator
             return null;
         }
 
-        $candidate = trim($candidate);
+        $candidate = str($candidate)->trim()->value();
 
         return $candidate !== '' ? $candidate : null;
     }
 
     private function hasProfile(string $profile): bool
     {
-        return array_key_exists($profile, $this->config->profiles);
+        return isset($this->config->profiles[$profile]);
     }
 
     private function profilePolicy(string $profile): array
@@ -192,7 +192,7 @@ final readonly class GatePolicyEvaluator
         }
 
         return [
-            'exit_on_warn' => (bool) ($profiles[$profile]['exit_on_warn'] ?? false),
+            'exit_on_warn' => ($profiles[$profile]['exit_on_warn'] ?? false),
             'safety' => is_array($profiles[$profile]['safety'] ?? null) ? $profiles[$profile]['safety'] : [],
             'evidence' => is_array($profiles[$profile]['evidence'] ?? null) ? $profiles[$profile]['evidence'] : [],
         ];
@@ -217,12 +217,10 @@ final readonly class GatePolicyEvaluator
      */
     private function normalizeChecks(array $checks): array
     {
-        return array_map(static function (array $check): array {
-            return [
-                'code' => (string) ($check['code'] ?? ''),
-                'status' => (string) ($check['status'] ?? 'warn'),
-            ];
-        }, $checks);
+        return collect($checks)->map(static fn (array $check): array => [
+            'code' => (string) ($check['code'] ?? ''),
+            'status' => (string) ($check['status'] ?? 'warn'),
+        ])->all();
     }
 
     /**
@@ -233,16 +231,24 @@ final readonly class GatePolicyEvaluator
     {
         $safety = $policy['safety'] ?? [];
         $failOnStatuses = is_array($safety['fail_on_statuses'] ?? null) ? $safety['fail_on_statuses'] : ['fail'];
-        $failOnStatuses = array_values(array_filter(array_map(static fn (mixed $status): string => is_string($status) ? $status : '', $failOnStatuses)));
+        $failOnStatuses = collect($failOnStatuses)
+            ->map(static fn (mixed $status): string => is_string($status) ? $status : '')
+            ->filter(fn (string $status): bool => $status !== '')
+            ->values()
+            ->all();
         $failOnWarningCodes = is_array($safety['fail_on_warning_codes'] ?? null) ? $safety['fail_on_warning_codes'] : [];
-        $failOnWarningCodes = array_values(array_filter(array_map(static fn (mixed $code): string => is_string($code) ? $code : '', $failOnWarningCodes)));
+        $failOnWarningCodes = collect($failOnWarningCodes)
+            ->map(static fn (mixed $code): string => is_string($code) ? $code : '')
+            ->filter(fn (string $code): bool => $code !== '')
+            ->values()
+            ->all();
 
         foreach ($checks as $check) {
-            if (in_array($check['status'], $failOnStatuses, true)) {
+            if (collect($failOnStatuses)->contains($check['status'])) {
                 return true;
             }
 
-            if ($check['status'] === 'warn' && in_array($check['code'], $failOnWarningCodes, true)) {
+            if ($check['status'] === 'warn' && collect($failOnWarningCodes)->contains($check['code'])) {
                 return true;
             }
         }
@@ -258,22 +264,26 @@ final readonly class GatePolicyEvaluator
     private function evidenceFailed(array $checks, array $summary, array $policy): bool
     {
         $evidence = $policy['evidence'] ?? [];
-        $enabled = (bool) ($evidence['enabled'] ?? false);
+        $enabled = ($evidence['enabled'] ?? false);
 
         if (! $enabled) {
             return false;
         }
 
         $failOnCodes = is_array($evidence['fail_on_codes'] ?? null) ? $evidence['fail_on_codes'] : [];
-        $failOnCodes = array_values(array_filter(array_map(static fn (mixed $code): string => is_string($code) ? $code : '', $failOnCodes)));
+        $failOnCodes = collect($failOnCodes)
+            ->map(static fn (mixed $code): string => is_string($code) ? $code : '')
+            ->filter(fn (string $code): bool => $code !== '')
+            ->values()
+            ->all();
 
         foreach ($checks as $check) {
-            if (in_array($check['code'], $failOnCodes, true) && in_array($check['status'], ['warn', 'fail'], true)) {
+            if (collect($failOnCodes)->contains($check['code']) && collect(['warn', 'fail'])->contains($check['status'])) {
                 return true;
             }
         }
 
-        $maxAgeDays = (int) ($evidence['max_restore_verification_age_days'] ?? 0);
+        $maxAgeDays = ($evidence['max_restore_verification_age_days'] ?? 0);
 
         if ($maxAgeDays <= 0) {
             return false;
@@ -281,7 +291,7 @@ final readonly class GatePolicyEvaluator
 
         $timestamp = $summary['latest_restore_run']['timestamp'] ?? null;
 
-        if (! is_string($timestamp) || trim($timestamp) === '') {
+        if (! is_string($timestamp) || str($timestamp)->trim()->isEmpty()) {
             return true;
         }
 

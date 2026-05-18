@@ -7,7 +7,7 @@ use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidOperationException;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
 
 it('validates built-in operations and their exclusivity rules', function (): void {
-    $catalog = new CommandRunCatalog;
+    $catalog = app(CommandRunCatalog::class);
 
     expect($catalog->validate('logical_backup', '   '))
         ->toBeNull()
@@ -26,7 +26,7 @@ it('validates built-in operations and their exclusivity rules', function (): voi
 });
 
 it('throws for unsupported operations and missing required arguments', function (): void {
-    $catalog = new CommandRunCatalog;
+    $catalog = app(CommandRunCatalog::class);
 
     expect(fn (): array => $catalog->operation('not-real'))
         ->toThrow(InvalidOperationException::class, 'Unsupported operation: not-real');
@@ -42,7 +42,7 @@ it('throws for unsupported operations and missing required arguments', function 
 });
 
 it('supports runtime extension with custom validators', function (): void {
-    $catalog = new CommandRunCatalog;
+    $catalog = app(CommandRunCatalog::class);
 
     $catalog->extend('custom_snapshot', [
         'argument_required' => true,
@@ -72,7 +72,7 @@ it('merges configured custom operations at construction time', function (): void
         ],
     ]);
 
-    $catalog = new CommandRunCatalog;
+    $catalog = app(CommandRunCatalog::class);
 
     expect($catalog->operation('tenant_backup')['label'])->toBe('Tenant Backup')
         ->and($catalog->validate('tenant_backup', '42'))->toBe('42')

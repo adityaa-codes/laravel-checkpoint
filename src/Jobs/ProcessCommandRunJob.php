@@ -6,8 +6,6 @@ namespace AdityaaCodes\LaravelCheckpoint\Jobs;
 
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\PgBaseBackupDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
@@ -145,8 +143,6 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
         return match ($driver) {
             'shell' => ShellCommandDriver::class,
             'postgres' => PostgresDriver::class,
-            'pgbasebackup' => PgBaseBackupDriver::class,
-            'pgdump' => PgDumpDriver::class,
             'mysql' => MysqlDriver::class,
             default => null,
         };

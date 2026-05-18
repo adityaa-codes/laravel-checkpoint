@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Tests;
 
 use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\PgBaseBackupDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\PgDumpDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpointServiceProvider;
@@ -248,10 +246,8 @@ class TestCase extends Orchestra
                 ],
                 'postgres' => [
                     'class' => PostgresDriver::class,
-                ],
-                'pgbasebackup' => [
-                    'class' => PgBaseBackupDriver::class,
                     'binary' => 'pg_basebackup',
+                    'physical_output_dir' => sys_get_temp_dir().'/checkpoint-basebackups',
                     'stanza' => 'main',
                     'repo' => 1,
                     'repositories' => [
@@ -283,17 +279,6 @@ class TestCase extends Orchestra
                     'backup_standby' => false,
                     'checksum_page' => false,
                     'delta' => false,
-                    'command_timeout_seconds' => 5,
-                    'extra_args' => [
-                        'backup' => [],
-                        'restore' => [],
-                        'verify' => [],
-                        'check' => [],
-                        'info' => [],
-                    ],
-                ],
-                'pgdump' => [
-                    'class' => PgDumpDriver::class,
                     'dump_binary' => 'pg_dump',
                     'restore_binary' => 'pg_restore',
                     'format' => 'directory',
@@ -308,6 +293,9 @@ class TestCase extends Orchestra
                     'extra_args' => [
                         'backup' => [],
                         'restore' => [],
+                        'verify' => [],
+                        'check' => [],
+                        'info' => [],
                     ],
                 ],
                 'mysql' => [

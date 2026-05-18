@@ -1,0 +1,40 @@
+<?php
+
+declare(strict_types=1);
+
+namespace {{ namespace }};
+
+use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
+use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use Symfony\Component\Process\Process;
+
+final class {{ class }} implements BackupDriver
+{
+    public function execute(CommandRun $run): void
+    {
+        if (! $run->claimPendingExecution()) {
+            return;
+        }
+
+        $run->forceFill([
+            'command_line' => '{{ dummyCommand }}',
+        ])->save();
+
+        $process = new Process(['{{ dummyCommand }}']);
+        $process->run();
+
+        $exitCode = $process->getExitCode() ?? -1;
+        $output = $process->getOutput().$process->getErrorOutput();
+
+        $run->forceFill([
+            'command_output' => $output,
+            'exit_code' => $exitCode,
+        ])->save();
+
+        if ($exitCode === 0) {
+            $run->markAsSucceeded($exitCode, $output);
+        } else {
+            $run->markAsFailed($exitCode, $output);
+        }
+    }
+}

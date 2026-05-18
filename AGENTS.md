@@ -1,361 +1,218 @@
 # Laravel Checkpoint — AI Agent & Contributor Guidelines
 
-## Mission
+## Rules
 
-Make backup, restore, PITR, replication, and recovery-drill operations **safe, auditable, and automation-friendly** for Laravel applications. Defaults must be trustworthy in production. Positioning: **"Database Reliability Layer"** — not a backup tool, a business continuity system.
+These rules apply to every task in this project unless explicitly overridden.
+Bias: caution over speed on non-trivial work. Use judgment on trivial tasks.
 
----
+## Rule 1 — Think Before Coding
+State assumptions explicitly. If uncertain, ask rather than guess.
+Present multiple interpretations when ambiguity exists.
+Push back when a simpler approach exists.
+Stop when confused. Name what's unclear.
 
-## Philosophy
+## Rule 2 — Simplicity First
+Minimum code that solves the problem. Nothing speculative.
+No features beyond what was asked. No abstractions for single-use code.
+Test: would a senior engineer say this is overcomplicated? If yes, simplify.
 
-1. **Safety before convenience** — destructive ops (restore, replication apply) remain guarded at all times.
-2. **Evidence over assumption** — "backup succeeded" is not enough; keep restore verification and drill evidence visible.
-3. **Operator + agent dual UX** — human CLI stays concise, triage-first with `--brief`. `--agent` output stays deterministic, parseable, and versioned.
-4. **Additive contracts** — evolve JSON payloads by adding fields, never removing or mutating existing keys.
-5. **Frictionless install** — `composer require` + `php artisan checkpoint:install` gets you running. No DDEV, no Docker prerequisites.
-6. **Pro/Free clean split** — advanced features (PITR, drills, replication) gate behind `class_exists(ProServiceProvider::class)`. Never break open-source users.
+## Rule 3 — Surgical Changes
+Touch only what you must. Clean up only your own mess.
+Don't "improve" adjacent code, comments, or formatting.
+Don't refactor what isn't broken. Match existing style.
 
----
+## Rule 4 — Goal-Driven Execution
+Define success criteria. Loop until verified.
+Don't follow steps. Define success and iterate.
+Strong success criteria let you loop independently.
 
-## Architecture
+## Rule 5 — Use the model only for judgment calls
+Use me for: classification, drafting, summarization, extraction.
+Do NOT use me for: routing, retries, deterministic transforms.
+If code can answer, code answers.
 
-### Directory layout
-```
-src/
-  Actions/           → single-responsibility action classes (EnqueueCommandRunAction)
-  Console/           → Artisan commands (one class per command, final)
-  Contracts/         → interfaces (BackupDriver, ReplicationEndpointParser)
-  Drivers/           → backup driver implementations (Mysql, PgDump, PgBackRest, Shell, Postgres, Fake)
-  Enums/             → native PHP 8.1 backed enums (CommandRunStatus, ReplicationEngine)
-  Events/            → final readonly classes with constructor promotion
-  Exceptions/        → package-specific exceptions extending RuntimeException
-  Jobs/              → queue jobs (ProcessCommandRunJob)
-  Models/            → Eloquent models with modern casts() syntax
-  Services/          → domain logic services
-  Support/           → formatting, payload building, event mapping utilities
-  ValueObjects/      → readonly DTOs (ReplicationEndpoint, ReplicationRequest)
-config/
-  checkpoint.php     → single config file, 375 lines max, DB_OPS_* env prefix
-tests/
-  Feature/           → end-to-end Artisan command tests
-  Unit/              → isolated class tests
-  Fixtures/          → deterministic JSON snapshots (time frozen)
-  Pest.php           → shared helpers (checkpoint_artisan, checkpoint_fixture_path)
-  TestCase.php       → extends Orchestra Testbench, uses SQLite :memory:
-```
+## Rule 6 — Token budgets are not advisory
+Per-task: 4,000 tokens. Per-session: 30,000 tokens.
+If approaching budget, summarize and start fresh.
+Surface the breach. Do not silently overrun.
 
-### Layer rules
-- **Commands** are the entry point. They validate input, delegate to services/actions, format output. No business logic.
-- **Services** contain domain logic. They receive dependencies via constructor DI (interfaces, not facades).
-- **Actions** are single-purpose orchestrators (enqueue, validate, build). One `execute()` method pattern.
-- **Drivers** implement `BackupDriver` (one method: `execute(CommandRun $run): void`). Config-driven resolution via `config('checkpoint.drivers.{name}.class')`.
-- **Models** own their persistence. Atomic state transitions (`claimPendingExecution`, `markAsSucceeded`) use `whereKey()->where()->update()` for race-condition safety.
+## Rule 7 — Surface conflicts, don't average them
+If two patterns contradict, pick one (more recent / more tested).
+Explain why. Flag the other for cleanup.
+Don't blend conflicting patterns.
 
----
+## Rule 8 — Read before you write
+Before adding code, read exports, immediate callers, shared utilities.
+"Looks orthogonal" is dangerous. If unsure why code is structured a way, ask.
 
-## Code Conventions
+## Rule 9 — Tests verify intent, not just behavior
+Tests must encode WHY behavior matters, not just WHAT it does.
+A test that can't fail when business logic changes is wrong.
 
-### Mandatory
-```php
-declare(strict_types=1);                          // every file
-final class ClassName                             // every class (except intentional seams)
-final readonly class ClassName                    // services, actions, events, value objects
-private readonly Type $dependency,                 // constructor promotion
-public function __construct(...) {}                // no body when promotion covers all
-public function handle(): int                     // commands return 0 (SUCCESS) or 1 (FAILURE)
-```
+## Rule 10 — Checkpoint after every significant step
+Summarize what was done, what's verified, what's left.
+Don't continue from a state you can't describe back.
+If you lose track, stop and restate.
 
-### PHP 8.3+ features to use
-- `readonly` on all properties
-- Native enums (`enum Status: string { case Pending = 'pending'; }`)
-- `match()` expressions, never long `switch`/`if-elseif` chains
-- First-class callables: `$this->validator->validate(...)`
-- `str_starts_with`, `str_contains`, `str()` helper
-- `json_validate()` for input checking
 
-### Strictly avoid
-- **No comments** in source files (code should be self-documenting). PHPDoc only for `@param`/`@return` on public methods.
-- **No facades** in services/actions. Use constructor DI. `config()` and `app()` helpers only in service providers and commands.
-- **No error suppression** (`@file_put_contents`, `@fopen`, `@unlink`). Check return values.
-- **No `catch (Throwable)` without logging**. Always `report($e)` or at minimum `logger()->error(...)`.
-- **No `config()->set()` inside validators**. Validation reports, never mutates.
-- **No `(new Model)->method()`**. Resolve from container or receive via DI.
-- **No methods over 50 lines**. Extract private methods or separate classes.
-- **No shell string concatenation**. All process commands use Symfony Process with array args.
+## Rule 11 — Fail loud
+"Completed" is wrong if anything was skipped silently.
+"Tests pass" is wrong if any were skipped.
+Default to surfacing uncertainty, not hiding it.
 
 ---
 
-## CLI Command Standards
+## What
+Database reliability layer for Laravel: backup, restore, PITR, replication, recovery drills.
+PHP 8.3+, Laravel 12/13, Pest, Pint, PHPStan (level max), Orchestra Testbench, SQLite :memory:.
+Drivers: MySQL, PgDump, PgBackRest, Shell, Postgres, Fake.
+Key locations: `src/Console/` (commands), `src/Services/` (domain logic), `src/Drivers/` (backup implementations),
+`src/Models/` (Eloquent), `config/checkpoint.php` (single config file).
 
-### Naming
-- All commands use `checkpoint:*` prefix. No `do:`, `check:`, `admin:` namespaces.
-- Public surface: `install`, `doctor`, `status`, `report`, `enqueue`, `enqueue-backup`, `enqueue-drill`, `replicate`, `migrate-from-spatie`, `health-check`, `pitr-readiness`, `prune`, `recover-orphans`, `retention-policy`, `catalog-export`, `record-drill`, `test`.
+## Why
+Mission: Make backup, restore, PITR, replication, and recovery-drill operations safe, auditable, and automation-friendly.
+Positioning: Database Reliability Layer — a business continuity system, not a backup tool.
 
-### Structure
-```php
-final class ExampleCommand extends Command
-{
-    use UsesLaravelPrompts;
+Principles: safety before convenience · evidence over assumption · operator + agent dual UX · additive contracts ·
+frictionless install.
 
-    protected $signature = 'checkpoint:example {--format=table}';
-    protected $description = 'One-line description.';
-
-    public function __construct(
-        private readonly SomeService $service,
-    ) {
-        parent::__construct();
-    }
-
-    public function handle(): int
-    {
-        try {
-            // validation → logic → output
-            return self::SUCCESS;
-        } catch (Throwable $exception) {
-            $this->promptError($exception->getMessage());
-            return self::FAILURE;
-        }
-    }
-}
+## How
+```bash
+vendor/bin/pint            # auto-fix style (Laravel Pint)
+vendor/bin/phpstan analyse # static analysis (level max)
+vendor/bin/pest            # test suite (Pest only, no PHPUnit)
 ```
 
-### Output modes
-- `table` — human-readable, uses `$this->promptTable()` from `UsesLaravelPrompts`
-- `json` — full JSON envelope via `CommandJsonContract`
-- `agent` — AI-agent-friendly compact JSON
-- `compact-json` — null-stripped JSON
+CI: PHP 8.3–8.5 × Laravel 12–13 × prefer-stable/prefer-lowest (12 jobs).
+Pre-release: full matrix green + no `@` suppression + no swallowed exceptions +
+all `stringOption()` in `UsesLaravelPrompts` trait + no methods >50 lines.
 
-### Shared utilities (add to UsesLaravelPrompts trait, NOT copy-paste)
-- `stringOption(string $name): ?string`
-- `policyProfileOverride(): ?string`
-- `machineGateDecision(array $gateDecision): array`
-- `shouldCollapsePassingChecks(): bool`
-- `orderedChecksForDisplay(array $checks): array`
-- `overallSloStatus(array $checks, int $failedCount, int $warnCount): array`
-- Translation fallback helper: `translatedOr(string $key, string $default): string`
+Security: all env vars `DB_OPS_*`. Restore requires confirmation in non-local environments.
+Queue locks (`ShouldBeUnique`) prevent concurrent destructive operations.
+All shell commands use Symfony Process array args — no string concatenation.
 
----
+## Agent Docs
+Read these only when relevant to your task (in `.ai/guidelines/laravel-checkpoint/`):
 
-## Config Conventions
+| File | When to read |
+|------|-------------|
+| `cli-command-standards.md` | Adding/modifying Artisan commands |
+| `driver-contract.md` | Implementing or debugging backup drivers |
+| `json-output-contracts.md` | Changing command output shapes |
+| `testing-and-contribution.md` | Writing tests or preparing commits |
+| `../../IMPLEMENTATION_PLAN_V2.md` | Choosing what to work on next |
 
-### Env naming
-- All env vars use `DB_OPS_*` prefix
-- Dot-notation config keys: `checkpoint.queue.name`, `checkpoint.drivers.mysql.binary`
-- Every config key has a safe default. No `env()` without a second argument.
+Consumer-facing guidelines: `resources/boost/guidelines/laravel-checkpoint/core.blade.php`.
 
-### Timeout chain (simplified)
-```php
-$timeoutBase = (int) env('DB_OPS_TIMEOUT', 3600);
-// queue.timeout = $timeoutBase
-// queue.retry_after = $timeoutBase + 60
-// queue.unique_for = $timeoutBase + 60
-```
-Individual env vars (`DB_OPS_QUEUE_TIMEOUT`, etc.) override specific keys.
+## Hard No's
+1. No facades in services/actions — constructor DI. `config()`/`app()` only in commands and providers.
+2. No shell string concatenation — Symfony Process array args only.
+3. No swallowed exceptions — always `report($e)` or `logger()->error(...)`.
+4. No error suppression (`@`) — check return values.
+5. No `config()->set()` in validators — validation reports, never mutates.
+6. No `(new Model)->method()` — resolve from container or receive via DI.
+7. No comments in source files — code is self-documenting.
 
-### Gate profiles
-- `local`, `staging`, `production` profiles with safety/evidence gate rules
-- Auto-detected from `app()->environment()` unless `--policy-profile=` overrides
-- Exit codes: pass=0, warn=2, safety_fail=10, evidence_fail=11, policy_error=12
+===
 
----
+<laravel-boost-guidelines>
+=== foundation rules ===
 
-## Testing Standards
+# Laravel Boost Guidelines
 
-### Framework
-- **Pest** only. No PHPUnit-style `test_*` methods. Use `it()` and `expect()`.
-- `uses(TestCase::class)` declared in `tests/Pest.php`
-- Arch tests in `tests/ArchTest.php`: enforce `strict_types`, `final`, no `dd`/`dump`, contracts are interfaces, drivers implement `BackupDriver`, Jobs implement `ShouldQueue`.
+The Laravel Boost guidelines are specifically curated by Laravel maintainers for this application. These guidelines should be followed closely to ensure the best experience when building Laravel applications.
 
-### Test helpers
-```php
-checkpoint_artisan('checkpoint:doctor --format=json')  // runs command
-checkpoint_fixture_path('doctor.json')                  // resolves fixture
-checkpoint_assert_matches_fixture($payload, $fixture)   // compares to snapshot
-```
+## Foundational Context
 
-### Coverage requirements
-- Every command gets: happy path, failure path, edge case (empty state, missing binary, invalid input)
-- Every driver gets: execute success, execute failure, metadata correctness
-- Every service gets: unit tests for logic, integration tests for side effects
-- Every new config key gets: ConfigValidator validation test
-- Fixtures: deterministic (time frozen), committed alongside tests
+This application is a Laravel application and its main Laravel ecosystems package & versions are below. You are an expert with them all. Ensure you abide by these specific packages & versions.
 
-### What NOT to test
-- Framework internals (Laravel's queue dispatcher, scheduler)
-- Third-party binary output (pg_dump, mysqldump)
-- UI rendering (use FakeDriver for command execution)
+- php - 8.4
 
----
+## Skills Activation
 
-## Driver Contract
+This project has domain-specific skills available in `**/skills/**`. You MUST activate the relevant skill whenever you work in that domain—don't wait until you're stuck.
 
-### Interface
-```php
-interface BackupDriver
-{
-    public function execute(CommandRun $run): void;
-}
-```
+## Conventions
 
-### Driver requirements
-1. Claim the run atomically (`claimPendingExecution`)
-2. Compute planned metadata before execution
-3. Run `RestoreSafetyGuard->evaluate()` for destructive operations
-4. Build Symfony Process argv array (never shell strings)
-5. Capture stdout/stderr via `CommandOutputStore`
-6. Mark run as succeeded/failed with exit code
-7. Dispatch appropriate events (BackupCompleted, BackupFailed)
-8. Persist structured metadata for audit trail
+- You must follow all existing code conventions used in this application. When creating or editing a file, check sibling files for the correct structure, approach, and naming.
+- Use descriptive names for variables and methods. For example, `isRegisteredForDiscounts`, not `discount()`.
+- Check for existing components to reuse before writing a new one.
 
-### Adding a custom driver
-1. Implement `BackupDriver`
-2. Register class in `config/checkpoint.php` under `drivers.{name}.class`
-3. Add binary validation to `ConfigValidator`
-4. Add health checks to `OperationalReportBuilder::activeDriverBinaryChecks()`
+## Verification Scripts
 
----
+- Do not create verification scripts or tinker when tests cover that functionality and prove they work. Unit and feature tests are more important.
 
-## Known Anti-Patterns (from audit — NEVER do these)
+## Application Structure & Architecture
 
-| Anti-pattern | Example | Fix |
-|-------------|---------|-----|
-| Config coupling | `Repository $config` injected then `$config->get()` scattered | Pass typed value objects/DTOs |
-| Copy-paste utility methods | `stringOption()` in 6 commands | Put in `UsesLaravelPrompts` trait |
-| Swallowed exceptions | `catch (Throwable) {}` with no logging | `report($e)` or `logger()->error()` |
-| Config mutation in validators | `config()->set(...)` inside `ConfigValidator` | Validation reports; caller fixes |
-| Monolith classes | 1,930-line `OperationalReportBuilder` | Extract: HealthCheckComposer, BreakdownAggregator, DrillTrendAnalyzer |
-| Global helpers in services | `app()->environment()` in GatePolicyEvaluator | Pass environment via constructor |
-| Model instantiation | `(new CommandRun)->method()` | DI or `app()->make()` |
-| Error suppression | `@file_put_contents()` | Check return value + log on failure |
-| Duplicate binary lists | Same binary env/config keys in 3 files | Single source of truth in config |
-| DSN regex duplication | Same DSN pattern in Parser + Redactor | Extract `DsnPattern` utility |
+- Stick to existing directory structure; don't create new base folders without approval.
+- Do not change the application's dependencies without approval.
 
----
+## Frontend Bundling
 
-## JSON Output Contracts
+- If the user doesn't see a frontend change reflected in the UI, it could mean they need to run `npm run build`, `npm run dev`, or `composer run dev`. Ask them.
 
-### Envelope shape
-```json
-{
-  "surface": "doctor|report|status",
-  "version": 3,
-  "ok": true,
-  "driver": "mysql",
-  "generated_at": "2026-01-01T00:00:00+00:00",
-  "checks": [...],
-  "gates": { "profile": "local", "verdict": "pass", "exit_code": 0 }
-}
-```
+## Documentation Files
 
-### Contract evolution rules
-- **Add** new top-level keys: bump `version`
-- **Add** fields inside existing objects: keep `version`, consumers ignore unknown fields
-- **Never remove** a key without a new `surface` version
-- **Never change** a field's type (string → int)
-- Agent payloads get a `compact` block with `verdict`, `severity`, `top_issue`, `next_action`, `exit_code`
+- You must only create documentation files if explicitly requested by the user.
 
----
+## Replies
 
-## Security Rules
+- Be concise in your explanations - focus on what's important rather than explaining obvious details.
 
-1. **No hardcoded credentials** — ever. Everything through env vars or config.
-2. **All shell commands use Symfony Process array args** — prevents injection.
-3. **pgBackRest secrets** written to temp files with `chmod 0600`, cleaned in `finally`.
-4. **DSN URLs** redacted before logging via `ReplicationSecretRedactor`.
-5. **Command output** truncated/persisted via `CommandOutputStore`, not dumped to terminal.
-6. **Restore confirmation** required for non-local environments (`DB_OPS_RESTORE_REQUIRE_CONFIRMATION`).
-7. **Queue locks** prevent concurrent destructive operations (`ShouldBeUnique`).
-8. **Temp files** cleaned in `finally` blocks. Accept that SIGKILL leaves orphans; document in ops guide.
+=== boost rules ===
 
----
+# Laravel Boost
 
-## Quality Gates
+## Tools
 
-### CI must include
-```yaml
-- PHP 8.3, 8.4, 8.5 × Laravel 12, 13 × prefer-stable, prefer-lowest (12 jobs)
-- vendor/bin/pest --ci
-- vendor/bin/phpstan analyse
-- vendor/bin/pint --test
-```
+- Laravel Boost is an MCP server with tools designed specifically for this application. Prefer Boost tools over manual alternatives like shell commands or file reads.
+- Use `database-query` to run read-only queries against the database instead of writing raw SQL in tinker.
+- Use `database-schema` to inspect table structure before writing migrations or models.
+- Use `get-absolute-url` to resolve the correct scheme, domain, and port for project URLs. Always use this before sharing a URL with the user.
+- Use `browser-logs` to read browser logs, errors, and exceptions. Only recent logs are useful, ignore old entries.
 
-### Pre-commit
-- `vendor/bin/pint` (auto-fix style)
-- `vendor/bin/pest --stop-on-failure` (fast path)
+## Searching Documentation (IMPORTANT)
 
-### Pre-release
-- Full test matrix passes
-- PHPStan level max (or baseline documented)
-- No `@` error suppression operators
-- No `catch (Throwable) {}` without logging
-- All `stringOption()` occurrences consolidated to trait
-- No methods over 50 lines (except generated/migration code)
+- Always use `search-docs` before making code changes. Do not skip this step. It returns version-specific docs based on installed packages automatically.
+- Pass a `packages` array to scope results when you know which packages are relevant.
+- Use multiple broad, topic-based queries: `['rate limiting', 'routing rate limiting', 'routing']`. Expect the most relevant results first.
+- Do not add package names to queries because package info is already shared. Use `test resource table`, not `filament 4 test resource table`.
 
----
+### Search Syntax
 
-## Contribution Workflow
+1. Use words for auto-stemmed AND logic: `rate limit` matches both "rate" AND "limit".
+2. Use `"quoted phrases"` for exact position matching: `"infinite scroll"` requires adjacent words in order.
+3. Combine words and phrases for mixed queries: `middleware "rate limit"`.
+4. Use multiple queries for OR logic: `queries=["authentication", "middleware"]`.
 
-1. Pick an atomic task from `IMPLEMENTATION_PLAN_V2.md` or the audit report.
-2. Create a feature branch: `feat/short-description` or `fix/short-description`.
-3. Write the test first (Pest `it()` block).
-4. Implement following architecture rules above.
-5. Run `vendor/bin/pint`, `vendor/bin/phpstan analyse`, `vendor/bin/pest`.
-6. Commit using Conventional Commits: `feat(scope): description` / `fix(scope): description`.
-7. Scopes: `core`, `cli`, `driver`, `config`, `test`, `docs`.
+## Artisan
 
----
+- Run Artisan commands directly via the command line (e.g., `php artisan route:list`). Use `php artisan list` to discover available commands and `php artisan [command] --help` to check parameters.
+- Inspect routes with `php artisan route:list`. Filter with: `--method=GET`, `--name=users`, `--path=api`, `--except-vendor`, `--only-vendor`.
+- Read configuration values using dot notation: `php artisan config:show app.name`, `php artisan config:show database.default`. Or read config files directly from the `config/` directory.
+- To check environment variables, read the `.env` file directly.
 
-## Free vs Pro Boundary
+## Tinker
 
-### Open source (this repo)
-- Backup, restore, prune, health checks, status, reporting
-- Shell, pgdump, mysql drivers
-- Basic scheduling and retention
-- Migrate-from-spatie command
+- Execute PHP in app context for debugging and testing code. Do not create models without user approval, prefer tests with factories instead. Prefer existing Artisan commands over custom tinker code.
+- Always use single quotes to prevent shell expansion: `php artisan tinker --execute 'Your::code();'`
+  - Double quotes for PHP strings inside: `php artisan tinker --execute 'User::where("active", true)->count();'`
 
-### Pro (private repo `laravel-checkpoint-pro`)
-- PITR (WAL/binlog replay)
-- Automated recovery drills
-- Replication engine
-- pgBackRest driver
-- Blast radius and safety gates
-- Tiered retention policies
+=== php rules ===
 
-### Integration pattern
-```php
-// In core service provider
-if (class_exists(\AdityaaCodes\LaravelCheckpointPro\ProServiceProvider::class)) {
-    // enable pro commands, drivers, gates
-}
-```
+# PHP
 
-When the Pro package is installed, its `ProServiceProvider` bootstraps and injects pro-specific bindings, commands, and drivers. No core code references Pro classes directly.
+- Always use curly braces for control structures, even for single-line bodies.
+- Use PHP 8 constructor property promotion: `public function __construct(public GitHub $github) { }`. Do not leave empty zero-parameter `__construct()` methods unless the constructor is private.
+- Use explicit return type declarations and type hints for all method parameters: `function isAccessible(User $user, ?string $path = null): bool`
+- Use TitleCase for Enum keys: `FavoritePerson`, `BestLake`, `Monthly`.
+- Prefer PHPDoc blocks over inline comments. Only add inline comments for exceptionally complex logic.
+- Use array shape type definitions in PHPDoc blocks.
 
----
+=== deployments rules ===
 
-## Laravel Boost Integration
+# Deployment
 
-Publish package guidelines for AI agents via Laravel Boost:
+- Laravel can be deployed using [Laravel Cloud](https://cloud.laravel.com/), which is the fastest way to deploy and scale production Laravel applications.
 
-```blade
-{{-- resources/boost/guidelines/laravel-checkpoint/core.blade.php --}}
-Laravel Checkpoint — Database Reliability Layer for Laravel.
-...
-```
-
-Package consumers run `php artisan boost:update --discover` to auto-include these guidelines in their agent's context.
-
----
-
-## Reference
-
-| Document | Purpose |
-|----------|---------|
-| `CHECKPOINT_V1_STRATEGY.md` | Product strategy, free/pro split, monetization |
-| `IMPLEMENTATION_PLAN_V2.md` | 12-phase implementation roadmap with priorities |
-| `CHECKPOINT_IMPROVEMENT_PLAN.md` | 6-initiative improvement plan (Pulse, streaming, etc.) |
-| `impl.md` | MySQL implementation task breakdown |
-| `reference.md` | MySQL/Laravel documentation references |
-| `website/docs/` | User-facing documentation |
-| [spatie/laravel-backup](https://github.com/spatie/laravel-backup) | Primary competitor (6k stars, 22M downloads) |
-| [spatie/laravel-package-tools](https://github.com/spatie/laravel-package-tools) | Package foundation used by this project |
+</laravel-boost-guidelines>

@@ -73,22 +73,20 @@ final readonly class ValidateOperationBinaries
                     'label' => 'mysqlbinlog',
                 ] : null,
             ])),
-            'postgres', 'pgbasebackup' => array_values(array_filter([
+            'postgres' => array_values(array_filter([
                 ($isBackup || $isDrill) ? [
-                    'binary' => (string) $this->config->get('checkpoint.drivers.pgbasebackup.binary', 'pg_basebackup'),
+                    'binary' => (string) $this->config->get('checkpoint.drivers.postgres.binary', 'pg_basebackup'),
                     'label' => 'pg_basebackup',
                 ] : null,
-            ])),
-            'pgdump' => [
                 [
-                    'binary' => (string) $this->config->get('checkpoint.drivers.pgdump.dump_binary', 'pg_dump'),
+                    'binary' => (string) $this->config->get('checkpoint.drivers.postgres.dump_binary', 'pg_dump'),
                     'label' => 'pg_dump',
                 ],
                 [
-                    'binary' => (string) $this->config->get('checkpoint.drivers.pgdump.restore_binary', 'pg_restore'),
+                    'binary' => (string) $this->config->get('checkpoint.drivers.postgres.restore_binary', 'pg_restore'),
                     'label' => 'pg_restore',
                 ],
-            ],
+            ])),
             default => [],
         };
     }

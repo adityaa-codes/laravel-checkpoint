@@ -13,7 +13,7 @@ it('exports backup catalog in machine-readable json', function (): void {
 
     CommandRun::query()->create([
         'operation' => 'physical_backup',
-        'driver_name' => 'pgbasebackup',
+        'driver_name' => 'postgres',
         'repository' => 2,
         'stanza' => 'archive',
         'backup_type' => 'full',
@@ -27,7 +27,7 @@ it('exports backup catalog in machine-readable json', function (): void {
         'attempts' => 1,
         'exit_code' => 0,
         'metadata' => [
-            'driver' => 'pgbasebackup',
+            'driver' => 'postgres',
             'storage' => ['class' => 'warm'],
             'flags' => ['nightly'],
         ],
@@ -42,7 +42,7 @@ it('exports backup catalog in machine-readable json', function (): void {
         'verification_type' => 'physical_backup',
         'status' => 'verified',
         'verified_at' => now()->subMinutes(5),
-        'metadata' => ['driver' => 'pgbasebackup'],
+        'metadata' => ['driver' => 'postgres'],
     ]);
 
     CommandRun::query()->create([
@@ -93,7 +93,7 @@ it('exports backup catalog in machine-readable json', function (): void {
         ->and($payload['rows'][1])->toMatchArray([
             'command_run_id' => 1,
             'operation' => 'physical_backup',
-            'driver' => 'pgbasebackup',
+            'driver' => 'postgres',
             'repository' => 2,
             'stanza' => 'archive',
             'type' => 'full',
@@ -119,7 +119,7 @@ it('exports backup catalog as deterministic csv rows', function (): void {
 
     CommandRun::query()->create([
         'operation' => 'physical_backup',
-        'driver_name' => 'pgbasebackup',
+        'driver_name' => 'postgres',
         'repository' => 1,
         'stanza' => 'main',
         'backup_type' => 'diff',
@@ -165,7 +165,7 @@ it('exports backup catalog as deterministic csv rows', function (): void {
         'metadata_json',
     ])->and($row[0])->toBe('1')
         ->and($row[1])->toBe('physical_backup')
-        ->and($row[2])->toBe('pgbasebackup')
+        ->and($row[2])->toBe('postgres')
         ->and($row[5])->toBe('diff')
         ->and($row[9])->toBe('failed');
 
@@ -177,7 +177,7 @@ it('filters catalog exports by driver repository stanza and window', function ()
 
     CommandRun::query()->create([
         'operation' => 'physical_backup',
-        'driver_name' => 'pgbasebackup',
+        'driver_name' => 'postgres',
         'repository' => 2,
         'stanza' => 'archive',
         'backup_type' => 'full',
@@ -190,7 +190,7 @@ it('filters catalog exports by driver repository stanza and window', function ()
 
     CommandRun::query()->create([
         'operation' => 'physical_backup',
-        'driver_name' => 'pgbasebackup',
+        'driver_name' => 'postgres',
         'repository' => 1,
         'stanza' => 'main',
         'backup_type' => 'full',
@@ -203,7 +203,7 @@ it('filters catalog exports by driver repository stanza and window', function ()
 
     CommandRun::query()->create([
         'operation' => 'physical_backup',
-        'driver_name' => 'pgbasebackup',
+        'driver_name' => 'postgres',
         'repository' => 2,
         'stanza' => 'archive',
         'backup_type' => 'full',
@@ -216,7 +216,7 @@ it('filters catalog exports by driver repository stanza and window', function ()
 
     Artisan::call('checkpoint:catalog-export', [
         '--format' => 'json',
-        '--driver' => 'pgbasebackup',
+        '--driver' => 'postgres',
         '--repository' => '2',
         '--stanza' => 'archive',
         '--window' => '24',
@@ -227,7 +227,7 @@ it('filters catalog exports by driver repository stanza and window', function ()
 
     expect($payload['count'])->toBe(1)
         ->and($payload['filters'])->toMatchArray([
-            'driver' => 'pgbasebackup',
+            'driver' => 'postgres',
             'repository' => 2,
             'stanza' => 'archive',
             'window_hours' => 24,

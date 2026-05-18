@@ -118,7 +118,7 @@ it('builds a combined report payload from a shared snapshot', function (): void 
         'verification_type' => 'physical_backup',
         'status' => 'verified',
         'verified_at' => now(),
-        'metadata' => ['driver' => 'pgbasebackup'],
+        'metadata' => ['driver' => 'postgres'],
     ]);
 
     $payload = resolve(OperationalReportBuilder::class)->reportPayload(5);
@@ -201,7 +201,7 @@ it('exposes verification health details in health checks', function (): void {
         'status' => 'failed',
         'verified_at' => now(),
         'error_detail' => 'Verification command failed',
-        'metadata' => ['driver' => 'pgbasebackup'],
+        'metadata' => ['driver' => 'postgres'],
     ]);
 
     $checks = resolve(OperationalReportBuilder::class)->healthChecks();

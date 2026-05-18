@@ -8,13 +8,12 @@ use AdityaaCodes\LaravelCheckpoint\Actions\EvaluateRetentionPolicyAction;
 use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
-use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
+use Laravel\Prompts\Prompt;
 
 use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\note;
-use Laravel\Prompts\Prompt;
 
 final class RetentionPolicyCommand extends Command
 {
@@ -30,7 +29,6 @@ final class RetentionPolicyCommand extends Command
     protected $description = 'Evaluate and optionally apply policy-based retention for checkpoint command runs.';
 
     public function __construct(
-        private readonly ConfigValidator $validator,
         private readonly EvaluateRetentionPolicyAction $evaluateRetentionPolicy,
         private readonly CommandJsonContract $jsonContract,
         private readonly Repository $config,
@@ -66,37 +64,6 @@ final class RetentionPolicyCommand extends Command
         }
 
         $limit = max(1, (int) $this->option('limit'));
-
-        try {
-            $this->validator->validate();
-        } catch (\Throwable $exception) {
-            report($exception);
-
-            if ($format === 'json') {
-                $this->line(json_encode($this->jsonContract->envelope('retention_policy', [
-                    'generated_at' => now()->toIso8601String(),
-                    'driver' => (string) $this->config->get('checkpoint.driver'),
-                    'mode' => $apply ? 'apply' : 'dry_run',
-                    'limit' => $limit,
-                    'retention_enabled' => false,
-                    'totals' => [
-                        'eligible' => 0,
-                        'deleted' => 0,
-                        'externalized_output' => 0,
-                    ],
-                    'by_policy' => [],
-                    'sample' => [],
-                    'error' => [
-                        'message' => $exception->getMessage(),
-                        'exception' => $exception::class,
-                    ],
-                ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
-            } else {
-                $this->promptError($exception->getMessage());
-            }
-
-            return self::FAILURE;
-        }
 
         $evaluation = $this->evaluateRetentionPolicy->execute($limit);
         $retentionEnabled = $this->evaluateRetentionPolicy->retentionEnabled();

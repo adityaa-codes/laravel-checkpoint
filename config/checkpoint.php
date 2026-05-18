@@ -29,8 +29,26 @@ return [
     |   pgsql/postgres → postgres (pg_dump + pg_basebackup)
     |   sqlite/other   → shell    (user-provided commands)
     |
-    | Supported drivers: shell, postgres, pgdump, pgbasebackup, mysql
+    | Supported drivers: shell, postgres, mysql
     | Set CP_DRIVER in your .env to override auto-detection.
+    |
+    | Custom drivers: Implement BackupDriver, then add a drivers.{name}
+    | config section with a 'class' key pointing to your FQCN. Optionally
+    | add 'health_binaries' to register binaries for checkpoint:doctor.
+    |
+    | Run `php artisan checkpoint:make-driver MyDriver` to scaffold one.
+    |
+    | Example custom driver:
+    |
+    |   'driver' => 'my_engine',
+    |   'drivers' => [
+    |       'my_engine' => [
+    |           'class' => App\Drivers\MyEngineDriver::class,
+    |           'health_binaries' => [
+    |               ['code' => 'mybinary', 'label' => 'mybinary', 'binary' => '/usr/bin/mybinary'],
+    |           ],
+    |       ],
+    |   ],
     |
     */
     'driver' => env('CP_DRIVER') ?: match (strtolower(trim((string) config('database.connections.'.config('database.default', 'mysql').'.driver', 'mysql')))) {
@@ -157,11 +175,11 @@ return [
     |
     */
     'cleanup' => [
-        'keep_all_backups_for_days'            => 7,
-        'keep_daily_backups_for_days'          => 16,
-        'keep_weekly_backups_for_weeks'        => 8,
-        'keep_monthly_backups_for_months'      => 4,
-        'keep_yearly_backups_for_years'        => 2,
+        'keep_all_backups_for_days' => 7,
+        'keep_daily_backups_for_days' => 16,
+        'keep_weekly_backups_for_weeks' => 8,
+        'keep_monthly_backups_for_months' => 4,
+        'keep_yearly_backups_for_years' => 2,
         'delete_oldest_when_using_more_megabytes_than' => 5000,
     ],
 

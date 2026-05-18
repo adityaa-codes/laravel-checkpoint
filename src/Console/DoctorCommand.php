@@ -6,7 +6,6 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
-use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use AdityaaCodes\LaravelCheckpoint\Services\GatePolicyEvaluator;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
 use Illuminate\Console\Command;
@@ -24,7 +23,6 @@ final class DoctorCommand extends Command
     protected $description = 'Show checkpoint package health checks.';
 
     public function __construct(
-        private readonly ConfigValidator $validator,
         private readonly Repository $config,
         private readonly OperationalReportBuilder $reportBuilder,
         private readonly CommandJsonContract $jsonContract,
@@ -45,11 +43,10 @@ final class DoctorCommand extends Command
             intro('Checkpoint Doctor: Health Checks');
             note('What: validate config posture, binaries, storage, queue, and safety signals.');
             note('When: during setup, after config edits, or while debugging failures.');
-            note('Next: if healthy, continue with checkpoint:enqueue-backup and checkpoint:status.');
+            note('Next: if healthy, continue with checkpoint:backup and checkpoint:status.');
         }
 
         try {
-            $this->validator->validate();
             $checks = $this->reportBuilder->healthChecks();
             $gateDecision = $this->gatePolicyEvaluator->evaluate($checks, $this->reportBuilder->summary(), $policyProfile);
             $exitCode = $gateDecision['exit_code'];
@@ -57,8 +54,8 @@ final class DoctorCommand extends Command
             report($exception);
 
             $checks = [[
-                'code' => 'config.validation',
-                'check' => 'Config validation',
+                'code' => 'health.error',
+                'check' => 'Health check execution',
                 'status' => 'fail',
                 'severity' => 'blocker',
                 'notes' => $exception->getMessage(),
@@ -252,12 +249,6 @@ final class DoctorCommand extends Command
                 continue;
             }
 
-            if ($code === 'config.validation') {
-                $suggestions[] = 'Fix checkpoint config validation errors and rerun checkpoint:doctor --agent.';
-
-                continue;
-            }
-
             if ($code === 'queue.orphaned_runs') {
                 $suggestions[] = 'Run checkpoint:recover-orphans and ensure queue workers emit regular heartbeats.';
 
@@ -265,7 +256,7 @@ final class DoctorCommand extends Command
             }
 
             if (str_starts_with($code, 'backup_drill.')) {
-                $suggestions[] = 'Run checkpoint:enqueue-drill (or record a drill run) and verify freshness, pass-rate, and trend thresholds.';
+                $suggestions[] = 'Run checkpoint:drill (or record a drill run) and verify freshness, pass-rate, and trend thresholds.';
 
                 $playbookCommands = $check['data']['recommended_commands'] ?? null;
 
@@ -319,9 +310,8 @@ final class DoctorCommand extends Command
     private function compactSuggestionForCheck(string $code): string
     {
         return match (true) {
-            $code === 'config.validation' => 'checkpoint:doctor --agent',
             $code === 'queue.orphaned_runs' => 'checkpoint:recover-orphans',
-            str_starts_with($code, 'backup_drill.') => 'checkpoint:enqueue-drill',
+            str_starts_with($code, 'backup_drill.') => 'checkpoint:drill',
             $code === 'backup.last_known_good' => 'Queue a backup',
             $code === 'backup.duration_anomaly' => 'Inspect backup duration history',
             $code === 'restore.post_verification' => 'Inspect restore verification results',

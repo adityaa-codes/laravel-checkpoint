@@ -157,7 +157,7 @@ it('requires a matching artifact snapshot for verified logical restores', functi
         'attempts' => 0,
         'last_known_good_at' => now(),
         'metadata' => [
-            'driver' => 'pgdump',
+            'driver' => 'postgres',
             'database' => ':memory:',
             'artifact_snapshot' => [
                 'path' => '/tmp/checkpoint-tests/logical-export-42',
@@ -188,7 +188,7 @@ it('requires a matching artifact snapshot for verified logical restores', functi
             'content_signature' => 'after',
         ],
         'metadata' => [
-            'driver' => 'pgdump',
+            'driver' => 'postgres',
             'database' => ':memory:',
         ],
     ]))->toThrow(ConfigurationException::class, 'Restore operation [logical_restore_file] requires a verified backup signal before execution.');
@@ -239,7 +239,7 @@ it('requires logical restore verification to match the driver provenance', funct
             'content_signature' => 'before',
         ],
         'metadata' => [
-            'driver' => 'pgdump',
+            'driver' => 'postgres',
             'database' => ':memory:',
         ],
     ]))->toThrow(ConfigurationException::class, 'Restore operation [logical_restore_file] requires a verified backup signal before execution.');
@@ -253,12 +253,12 @@ it('requires pitr restore verification to match mysql provenance', function (): 
 
     CommandRun::query()->create([
         'operation' => 'logical_backup',
-        'driver_name' => 'pgdump',
+        'driver_name' => 'postgres',
         'status' => CommandRunStatus::Succeeded,
         'attempts' => 0,
         'last_known_good_at' => now(),
         'metadata' => [
-            'driver' => 'pgdump',
+            'driver' => 'postgres',
             'database' => ':memory:',
         ],
     ]);
@@ -381,14 +381,14 @@ it('records append-only restore decision evidence for successful restore checks'
         'operation' => 'physical_backup',
         'backup_label' => '20260312-010101F',
         'verification_state' => 'verified',
-        'driver_name' => 'pgbasebackup',
+        'driver_name' => 'postgres',
         'repository' => 1,
         'stanza' => 'main',
         'status' => CommandRunStatus::Succeeded,
         'attempts' => 0,
         'last_known_good_at' => now(),
         'metadata' => [
-            'driver' => 'pgbasebackup',
+            'driver' => 'postgres',
             'database' => ':memory:',
         ],
     ]);
@@ -405,7 +405,7 @@ it('records append-only restore decision evidence for successful restore checks'
         'repository' => 1,
         'stanza' => 'main',
         'metadata' => [
-            'driver' => 'pgbasebackup',
+            'driver' => 'postgres',
             'database' => ':memory:',
         ],
     ]);

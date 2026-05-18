@@ -39,7 +39,7 @@
         {
             "command_run_id": 1,
             "operation": "physical_backup",
-            "driver": "pgbasebackup",
+            "driver": "postgres",
             "repository": 1,
             "stanza": "main",
             "type": "full",
@@ -61,7 +61,7 @@
                 "error_detail": null
             },
             "metadata": {
-                "driver": "pgbasebackup",
+                "driver": "postgres",
                 "flags": [
                     "nightly"
                 ],

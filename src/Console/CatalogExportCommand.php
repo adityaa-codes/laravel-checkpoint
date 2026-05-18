@@ -8,7 +8,6 @@ use AdityaaCodes\LaravelCheckpoint\Actions\BuildBackupCatalogExportAction;
 use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
-use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
 
@@ -30,7 +29,6 @@ final class CatalogExportCommand extends Command
     protected $description = 'Export backup catalog snapshots in machine-friendly JSON or CSV formats.';
 
     public function __construct(
-        private readonly ConfigValidator $validator,
         private readonly BuildBackupCatalogExportAction $buildCatalogExport,
         private readonly Repository $config,
         private readonly CommandJsonContract $jsonContract,
@@ -58,38 +56,6 @@ final class CatalogExportCommand extends Command
 
         if ($outputPath !== null && trim($outputPath) === '') {
             $this->promptError('The --output option must not be empty.');
-
-            return self::FAILURE;
-        }
-
-        try {
-            $this->validator->validate();
-        } catch (\Throwable $exception) {
-            report($exception);
-
-            if ($format === 'json') {
-                $this->line(json_encode($this->jsonContract->envelope('catalog_export', [
-                    'generated_at' => now()->toIso8601String(),
-                    'driver' => (string) $this->config->get('checkpoint.driver'),
-                    'format' => 'json',
-                    'limit_requested' => null,
-                    'limit' => null,
-                    'filters' => [
-                        'driver' => null,
-                        'repository' => null,
-                        'stanza' => null,
-                        'window_hours' => null,
-                    ],
-                    'count' => 0,
-                    'rows' => [],
-                    'error' => [
-                        'message' => $exception->getMessage(),
-                        'exception' => $exception::class,
-                    ],
-                ]), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
-            } else {
-                $this->promptError($exception->getMessage());
-            }
 
             return self::FAILURE;
         }

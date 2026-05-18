@@ -59,7 +59,7 @@ final readonly class OperationalReportBuilder
                 $payload = [
                     'id' => (int) $run->getKey(),
                     'operation' => $run->operation,
-                    'status' => (string) $run->status->value,
+                    'status' => $run->status->value,
                     'exit_code' => $run->exit_code,
                     'backup' => $this->backupSummary($run),
                     'verification_state' => $run->verification_state,
@@ -226,7 +226,7 @@ final readonly class OperationalReportBuilder
 
     private function backupDrillWindowDays(): int
     {
-        return max(1, (int) $this->config->get('checkpoint.observability.backup_drill_pass_rate_window_days', 30));
+        return max(1, $this->config->get('checkpoint.observability.backup_drill_pass_rate_window_days', 30));
     }
 
     /**
@@ -236,8 +236,8 @@ final readonly class OperationalReportBuilder
      */
     private function backupDrillRemediationPlaybook(array $summary, int $windowDays, array $trend): array
     {
-        $minPassRate = max(0.0, min(100.0, (float) $this->config->get('checkpoint.observability.backup_drill_min_pass_rate', 100.0)));
-        $maxAgeDays = max(1, (int) $this->config->get('checkpoint.observability.max_backup_drill_age_days', 30));
+        $minPassRate = max(0.0, min(100.0, $this->config->get('checkpoint.observability.backup_drill_min_pass_rate', 100.0)));
+        $maxAgeDays = max(1, $this->config->get('checkpoint.observability.max_backup_drill_age_days', 30));
 
         return $this->buildDrillRemediationPlaybook->execute(
             latestRun: $summary['latest'],
@@ -252,9 +252,9 @@ final readonly class OperationalReportBuilder
 
     private function backupSummary(CommandRun $run): string
     {
-        $parts = array_filter([$run->backup_type, $run->backup_label]);
+        $parts = collect([$run->backup_type, $run->backup_label])->filter()->all();
 
-        return $parts === [] ? '-' : implode(':', $parts);
+        return $parts === [] ? '-' : collect($parts)->implode(':');
     }
 
     /**
@@ -275,7 +275,7 @@ final readonly class OperationalReportBuilder
         }
 
         return [
-            'label' => $timestamp instanceof Carbon ? sprintf('%s at %s', $summary, $timestamp->format('Y-m-d H:i:s')) : $summary,
+            'label' => $timestamp instanceof Carbon ? "{$summary} at {$timestamp->format('Y-m-d H:i:s')}" : $summary,
             'timestamp' => $timestamp?->format('Y-m-d H:i:s'),
             'operation' => $run->operation,
         ];
@@ -302,16 +302,14 @@ final readonly class OperationalReportBuilder
         $reason = $this->resolveFailureReason($run);
         $nextAction = $this->nextActionForFailure($run, $reason);
 
+        $exitLabel = $run->exit_code !== null ? (string) $run->exit_code : '-';
+        $atLabel = $timestamp instanceof Carbon ? ' at '.$timestamp->format('Y-m-d H:i:s') : '';
+
         return [
-            'label' => sprintf(
-                '%s [failed] (exit: %s)%s',
-                $run->operation,
-                $run->exit_code !== null ? (string) $run->exit_code : '-',
-                $timestamp instanceof Carbon ? ' at '.$timestamp->format('Y-m-d H:i:s') : '',
-            ),
+            'label' => "{$run->operation} [failed] (exit: {$exitLabel}){$atLabel}",
             'timestamp' => $timestamp?->format('Y-m-d H:i:s'),
             'operation' => $run->operation,
-            'status' => (string) $run->status->value,
+            'status' => $run->status->value,
             'exit_code' => $run->exit_code,
             'failure_reason' => $reason,
             'next_action' => $nextAction,
@@ -331,11 +329,11 @@ final readonly class OperationalReportBuilder
         $label = $run->operation;
 
         if (is_string($target) && $target !== '') {
-            $label .= sprintf(' (%s)', $target);
+            $label .= " ({$target})";
         }
 
         if ($run->finished_at instanceof Carbon) {
-            $label .= sprintf(' at %s', $run->finished_at->format('Y-m-d H:i:s'));
+            $label .= " at {$run->finished_at->format('Y-m-d H:i:s')}";
         }
 
         return [
@@ -365,8 +363,8 @@ final readonly class OperationalReportBuilder
 
     private function resolveFailureReason(CommandRun $run): ?string
     {
-        if (is_string($run->command_output) && trim($run->command_output) !== '') {
-            $line = trim(strtok($run->command_output, "\n") ?: '');
+        if (is_string($run->command_output) && str($run->command_output)->trim()->isNotEmpty()) {
+            $line = str(strtok($run->command_output, "\n") ?: '')->trim()->value();
 
             if ($line !== '') {
                 return mb_substr($line, 0, 240);
@@ -374,7 +372,7 @@ final readonly class OperationalReportBuilder
         }
 
         if ($run->exit_code !== null) {
-            return sprintf('Command exited with code %d.', $run->exit_code);
+            return "Command exited with code {$run->exit_code}.";
         }
 
         return null;
@@ -385,9 +383,9 @@ final readonly class OperationalReportBuilder
         if (
             $run->operation === 'logical_backup'
             && is_string($reason)
-            && str_contains($reason, 'No shell command configured')
+            && str($reason)->contains('No shell command configured')
         ) {
-            return 'Set CP_CMD_LOGICAL_BACKUP, then run php artisan checkpoint:enqueue-backup.';
+            return 'Set CP_CMD_LOGICAL_BACKUP, then run php artisan checkpoint:backup.';
         }
 
         return 'Run php artisan checkpoint:report --limit=10 --format=json for full failure context.';
@@ -411,10 +409,10 @@ final readonly class OperationalReportBuilder
         }
 
         $target = $run->restore_target ?? $run->argument_text;
-        $label = sprintf('%s [%s]', $run->operation, (string) $run->status->value);
+        $label = "{$run->operation} [{$run->status->value}]";
 
         if (is_string($target) && $target !== '') {
-            $label .= sprintf(' (%s)', $target);
+            $label .= " ({$target})";
         }
 
         $audit = $this->restoreAuditPayload($run);
@@ -440,20 +438,20 @@ final readonly class OperationalReportBuilder
                 $parts[] = 'post_verify='.$postVerificationResult;
             }
 
-            $label .= ' {'.implode(', ', $parts).'}';
+            $label .= ' {'.collect($parts)->implode(', ').'}';
         }
 
         $timestamp = $run->finished_at ?? $run->started_at;
 
         if ($timestamp instanceof Carbon) {
-            $label .= sprintf(' at %s', $timestamp->format('Y-m-d H:i:s'));
+            $label .= " at {$timestamp->format('Y-m-d H:i:s')}";
         }
 
         return [
             'label' => $label,
             'timestamp' => $timestamp?->format('Y-m-d H:i:s'),
             'operation' => $run->operation,
-            'status' => (string) $run->status->value,
+            'status' => $run->status->value,
             'target' => $target,
             'audit' => $audit,
             'blast_radius' => is_array($audit['blast_radius'] ?? null) ? $audit['blast_radius'] : null,
@@ -583,13 +581,14 @@ final readonly class OperationalReportBuilder
             return ['label' => '-', 'timestamp' => null, 'run_uuid' => null, 'overall_result' => null, 'executed_by' => null];
         }
 
-        $label = sprintf('%s [%s]', $run->run_uuid, strtoupper((string) $run->overall_result));
+        $statusUpper = str((string) $run->overall_result)->upper()->value();
+        $label = "{$run->run_uuid} [{$statusUpper}]";
 
         if (is_string($run->executed_by) && $run->executed_by !== '') {
-            $label .= sprintf(' by %s', $run->executed_by);
+            $label .= " by {$run->executed_by}";
         }
 
-        $label .= sprintf(' at %s', $run->executed_at->format('Y-m-d H:i:s'));
+        $label .= " at {$run->executed_at->format('Y-m-d H:i:s')}";
 
         return [
             'label' => $label,

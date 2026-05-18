@@ -5,11 +5,9 @@ declare(strict_types=1);
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillFreshnessAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillPassRateAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFreshnessAlarmTriggered;
-use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
-use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use AdityaaCodes\LaravelCheckpoint\Tests\Support\DoctorCommandTestSupport;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Event;
@@ -67,37 +65,6 @@ it('renders stable status labels when translation keys cannot be resolved', func
         ->doesntExpectOutputToContain('messages.cli.doctor_warn')
         ->doesntExpectOutputToContain('messages.cli.doctor_fail')
         ->assertSuccessful();
-});
-
-it('throws a configuration exception for invalid config in non-production', function (): void {
-    config()->set('checkpoint.table_prefix', '');
-
-    expect(fn () => resolve(ConfigValidator::class)->validate())
-        ->toThrow(ConfigurationException::class, 'checkpoint.table_prefix must be a non-empty string.');
-});
-
-it('fails doctor when queue timeout settings are unsafe', function (): void {
-    config()->set('checkpoint.queue.timeout', 3600);
-    config()->set('checkpoint.queue.retry_after', 300);
-
-    checkpoint_artisan('checkpoint:doctor')
-        ->expectsOutputToContain('Config validation')
-        ->assertFailed();
-});
-
-it('returns non-zero when any doctor check fails', function (): void {
-    config()->set('checkpoint.queue.timeout', 3600);
-    config()->set('checkpoint.queue.retry_after', 300);
-
-    $exitCode = Artisan::call('checkpoint:doctor', ['--format' => 'json']);
-    $report = json_decode(Artisan::output(), true);
-
-    expect($exitCode)->toBe(10)
-        ->and($report)->toBeArray()
-        ->and(collect($report['checks'])->contains(
-            fn (array $check): bool => $check['code'] === 'config.validation'
-                && $check['status'] === 'fail',
-        ))->toBeTrue();
 });
 
 it('warns about unsafe restore posture in non-local environments', function (): void {
@@ -181,8 +148,8 @@ it('surfaces post-restore verification health posture in machine-readable doctor
 });
 
 it('fails when active driver binary is missing and includes remediation commands', function (): void {
-    config()->set('checkpoint.driver', 'pgbasebackup');
-    config()->set('checkpoint.drivers.pgbasebackup.binary', 'missing-pgbasebackup-binary');
+    config()->set('checkpoint.driver', 'postgres');
+    config()->set('checkpoint.drivers.postgres.binary', 'missing-pgbasebackup-binary');
 
     $exitCode = Artisan::call('checkpoint:doctor', ['--format' => 'json']);
     $report = json_decode(Artisan::output(), true);
@@ -190,7 +157,7 @@ it('fails when active driver binary is missing and includes remediation commands
     expect($exitCode)->toBe(10)
         ->and($report)->toBeArray()
         ->and(collect($report['checks'])->contains(
-            fn (array $check): bool => $check['code'] === 'driver.binary.pgbasebackup'
+            fn (array $check): bool => $check['code'] === 'driver.binary.postgres.pgbasebackup'
                 && $check['status'] === 'fail'
                 && ($check['data']['binary'] ?? null) === 'missing-pgbasebackup-binary'
                 && is_array($check['data']['remediation_commands'] ?? null)
@@ -316,29 +283,6 @@ it('dispatches drill alarms when no backup drills exist', function (): void {
         && $event->passRatePercent === 0.0
         && $event->thresholdPercent === 100.0
         && $event->version === 1);
-});
-
-it('returns a failed machine-readable json report for invalid config', function (): void {
-    config()->set('checkpoint.queue.timeout', 3600);
-    config()->set('checkpoint.queue.retry_after', 300);
-
-    $exitCode = Artisan::call('checkpoint:doctor', ['--format' => 'json']);
-    $report = json_decode(Artisan::output(), true);
-
-    expect($exitCode)->toBe(10)
-        ->and($report)->toBeArray()
-        ->and($report['version'])->toBe(3)
-        ->and($report['surface'])->toBe('doctor')
-        ->and($report['ok'])->toBeFalse()
-        ->and($report['gates'])->toMatchArray([
-            'failed_gate' => 'safety',
-            'exit_code' => 10,
-        ])
-        ->and(collect($report['checks'])->contains(
-            fn (array $check): bool => $check['code'] === 'config.validation'
-                && $check['status'] === 'fail'
-                && $check['severity'] === 'blocker',
-        ))->toBeTrue();
 });
 
 it('renders compact agent-friendly doctor output', function (): void {

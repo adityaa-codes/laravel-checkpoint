@@ -53,7 +53,7 @@ final readonly class ReplicationRequestFactory
 
             if (! $engineValue instanceof ReplicationEngine) {
                 throw new CheckpointArgumentException(
-                    sprintf('Replication profile [%s] must define engine as pgsql or mysql.', $parsed->identifier ?? ''),
+                    "Replication profile [{$parsed->identifier}] must define engine as pgsql or mysql.",
                 );
             }
 
@@ -82,11 +82,7 @@ final readonly class ReplicationRequestFactory
 
         if ($sourceEngine !== $destinationEngine) {
             throw new CheckpointArgumentException(
-                sprintf(
-                    'Replication v1 supports same-engine only. Received %s -> %s.',
-                    $sourceEngine->value,
-                    $destinationEngine->value,
-                ),
+                "Replication v1 supports same-engine only. Received {$sourceEngine->value} -> {$destinationEngine->value}.",
             );
         }
 
@@ -95,15 +91,15 @@ final readonly class ReplicationRequestFactory
 
     private function assertSafetyDefaults(): void
     {
-        if (! (bool) $this->config->get('checkpoint.replication.require_confirmation_token', true)) {
+        if (! $this->config->get('checkpoint.replication.require_confirmation_token', true)) {
             throw new CheckpointArgumentException('Replication safety requires confirmation token enforcement.');
         }
 
-        if (! (bool) $this->config->get('checkpoint.replication.block_in_ci', true)) {
+        if (! $this->config->get('checkpoint.replication.block_in_ci', true)) {
             throw new CheckpointArgumentException('Replication safety requires CI blocking by default.');
         }
 
-        if (! (bool) $this->config->get('checkpoint.replication.require_dry_run_before_apply', true)) {
+        if (! $this->config->get('checkpoint.replication.require_dry_run_before_apply', true)) {
             throw new CheckpointArgumentException('Replication safety requires dry-run-before-apply gate.');
         }
     }
@@ -123,7 +119,7 @@ final readonly class ReplicationRequestFactory
 
         if (! is_array($profile)) {
             throw new CheckpointArgumentException(
-                sprintf('Unknown replication profile [%s] for %s endpoint.', $identifier, $role),
+                "Unknown replication profile [{$identifier}] for {$role} endpoint.",
             );
         }
 

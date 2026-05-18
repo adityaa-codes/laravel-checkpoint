@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Services;
 
+use Illuminate\Support\Str;
+
 /** @internal */
 final readonly class ReplicationFailureSuggestionMapper
 {
@@ -23,7 +25,7 @@ final readonly class ReplicationFailureSuggestionMapper
      */
     public function map(string $stage, string $failureOutput, array $context = []): array
     {
-        $normalized = strtolower($failureOutput);
+        $normalized = str($failureOutput)->lower()->value();
         $category = $this->categoryFor($normalized, $stage);
         $playbook = $this->playbook($category);
 
@@ -38,11 +40,11 @@ final readonly class ReplicationFailureSuggestionMapper
 
     private function categoryFor(string $normalizedOutput, string $stage): string
     {
-        if ($stage === 'apply_gate' || str_contains($normalizedOutput, 'destination overwrite denied')) {
+        if ($stage === 'apply_gate' || str($normalizedOutput)->contains('destination overwrite denied')) {
             return 'destination_overwrite_conflict';
         }
 
-        if ($this->containsAny($normalizedOutput, [
+        if (Str::contains($normalizedOutput, [
             'password authentication failed',
             'access denied for user',
             'authentication failed',
@@ -52,7 +54,7 @@ final readonly class ReplicationFailureSuggestionMapper
             return 'auth_credential_failure';
         }
 
-        if ($this->containsAny($normalizedOutput, [
+        if (Str::contains($normalizedOutput, [
             'could not translate host name',
             'name or service not known',
             'temporary failure in name resolution',
@@ -64,7 +66,7 @@ final readonly class ReplicationFailureSuggestionMapper
             return 'dns_network_connection_refused';
         }
 
-        if ($this->containsAny($normalizedOutput, [
+        if (Str::contains($normalizedOutput, [
             'permission denied',
             'insufficient privilege',
             'must be superuser',
@@ -74,7 +76,7 @@ final readonly class ReplicationFailureSuggestionMapper
             return 'privilege_permission_denied';
         }
 
-        if ($this->containsAny($normalizedOutput, [
+        if (Str::contains($normalizedOutput, [
             'command not found',
             'no such file or directory',
             'executable file not found',
@@ -83,7 +85,7 @@ final readonly class ReplicationFailureSuggestionMapper
             return 'binary_missing';
         }
 
-        if ($this->containsAny($normalizedOutput, [
+        if (Str::contains($normalizedOutput, [
             'invalid dsn',
             'invalid uri',
             'could not parse',
@@ -93,7 +95,7 @@ final readonly class ReplicationFailureSuggestionMapper
             return 'invalid_url_dsn_parse';
         }
 
-        if ($this->containsAny($normalizedOutput, [
+        if (Str::contains($normalizedOutput, [
             'schema mismatch',
             'version mismatch',
             'unsupported server version',
@@ -104,7 +106,7 @@ final readonly class ReplicationFailureSuggestionMapper
             return 'schema_version_mismatch';
         }
 
-        if ($this->containsAny($normalizedOutput, [
+        if (Str::contains($normalizedOutput, [
             'checksum mismatch',
             'hash mismatch',
             'sanity check failed',
@@ -228,23 +230,16 @@ final readonly class ReplicationFailureSuggestionMapper
 
     private function redactedExcerpt(string $output): string
     {
-        $lines = array_values(array_filter(array_map(trim(...), preg_split('/\R/', $output) ?: []), static fn (string $line): bool => $line !== ''));
-        $excerpt = implode(' | ', array_slice($lines, max(0, count($lines) - 3)));
+        $lines = collect(preg_split('/\R/', $output) ?: [])
+            ->map(fn (string $line): string => str($line)->trim()->value())
+            ->filter(fn (string $line): bool => $line !== '')
+            ->values()
+            ->all();
+
+        $excerpt = collect($lines)
+            ->slice(max(0, count($lines) - 3))
+            ->implode(' | ');
 
         return $this->secretRedactor->redact($excerpt);
-    }
-
-    /**
-     * @param  list<string>  $needles
-     */
-    private function containsAny(string $haystack, array $needles): bool
-    {
-        foreach ($needles as $needle) {
-            if (str_contains($haystack, $needle)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

@@ -1371,7 +1371,7 @@ final class MysqlDriver implements BackupDriver
     {
         $artifactPath = $this->backupTarget($run);
 
-        $results = (new BackupArtifactUploader)->upload($artifactPath);
+        $results = app(BackupArtifactUploader::class)->upload($artifactPath);
 
         if ($results !== []) {
             $run->recordMetadata([

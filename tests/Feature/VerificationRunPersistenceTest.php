@@ -16,7 +16,7 @@ it('persists verification runs when verification metadata transitions to verifie
     $run->recordMetadata([
         'verification_state' => 'pending',
         'metadata' => [
-            'driver' => 'pgbasebackup',
+            'driver' => 'postgres',
             'summary' => ['ok' => false],
         ],
     ]);
@@ -27,7 +27,7 @@ it('persists verification runs when verification metadata transitions to verifie
         'verification_state' => 'verified',
         'verified_at' => now(),
         'metadata' => [
-            'driver' => 'pgbasebackup',
+            'driver' => 'postgres',
             'summary' => ['ok' => true],
         ],
     ]);
@@ -41,7 +41,7 @@ it('persists verification runs when verification metadata transitions to verifie
         ->and($persisted?->verified_at)->not->toBeNull()
         ->and($persisted?->error_detail)->toBeNull()
         ->and($persisted?->metadata)->toMatchArray([
-            'driver' => 'pgbasebackup',
+            'driver' => 'postgres',
             'summary' => ['ok' => true],
         ])
         ->and($run->fresh()?->verificationRuns()->count())->toBe(1);
@@ -59,7 +59,7 @@ it('persists failed verification runs with error detail', function (): void {
         'verification_state' => 'failed',
         'verified_at' => now(),
         'metadata' => [
-            'driver' => 'pgbasebackup',
+            'driver' => 'postgres',
             'summary' => ['error_count' => 1],
         ],
     ]);
@@ -70,7 +70,7 @@ it('persists failed verification runs with error detail', function (): void {
         ->and($persisted?->status)->toBe('failed')
         ->and($persisted?->error_detail)->toBe('verification mismatch detected')
         ->and($persisted?->metadata)->toMatchArray([
-            'driver' => 'pgbasebackup',
+            'driver' => 'postgres',
             'summary' => ['error_count' => 1],
         ]);
 });

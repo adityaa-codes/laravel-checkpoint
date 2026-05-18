@@ -25,10 +25,7 @@ final readonly class CommandJsonContract
      */
     public function envelope(string $surface, array $payload): array
     {
-        $isAgentContractPayload = array_key_exists('result', $payload)
-            && array_key_exists('code', $payload)
-            && array_key_exists('summary', $payload)
-            && array_key_exists('data', $payload);
+        $isAgentContractPayload = isset($payload['result'], $payload['code'], $payload['summary'], $payload['data']);
 
         $compact = $isAgentContractPayload ? $this->compactBlock($payload) : null;
 
@@ -47,8 +44,7 @@ final readonly class CommandJsonContract
      */
     private function compactBlock(array $payload): array
     {
-        $result = (string) ($payload['result'] ?? '');
-        $verdict = match ($result) {
+        $verdict = match ((string) ($payload['result'] ?? '')) {
             'passed' => 'PASS',
             'partial' => 'WARN',
             'failed' => 'FAIL',
@@ -142,7 +138,7 @@ final readonly class CommandJsonContract
         $suggestions = $payload['suggestions'] ?? null;
         if (is_array($suggestions)) {
             foreach ($suggestions as $suggestion) {
-                if (is_string($suggestion) && trim($suggestion) !== '') {
+                if (is_string($suggestion) && str($suggestion)->trim()->isNotEmpty()) {
                     return $suggestion;
                 }
             }
@@ -160,7 +156,7 @@ final readonly class CommandJsonContract
         $cursor = $payload;
 
         foreach ($path as $segment) {
-            if (is_array($cursor) && array_key_exists($segment, $cursor)) {
+            if (is_array($cursor) && isset($cursor[$segment])) {
                 $cursor = $cursor[$segment];
 
                 continue;
@@ -173,7 +169,7 @@ final readonly class CommandJsonContract
             return null;
         }
 
-        $value = trim($cursor);
+        $value = str($cursor)->trim()->value();
 
         return $value === '' || $value === '-' ? null : $value;
     }
@@ -209,8 +205,6 @@ final readonly class CommandJsonContract
      */
     public function compactEnvelope(string $surface, array $payload): array
     {
-        $enveloped = $this->envelope($surface, $payload);
-
-        return $this->stripNullValues($enveloped);
+        return $this->stripNullValues($this->envelope($surface, $payload));
     }
 }

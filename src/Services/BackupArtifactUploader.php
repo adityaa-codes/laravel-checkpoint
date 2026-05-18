@@ -4,18 +4,25 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Services;
 
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Filesystem\Factory as FilesystemFactory;
+use Illuminate\Filesystem\Filesystem;
 use RuntimeException;
 
 final readonly class BackupArtifactUploader
 {
+    public function __construct(
+        private Repository $config,
+        private FilesystemFactory $filesystemFactory,
+        private Filesystem $files,
+    ) {}
+
     /**
      * @return array<int, array<string, mixed>>
      */
     public function upload(string $localPath): array
     {
-        $disks = (array) config('checkpoint.destination.disks', []);
+        $disks = $this->config->get('checkpoint.destination.disks', []);
 
         if ($disks === []) {
             return [];
@@ -25,12 +32,12 @@ final readonly class BackupArtifactUploader
             return [];
         }
 
-        $encrypt = (bool) config('checkpoint.encryption.enabled', false);
+        $encrypt = $this->config->get('checkpoint.encryption.enabled', false);
         $timestamp = now()->format('Ymd_His');
         $results = [];
 
         foreach ($disks as $disk) {
-            $filesystem = Storage::disk($disk);
+            $filesystem = $this->filesystemFactory->disk($disk);
 
             if (is_dir($localPath)) {
                 $results[] = $this->uploadDirectory($filesystem, $localPath, $disk, 'checkpoint-basebackups/'.$timestamp, $encrypt);
@@ -40,8 +47,8 @@ final readonly class BackupArtifactUploader
             }
         }
 
-        is_file($localPath) && File::delete($localPath);
-        is_dir($localPath) && File::deleteDirectory($localPath);
+        is_file($localPath) && $this->files->delete($localPath);
+        is_dir($localPath) && $this->files->deleteDirectory($localPath);
 
         return $results;
     }
@@ -49,7 +56,7 @@ final readonly class BackupArtifactUploader
     /**
      * @return array<string, mixed>
      */
-    private function uploadFile($filesystem, string $localPath, string $disk, string $remotePath, bool $encrypt): array
+    private function uploadFile(\Illuminate\Contracts\Filesystem\Filesystem $filesystem, string $localPath, string $disk, string $remotePath, bool $encrypt): array
     {
         $stream = fopen($localPath, 'r');
 
@@ -75,12 +82,12 @@ final readonly class BackupArtifactUploader
     /**
      * @return array<string, mixed>
      */
-    private function uploadDirectory($filesystem, string $localDir, string $disk, string $remotePath, bool $encrypt): array
+    private function uploadDirectory(\Illuminate\Contracts\Filesystem\Filesystem $filesystem, string $localDir, string $disk, string $remotePath, bool $encrypt): array
     {
-        $files = File::allFiles($localDir);
+        $allFiles = $this->files->allFiles($localDir);
         $count = 0;
 
-        foreach ($files as $file) {
+        foreach ($allFiles as $file) {
             $stream = fopen($file->getRealPath(), 'r');
 
             if ($stream === false) {
@@ -110,7 +117,7 @@ final readonly class BackupArtifactUploader
      */
     private function encryptStream($stream)
     {
-        $appKey = (string) config('app.key', '');
+        $appKey = $this->config->get('app.key', '');
 
         if ($appKey === '') {
             throw new RuntimeException('APP_KEY must be set to enable backup encryption.');

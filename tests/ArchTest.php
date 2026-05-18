@@ -30,6 +30,7 @@ arch('drivers implement backup driver')
     ->toImplement(BackupDriver::class)
     ->ignoring([
         'AdityaaCodes\\LaravelCheckpoint\\Drivers\\Concerns',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\Postgres',
     ]);
 
 arch('package classes are final by default')

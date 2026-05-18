@@ -12,11 +12,11 @@ use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationEndpoint;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationEndpointKind;
 
 /** @internal */
-final class ReplicationEndpointInputParser implements ReplicationEndpointParser
+final readonly class ReplicationEndpointInputParser implements ReplicationEndpointParser
 {
     public function parse(string $input): ReplicationEndpoint
     {
-        $normalized = trim($input);
+        $normalized = str($input)->trim()->value();
 
         if ($normalized === '') {
             return new ReplicationEndpoint(
@@ -25,7 +25,7 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
             );
         }
 
-        if (str_starts_with($normalized, 'profile:')) {
+        if (str($normalized)->startsWith('profile:')) {
             return $this->parseProfileReference($input, $normalized);
         }
 
@@ -33,7 +33,7 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
             return $this->parseDsn($input, $normalized);
         }
 
-        if (str_contains($normalized, '=')) {
+        if (str($normalized)->contains('=')) {
             return $this->parseKeyValue($input, $normalized);
         }
 
@@ -44,9 +44,9 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
 
     private function parseProfileReference(string $rawInput, string $normalized): ReplicationEndpoint
     {
-        $identifier = trim(substr($normalized, strlen('profile:')));
+        $identifier = str($normalized)->after('profile:')->trim()->value();
 
-        if ($identifier === '' || ! preg_match('/^[A-Za-z0-9._-]+$/', $identifier)) {
+        if ($identifier === '' || ! str($identifier)->isMatch('/^[A-Za-z0-9._-]+$/')) {
             throw new CheckpointArgumentException(
                 'Invalid profile reference. Use profile:<identifier> with letters, numbers, dot, underscore, or hyphen.',
             );
@@ -88,17 +88,27 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
 
     private function parseKeyValue(string $rawInput, string $normalized): ReplicationEndpoint
     {
-        $pairs = array_values(array_filter(array_map(trim(...), explode(',', $normalized)), static fn (string $pair): bool => $pair !== ''));
+        $pairs = str($normalized)
+            ->explode(',')
+            ->map(fn (string $pair): string => str($pair)->trim()->value())
+            ->filter(fn (string $pair): bool => $pair !== '')
+            ->values()
+            ->all();
+
         $attributes = [];
 
         foreach ($pairs as $pair) {
-            if (! str_contains($pair, '=')) {
+            if (! str($pair)->contains('=')) {
                 throw new CheckpointArgumentException(
                     'Invalid key=value endpoint input. Use comma-separated key=value pairs.',
                 );
             }
 
-            [$key, $value] = array_map(trim(...), explode('=', $pair, 2));
+            $parts = str($pair)->explode('=', 2)
+                ->map(fn (string $part): string => str($part)->trim()->value())
+                ->all();
+
+            [$key, $value] = $parts;
 
             if ($key === '' || $value === '') {
                 throw new CheckpointArgumentException(
@@ -128,6 +138,6 @@ final class ReplicationEndpointInputParser implements ReplicationEndpointParser
 
     private function looksLikeDsn(string $input): bool
     {
-        return preg_match(DsnPattern::REGEX, $input) === 1;
+        return str($input)->isMatch(DsnPattern::REGEX);
     }
 }

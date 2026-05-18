@@ -7,7 +7,6 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 use AdityaaCodes\LaravelCheckpoint\Actions\BuildPitrReadinessReportAction;
 use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
-use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
 
@@ -22,7 +21,6 @@ final class PitrReadinessCommand extends Command
     protected $description = 'Evaluate PITR readiness for a target timestamp.';
 
     public function __construct(
-        private readonly ConfigValidator $validator,
         private readonly BuildPitrReadinessReportAction $buildPitrReadinessReport,
         private readonly CommandJsonContract $jsonContract,
         private readonly Repository $config,
@@ -51,7 +49,6 @@ final class PitrReadinessCommand extends Command
         }
 
         try {
-            $this->validator->validate();
             $payload = $this->buildPitrReadinessReport->execute($targetInput);
             $exitCode = $payload['readiness'] === 'ready' ? self::SUCCESS : self::FAILURE;
         } catch (\Throwable $exception) {
@@ -62,7 +59,7 @@ final class PitrReadinessCommand extends Command
                 'target' => null,
                 'readiness' => 'not_ready',
                 'checks' => [[
-                    'code' => 'config.validation',
+                    'code' => 'pitr_readiness.error',
                     'status' => 'fail',
                     'message' => $exception->getMessage(),
                     'data' => [

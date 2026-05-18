@@ -61,7 +61,7 @@ final readonly class BuildDrillRemediationPlaybookAction
                 title: 'No backup drill evidence available',
                 summary: 'No backup drill run is recorded. Schedule and record a drill run before relying on restore readiness.',
                 recommendedCommands: [
-                    'checkpoint:enqueue-drill',
+                    'checkpoint:drill',
                     'checkpoint:record-drill --run-uuid=<uuid> --overall-result=pass --executed-at="<iso-8601>"',
                 ],
                 steps: [
@@ -80,7 +80,7 @@ final readonly class BuildDrillRemediationPlaybookAction
                 title: 'Backup drill evidence is stale',
                 summary: sprintf('Latest drill run %s is %d day(s) old and exceeds the %d-day freshness target.', (string) $latestRunUuid, (int) $latestAgeDays, $maxAgeDays),
                 recommendedCommands: [
-                    'checkpoint:enqueue-drill',
+                    'checkpoint:drill',
                     'checkpoint:doctor --format=json',
                 ],
                 steps: [
@@ -118,7 +118,7 @@ final readonly class BuildDrillRemediationPlaybookAction
                 title: 'Backup drill pass rate is below threshold',
                 summary: sprintf('Drill pass rate is %.1f%% in the last %d day(s), below the configured %.1f%% threshold.', $passRatePercent, $windowDays, $minimumPassRatePercent),
                 recommendedCommands: [
-                    'checkpoint:enqueue-drill',
+                    'checkpoint:drill',
                     'checkpoint:status --summary --format=json',
                 ],
                 steps: [

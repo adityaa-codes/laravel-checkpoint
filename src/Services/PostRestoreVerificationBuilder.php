@@ -21,7 +21,7 @@ final readonly class PostRestoreVerificationBuilder
 
         $restoreAudit = is_array($metadata['restore_audit'] ?? null) ? $metadata['restore_audit'] : [];
         $resolvedRestoreTarget = $this->resolvedRestoreTarget($run, $restoreAudit, $restoreTarget);
-        $verifiedBackupRequired = (bool) ($restoreAudit['verified_backup_required'] ?? false);
+        $verifiedBackupRequired = ($restoreAudit['verified_backup_required'] ?? false);
         $verifiedSignalRunId = is_numeric($restoreAudit['verified_signal_run_id'] ?? null)
             ? (int) $restoreAudit['verified_signal_run_id']
             : null;
@@ -73,12 +73,12 @@ final readonly class PostRestoreVerificationBuilder
 
     private function isRestoreOperation(string $operation): bool
     {
-        return in_array($operation, [
+        return collect([
             'logical_restore_latest',
             'logical_restore_file',
             'pitr_restore',
             'physical_restore',
-        ], true);
+        ])->contains($operation);
     }
 
     /**
@@ -92,7 +92,7 @@ final readonly class PostRestoreVerificationBuilder
             return null;
         }
 
-        $candidate = trim($candidate);
+        $candidate = str($candidate)->trim()->value();
 
         return $candidate !== '' ? $candidate : null;
     }

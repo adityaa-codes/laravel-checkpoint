@@ -63,7 +63,7 @@ final readonly class CommandOutputCapture
 
     public function maxPersistedBytes(): int
     {
-        $maxBytes = (int) $this->config->get('checkpoint.output.max_persisted_bytes', 65536);
+        $maxBytes = $this->config->get('checkpoint.output.max_persisted_bytes', 65536);
 
         if ($maxBytes < 1) {
             throw new ConfigurationException('checkpoint.output.max_persisted_bytes must be greater than zero.');
@@ -90,7 +90,7 @@ final readonly class CommandOutputCapture
             ];
         }
 
-        $marker = sprintf("\n...[truncated %d bytes]...\n", $originalBytes - $maxBytes);
+        $marker = "\n...[truncated ".($originalBytes - $maxBytes)." bytes]...\n";
         $markerBytes = strlen($marker);
 
         if ($markerBytes >= $maxBytes) {

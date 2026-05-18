@@ -55,7 +55,7 @@
       "severity": "warning"
     },
     {
-      "code": "binary.pgbasebackup",
+      "code": "binary.pg_basebackup",
       "check": "Binary: pg_basebackup",
       "status": "warn",
       "notes": "pg_basebackup not found on PATH",
@@ -354,7 +354,7 @@
         "title": "Backup drill pass rate is below threshold",
         "summary": "Drill pass rate is 0.0% in the last 14 day(s), below the configured 100.0% threshold.",
         "recommended_commands": [
-          "checkpoint:enqueue-drill",
+          "checkpoint:drill",
           "checkpoint:status --summary --format=json"
         ],
         "steps": [

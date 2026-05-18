@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\EnqueueBackupDrillCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\EnqueueCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\EnqueueLogicalBackupCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\HealthCheckCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
@@ -38,7 +36,6 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
-use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationEndpointInputParser;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationRequestFactory;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationSecretRedactor;
@@ -48,9 +45,7 @@ use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
 it('keeps package internals final by default with explicit seams', function (): void {
     $finalClasses = [
         DoctorCommand::class,
-        EnqueueBackupDrillCommand::class,
         EnqueueCommand::class,
-        EnqueueLogicalBackupCommand::class,
         HealthCheckCommand::class,
         InstallCommand::class,
         PruneCommand::class,
@@ -70,7 +65,6 @@ it('keeps package internals final by default with explicit seams', function (): 
         BackupDrillRunPolicy::class,
         CommandRunPolicy::class,
         CommandRunCatalog::class,
-        ConfigValidator::class,
         RestoreSafetyGuard::class,
         ReplicationRequestFactory::class,
         ReplicationEndpointInputParser::class,
@@ -99,7 +93,6 @@ it('keeps immutable payload and service objects readonly where appropriate', fun
         OrphanRunRedispatched::class,
         QueueLagDetected::class,
         LaravelCheckpoint::class,
-        ConfigValidator::class,
         RestoreSafetyGuard::class,
     ];
 

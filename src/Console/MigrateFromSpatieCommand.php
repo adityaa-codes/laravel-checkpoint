@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
-use AdityaaCodes\LaravelCheckpoint\Services\EnvFileManager;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
-use RuntimeException;
 use Throwable;
 
 use function Laravel\Prompts\confirm;
@@ -23,18 +21,9 @@ final class MigrateFromSpatieCommand extends Command
 {
     use UsesLaravelPrompts;
 
-    public function __construct(
-        private readonly EnvFileManager $envFileManager,
-    ) {
-        parent::__construct();
-    }
-
     protected $signature = 'checkpoint:migrate-from-spatie
         {--dry-run : Preview the migration plan without making changes.}
         {--force : Skip all confirmation prompts.}
-        {--skip-config : Skip writing configuration values to .env.}
-        {--skip-schedule : Skip updating scheduler entries.}
-        {--write-env : Persist mapped values into the environment file.}
         {--remove-spatie : Also remove spatie/laravel-backup from composer.json.}';
 
     protected $description = 'Migrate from spatie/laravel-backup to Laravel Checkpoint with interactive guidance.';
@@ -43,7 +32,7 @@ final class MigrateFromSpatieCommand extends Command
      * @var array<string, string>
      */
     private const array COMMAND_MAP = [
-        'backup:run' => 'checkpoint:enqueue-backup',
+        'backup:run' => 'checkpoint:backup',
         'backup:clean' => 'checkpoint:prune',
         'backup:monitor' => 'checkpoint:doctor --format=json',
         'backup:list' => 'checkpoint:status',
@@ -119,7 +108,7 @@ final class MigrateFromSpatieCommand extends Command
                 note('After migration:');
                 note('1. Review config/checkpoint.php for driver-specific settings.');
                 note('2. Run php artisan checkpoint:install to validate your setup.');
-                note('3. Run php artisan checkpoint:enqueue-backup to test your first backup.');
+                note('3. Run php artisan checkpoint:backup to test your first backup.');
                 note('4. Start a queue worker: php artisan queue:work --queue=db-ops');
                 outro('Migration plan ready.');
             }
@@ -284,24 +273,6 @@ final class MigrateFromSpatieCommand extends Command
         $this->promptInfo('Config published and migration plan applied. Review config/checkpoint.php.');
     }
 
-    /**
-     * @param  array<string, string>  $entries
-     */
-    private function writeEnvEntries(array $entries): void
-    {
-        $path = app()->environmentFilePath();
-
-        if (! file_exists($path)) {
-            throw new RuntimeException(sprintf('Environment file [%s] does not exist.', $path));
-        }
-
-        $contents = (string) file_get_contents($path);
-        $contents = $this->envFileManager->writeEntries($contents, $entries);
-        file_put_contents($path, $contents);
-
-        $this->promptInfo('.env updated with '.count($entries).' value(s).');
-    }
-
     private function publishCheckpointConfig(): void
     {
         $force = (bool) $this->option('force');
@@ -417,7 +388,7 @@ final class MigrateFromSpatieCommand extends Command
 
         $steps[] = [
             'step' => '4. Schedule migration',
-            'action' => 'Replace $schedule->command(\'backup:run\') with $schedule->command(\'checkpoint:enqueue-backup\').',
+            'action' => 'Replace $schedule->command(\'backup:run\') with $schedule->command(\'checkpoint:backup\').',
         ];
 
         $steps[] = [

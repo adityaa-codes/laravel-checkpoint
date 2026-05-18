@@ -225,27 +225,27 @@ final readonly class CommandOutputStore
 
     private function storageMode(): string
     {
-        return (string) $this->config->get('checkpoint.output.storage', 'database');
+        return $this->config->get('checkpoint.output.storage', 'database');
     }
 
     private function filesystemDisk(): string
     {
-        return (string) $this->config->get('checkpoint.output.filesystem.disk', 'local');
+        return $this->config->get('checkpoint.output.filesystem.disk', 'local');
     }
 
     private function pathPrefix(): string
     {
-        return trim((string) $this->config->get('checkpoint.output.filesystem.path_prefix', 'checkpoint/command-output'), '/');
+        return str($this->config->get('checkpoint.output.filesystem.path_prefix', 'checkpoint/command-output'))->trim('/')->value();
     }
 
     private function inlineBytes(): int
     {
-        return max(0, (int) $this->config->get('checkpoint.output.filesystem.inline_bytes', 2048));
+        return max(0, $this->config->get('checkpoint.output.filesystem.inline_bytes', 2048));
     }
 
     private function tempDir(): string
     {
-        $configured = trim((string) $this->config->get('checkpoint.temp_dir', storage_path('app/checkpoint/tmp')));
+        $configured = str($this->config->get('checkpoint.temp_dir', storage_path('app/checkpoint/tmp')))->trim()->value();
 
         if ($configured === '') {
             throw new ConfigurationException('checkpoint.temp_dir must be a non-empty string.');

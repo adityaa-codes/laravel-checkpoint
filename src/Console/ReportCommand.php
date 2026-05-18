@@ -6,7 +6,6 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandJsonContract;
-use AdityaaCodes\LaravelCheckpoint\Services\ConfigValidator;
 use AdityaaCodes\LaravelCheckpoint\Services\GatePolicyEvaluator;
 use AdityaaCodes\LaravelCheckpoint\Services\OperationalReportBuilder;
 use Illuminate\Console\Command;
@@ -24,7 +23,6 @@ final class ReportCommand extends Command
     protected $description = 'Show checkpoint operational report (table by default, json/agent supported).';
 
     public function __construct(
-        private readonly ConfigValidator $validator,
         private readonly Repository $config,
         private readonly OperationalReportBuilder $reportBuilder,
         private readonly CommandJsonContract $jsonContract,
@@ -57,7 +55,6 @@ final class ReportCommand extends Command
         ['requested' => $requestedLimit, 'effective' => $effectiveLimit] = $this->recentRunLimits();
 
         try {
-            $this->validator->validate();
             $reportPayload = $this->reportBuilder->reportPayload($effectiveLimit);
         } catch (\Throwable $exception) {
             report($exception);
@@ -70,8 +67,8 @@ final class ReportCommand extends Command
                 'health' => [
                     'ok' => false,
                     'checks' => [[
-                        'code' => 'config.validation',
-                        'check' => 'Config validation',
+                        'code' => 'report.error',
+                        'check' => 'Report execution',
                         'status' => 'fail',
                         'notes' => $exception->getMessage(),
                         'data' => [
@@ -176,7 +173,7 @@ final class ReportCommand extends Command
                 'severity' => 'critical',
                 'title' => 'No backup drill evidence available',
                 'summary' => 'No backup drill run is recorded. Schedule and record a drill run before relying on restore readiness.',
-                'recommended_commands' => ['checkpoint:enqueue-drill'],
+                'recommended_commands' => ['checkpoint:drill'],
                 'steps' => [],
                 'evidence' => [
                     'window_days' => $windowDays,
@@ -401,12 +398,10 @@ final class ReportCommand extends Command
 
             $code = (string) $check['code'];
 
-            if ($code === 'config.validation') {
-                $suggestions[] = $compact ? 'checkpoint:doctor --agent' : 'Resolve config validation failures before executing queue operations.';
-            } elseif ($code === 'queue.orphaned_runs') {
+            if ($code === 'queue.orphaned_runs') {
                 $suggestions[] = $compact ? 'checkpoint:recover-orphans' : 'Run checkpoint:recover-orphans and verify worker heartbeat settings.';
             } elseif (str_starts_with($code, 'backup_drill.')) {
-                $suggestions[] = $compact ? 'checkpoint:enqueue-drill' : 'Run a backup drill and track pass-rate/freshness health signals.';
+                $suggestions[] = $compact ? 'checkpoint:drill' : 'Run a backup drill and track pass-rate/freshness health signals.';
 
                 $playbookCommands = $check['data']['recommended_commands'] ?? null;
 

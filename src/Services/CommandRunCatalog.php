@@ -6,6 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Services;
 
 use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\InvalidOperationException;
+use Illuminate\Contracts\Config\Repository;
 
 final class CommandRunCatalog
 {
@@ -14,11 +15,12 @@ final class CommandRunCatalog
      */
     private array $operations;
 
-    public function __construct()
-    {
+    public function __construct(
+        private readonly Repository $config,
+    ) {
         $this->operations = array_replace_recursive(
             $this->defaultOperations(),
-            config('checkpoint.custom_operations', []),
+            $this->config->get('checkpoint.custom_operations', []),
         );
     }
 
@@ -35,9 +37,9 @@ final class CommandRunCatalog
      */
     public function operation(string $operation): array
     {
-        if (! array_key_exists($operation, $this->operations)) {
+        if (! isset($this->operations[$operation])) {
             throw new InvalidOperationException(
-                sprintf('Unsupported operation: %s', $operation),
+                "Unsupported operation: {$operation}",
             );
         }
 
@@ -47,12 +49,12 @@ final class CommandRunCatalog
     public function validate(string $operation, ?string $argument): ?string
     {
         $definition = $this->operation($operation);
-        $normalizedArgument = $argument !== null ? trim($argument) : null;
-        $required = (bool) ($definition['argument_required'] ?? false);
+        $normalizedArgument = $argument !== null ? str($argument)->trim()->value() : null;
+        $required = ($definition['argument_required'] ?? false);
 
         if ($required && ($normalizedArgument === null || $normalizedArgument === '')) {
             throw new CheckpointArgumentException(
-                sprintf('Operation %s requires an argument.', $operation),
+                "Operation {$operation} requires an argument.",
             );
         }
 
@@ -66,11 +68,7 @@ final class CommandRunCatalog
             $hint = (string) ($definition['argument_hint'] ?? 'valid input');
 
             throw new CheckpointArgumentException(
-                sprintf(
-                    'Invalid argument for %s. Expected: %s',
-                    $operation,
-                    $hint,
-                ),
+                "Invalid argument for {$operation}. Expected: {$hint}",
             );
         }
 
@@ -79,12 +77,12 @@ final class CommandRunCatalog
 
     public function isDestructive(string $operation): bool
     {
-        return (bool) ($this->operation($operation)['destructive'] ?? false);
+        return $this->operation($operation)['destructive'] ?? false;
     }
 
     public function isExclusive(string $operation): bool
     {
-        return (bool) ($this->operation($operation)['exclusive'] ?? false);
+        return $this->operation($operation)['exclusive'] ?? false;
     }
 
     /**
@@ -194,27 +192,27 @@ final class CommandRunCatalog
             return false;
         }
 
-        if (! is_string($payload['source'] ?? null) || trim($payload['source']) === '') {
+        if (! is_string($payload['source'] ?? null) || str($payload['source'])->trim()->isEmpty()) {
             return false;
         }
 
-        if (! is_string($payload['destination'] ?? null) || trim($payload['destination']) === '') {
+        if (! is_string($payload['destination'] ?? null) || str($payload['destination'])->trim()->isEmpty()) {
             return false;
         }
 
         foreach (['dry_run', 'apply', 'force', 'force_overwrite', 'overwrite_destination'] as $flag) {
-            if (array_key_exists($flag, $payload) && ! is_bool($payload[$flag])) {
+            if (isset($payload[$flag]) && ! is_bool($payload[$flag])) {
                 return false;
             }
         }
 
-        if (array_key_exists('critical_tables', $payload)) {
+        if (isset($payload['critical_tables'])) {
             if (! is_array($payload['critical_tables'])) {
                 return false;
             }
 
             foreach ($payload['critical_tables'] as $table) {
-                if (! is_string($table) || trim($table) === '') {
+                if (! is_string($table) || str($table)->trim()->isEmpty()) {
                     return false;
                 }
             }

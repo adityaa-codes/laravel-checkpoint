@@ -21,7 +21,6 @@ final class TestCommand extends Command
     use UsesLaravelPrompts;
 
     protected $signature = 'checkpoint:test
-        {--preset=minimal : Installation preset (minimal, postgres-prod, mysql-prod).}
         {--timeout=3600 : Queue work timeout in seconds.}
         {--force : Force vendor publish overwrite during install.}';
 
@@ -30,7 +29,6 @@ final class TestCommand extends Command
     public function handle(): int
     {
         try {
-            $preset = (string) ($this->option('preset') ?: 'minimal');
             $timeout = max(1, (int) ($this->option('timeout') ?: 3600));
             $force = (bool) $this->option('force');
 
@@ -40,7 +38,7 @@ final class TestCommand extends Command
                 note('When: CI pipelines, deployment validation, troubleshooting.');
             }
 
-            $install = $this->runInstall($preset, $force);
+            $install = $this->runInstall($force);
             $doctor = $this->runDoctor();
             $smoke = $this->runBackupSmoke($timeout);
 
@@ -81,9 +79,9 @@ final class TestCommand extends Command
     /**
      * @return array{ok:bool}
      */
-    private function runInstall(string $preset, bool $force): array
+    private function runInstall(bool $force): array
     {
-        $parameters = ['--preset' => $preset, '--skip-publish' => true, '--skip-doctor' => true, '--no-interaction' => true];
+        $parameters = ['--skip-publish' => true, '--skip-doctor' => true, '--no-interaction' => true];
 
         if ($force) {
             $parameters['--force'] = true;
@@ -137,7 +135,7 @@ final class TestCommand extends Command
      */
     private function runBackupSmoke(int $timeout): array
     {
-        $enqueueCode = Artisan::call('checkpoint:enqueue-backup');
+        $enqueueCode = Artisan::call('checkpoint:backup');
 
         if ($enqueueCode !== self::SUCCESS) {
             $output = trim((string) Artisan::output());

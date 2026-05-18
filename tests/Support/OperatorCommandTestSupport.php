@@ -158,7 +158,7 @@ final class OperatorCommandTestSupport
             'status' => 'verified',
             'verified_at' => now()->subMinutes(5),
             'metadata' => [
-                'driver' => 'pgbasebackup',
+                'driver' => 'postgres',
                 'summary' => ['ok' => true],
             ],
         ]);
@@ -169,7 +169,7 @@ final class OperatorCommandTestSupport
             'status' => 'failed',
             'verified_at' => now()->subMinutes(3),
             'metadata' => [
-                'driver' => 'pgbasebackup',
+                'driver' => 'postgres',
             ],
             'error_detail' => 'Restore verification failed',
         ]);

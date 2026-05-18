@@ -157,7 +157,7 @@ final class CommandJsonFixtureSupport
             'status' => 'verified',
             'verified_at' => now()->subMinutes(5),
             'metadata' => [
-                'driver' => 'pgbasebackup',
+                'driver' => 'postgres',
                 'summary' => ['ok' => true],
             ],
         ]);
@@ -168,7 +168,7 @@ final class CommandJsonFixtureSupport
             'status' => 'failed',
             'verified_at' => now()->subMinutes(3),
             'metadata' => [
-                'driver' => 'pgbasebackup',
+                'driver' => 'postgres',
             ],
             'error_detail' => 'Restore verification failed',
         ]);
@@ -185,7 +185,7 @@ final class CommandJsonFixtureSupport
     {
         CommandRun::query()->create([
             'operation' => 'physical_backup',
-            'driver_name' => 'pgbasebackup',
+            'driver_name' => 'postgres',
             'repository' => 1,
             'stanza' => 'main',
             'backup_type' => 'full',
@@ -199,7 +199,7 @@ final class CommandJsonFixtureSupport
             'attempts' => 1,
             'exit_code' => 0,
             'metadata' => [
-                'driver' => 'pgbasebackup',
+                'driver' => 'postgres',
                 'flags' => ['nightly'],
                 'storage' => ['class' => 'warm'],
             ],
@@ -215,7 +215,7 @@ final class CommandJsonFixtureSupport
             'status' => 'verified',
             'verified_at' => now()->subMinutes(5),
             'metadata' => [
-                'driver' => 'pgbasebackup',
+                'driver' => 'postgres',
             ],
         ]);
 

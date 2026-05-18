@@ -16,9 +16,6 @@ parameters:
             message: '#Call to an undefined method Pest\\PendingCalls\\TestCall::expect\(\)\.#'
             path: tests/ArchTest.php
         -
-            message: '#Call to an undefined method Mockery\\ExpectationInterface\|Mockery\\HigherOrderMessage::once\(\)\.#'
-            path: tests/Feature/EnqueueLogicalBackupCommandTest.php
-        -
             message: '#Unable to resolve the template type TKey in call to function collect#'
             path: tests/Feature/DoctorCommandTest.php
         -
@@ -36,9 +33,6 @@ parameters:
         -
             message: '#Unable to resolve the template type TValue in call to function collect#'
             path: tests/Feature/HighVolumeOperationalFlowsTest.php
-        -
-            message: '#Call to an undefined method Mockery\\ExpectationInterface\|Mockery\\HigherOrderMessage::once\(\)\.#'
-            path: tests/Feature/EnqueueBackupDrillCommandTest.php
         -
             message: '#Call to an undefined method Mockery\\ExpectationInterface\|Mockery\\HigherOrderMessage::once\(\)\.#'
             path: tests/Feature/RecoverOrphansCommandTest.php
@@ -52,15 +46,6 @@ parameters:
             message: '#Call to an undefined method Illuminate\\Database\\Migrations\\Migration::up\(\)\.#'
             path: tests/Feature/MigrationCoverageTest.php
         -
-            message: '#Call to an undefined method Pest\\PendingCalls\\TestCall\|Pest\\Support\\HigherOrderTapProxy::markTestSkipped\(\)\.#'
-            path: tests/Unit/PgDumpDriverTest.php
-        -
-            message: '#Call to an undefined method Mockery\\ExpectationInterface\|Mockery\\HigherOrderMessage::(once|atLeast)\(\)\.#'
-            path: tests/Unit/PgDumpDriverTest.php
-        -
-            message: '#Anonymous function with return type void returns null but should not return anything\.#'
-            path: tests/Unit/PgDumpDriverTest.php
-        -
-            message: '#Anonymous function with return type void returns null but should not return anything\.#'
+            message: '#Call to an undefined method Mockery\\ExpectationInterface\|Mockery\\HigherOrderMessage::once\(\)\.#'
             path: tests/Unit/ShellCommandDriverTest.php
     tmpDir: build/phpstan

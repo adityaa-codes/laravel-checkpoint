@@ -91,7 +91,7 @@ it('denormalizes hot operator fields from metadata payloads', function (): void 
 
     $run->recordMetadata([
         'metadata' => [
-            'driver' => 'pgbasebackup',
+            'driver' => 'postgres',
             'restore_audit' => [
                 'confirmation_satisfied_via' => 'token',
                 'verified_signal_run_id' => 42,
@@ -105,11 +105,11 @@ it('denormalizes hot operator fields from metadata payloads', function (): void 
 
     $run->refresh();
 
-    expect($run->driver_name)->toBe('pgbasebackup')
+    expect($run->driver_name)->toBe('postgres')
         ->and($run->restore_confirmation_satisfied_via)->toBe('token')
         ->and($run->restore_verified_signal_run_id)->toBe(42)
         ->and($run->restore_post_verification_result)->toBe('pass')
-        ->and($run->resolvedDriverName('shell'))->toBe('pgbasebackup')
+        ->and($run->resolvedDriverName('shell'))->toBe('postgres')
         ->and($run->restoreAuditSummary())->toBe([
             'confirmation_satisfied_via' => 'token',
             'verified_signal_run_id' => 42,
@@ -128,7 +128,7 @@ it('persists verification rows from verification metadata transitions', function
         'verification_state' => 'verified',
         'verified_at' => Date::now(),
         'metadata' => [
-            'driver' => 'pgbasebackup',
+            'driver' => 'postgres',
             'summary' => ['ok' => true],
         ],
     ]);
@@ -143,12 +143,12 @@ it('persists verification rows from verification metadata transitions', function
 
 it('clears denormalized operator fields when metadata no longer carries them', function (): void {
     $run = CommandRun::factory()->pending()->create([
-        'driver_name' => 'pgbasebackup',
+        'driver_name' => 'postgres',
         'restore_confirmation_satisfied_via' => 'token',
         'restore_verified_signal_run_id' => 42,
         'restore_post_verification_result' => 'pass',
         'metadata' => [
-            'driver' => 'pgbasebackup',
+            'driver' => 'postgres',
             'restore_audit' => [
                 'confirmation_satisfied_via' => 'token',
                 'verified_signal_run_id' => 42,

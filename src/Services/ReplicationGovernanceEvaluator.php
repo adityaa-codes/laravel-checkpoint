@@ -8,8 +8,8 @@ use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationEndpoint;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationEndpointKind;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\ReplicationRequest;
+use Carbon\Carbon;
 use Illuminate\Contracts\Config\Repository;
-use Illuminate\Support\Facades\Date;
 
 /** @internal */
 final readonly class ReplicationGovernanceEvaluator
@@ -36,7 +36,7 @@ final readonly class ReplicationGovernanceEvaluator
             $blockedReasons[] = 'destination_not_allowlisted';
         }
 
-        if ($applyRequested && ! (bool) ($changeWindow['allowed'] ?? false)) {
+        if ($applyRequested && ! ($changeWindow['allowed'] ?? false)) {
             $blockedReasons[] = 'outside_change_window';
         }
 
@@ -64,17 +64,17 @@ final readonly class ReplicationGovernanceEvaluator
             return;
         }
 
-        if ((bool) ($preflight['allowed'] ?? false)) {
+        if (($preflight['allowed'] ?? false)) {
             return;
         }
 
         $reasons = $preflight['blocked_reasons'] ?? [];
         $reasonText = is_array($reasons) && $reasons !== []
-            ? implode(', ', array_map(static fn (mixed $reason): string => (string) $reason, $reasons))
+            ? collect($reasons)->map(static fn (mixed $reason): string => (string) $reason)->implode(', ')
             : 'unknown_policy_failure';
 
         throw new CheckpointArgumentException(
-            sprintf('Replication apply is blocked by governance preflight: %s.', $reasonText),
+            "Replication apply is blocked by governance preflight: {$reasonText}.",
         );
     }
 
@@ -89,23 +89,13 @@ final readonly class ReplicationGovernanceEvaluator
             return [];
         }
 
-        $allowlist = [];
-
-        foreach ($configured as $candidate) {
-            if (! is_string($candidate)) {
-                continue;
-            }
-
-            $value = strtolower(trim($candidate));
-
-            if ($value === '') {
-                continue;
-            }
-
-            $allowlist[] = $value;
-        }
-
-        return array_values(array_unique($allowlist));
+        return collect($configured)
+            ->filter(fn (mixed $candidate): bool => is_string($candidate))
+            ->map(fn (string $candidate): string => str($candidate)->trim()->lower()->value())
+            ->filter(fn (string $value): bool => $value !== '')
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**
@@ -115,7 +105,7 @@ final readonly class ReplicationGovernanceEvaluator
     private function destinationAllowlisted(array $candidates, array $allowlist): bool
     {
         foreach ($candidates as $candidate) {
-            if (in_array(strtolower($candidate), $allowlist, true)) {
+            if (collect($allowlist)->contains(str($candidate)->lower()->value())) {
                 return true;
             }
         }
@@ -131,10 +121,10 @@ final readonly class ReplicationGovernanceEvaluator
         $candidates = [];
 
         if ($endpoint->kind === ReplicationEndpointKind::ConfigProfile) {
-            $identifier = strtolower(trim($endpoint->identifier ?? ''));
+            $identifier = str($endpoint->identifier ?? '')->trim()->lower()->value();
 
             if ($identifier !== '') {
-                $candidates[] = sprintf('profile:%s', $identifier);
+                $candidates[] = "profile:{$identifier}";
                 $candidates[] = $identifier;
             }
         }
@@ -143,7 +133,7 @@ final readonly class ReplicationGovernanceEvaluator
             $parts = parse_url($endpoint->rawInput);
 
             if (is_array($parts) && is_string($parts['host'] ?? null)) {
-                $host = strtolower(trim($parts['host']));
+                $host = str($parts['host'])->trim()->lower()->value();
 
                 if ($host !== '') {
                     $candidates[] = $host;
@@ -159,7 +149,7 @@ final readonly class ReplicationGovernanceEvaluator
                     continue;
                 }
 
-                $normalized = strtolower(trim($value));
+                $normalized = str($value)->trim()->lower()->value();
 
                 if ($normalized !== '') {
                     $candidates[] = $normalized;
@@ -167,7 +157,7 @@ final readonly class ReplicationGovernanceEvaluator
             }
         }
 
-        return array_values(array_unique($candidates));
+        return collect($candidates)->unique()->values()->all();
     }
 
     /**
@@ -175,13 +165,13 @@ final readonly class ReplicationGovernanceEvaluator
      */
     private function changeWindowDecision(bool $applyRequested): array
     {
-        $timezone = (string) $this->config->get('checkpoint.replication.change_window_timezone', 'UTC');
+        $timezone = $this->config->get('checkpoint.replication.change_window_timezone', 'UTC');
         $days = $this->normalizedChangeWindowDays();
-        $start = (string) $this->config->get('checkpoint.replication.change_window_start', '00:00');
-        $end = (string) $this->config->get('checkpoint.replication.change_window_end', '23:59');
-        $enforced = (bool) $this->config->get('checkpoint.replication.enforce_change_window', false);
-        $now = Date::now($timezone);
-        $currentDay = strtolower($now->format('D'));
+        $start = $this->config->get('checkpoint.replication.change_window_start', '00:00');
+        $end = $this->config->get('checkpoint.replication.change_window_end', '23:59');
+        $enforced = $this->config->get('checkpoint.replication.enforce_change_window', false);
+        $now = Carbon::now($timezone);
+        $currentDay = str($now->format('D'))->lower()->value();
         $currentTime = $now->format('H:i');
 
         if (! $applyRequested) {
@@ -212,7 +202,7 @@ final readonly class ReplicationGovernanceEvaluator
             ];
         }
 
-        $dayAllowed = in_array($currentDay, $days, true);
+        $dayAllowed = collect($days)->contains($currentDay);
         $inWindow = $this->timeInWindow($currentTime, $start, $end);
         $allowed = $dayAllowed && $inWindow;
 
@@ -250,21 +240,13 @@ final readonly class ReplicationGovernanceEvaluator
             return [];
         }
 
-        $days = [];
-
-        foreach ($configured as $day) {
-            if (! is_string($day)) {
-                continue;
-            }
-
-            $normalized = strtolower(substr(trim($day), 0, 3));
-
-            if ($normalized !== '') {
-                $days[] = $normalized;
-            }
-        }
-
-        return array_values(array_unique($days));
+        return collect($configured)
+            ->filter(fn (mixed $day): bool => is_string($day))
+            ->map(fn (string $day): string => str($day)->trim()->substr(0, 3)->lower()->value())
+            ->filter(fn (string $normalized): bool => $normalized !== '')
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function timeInWindow(string $currentTime, string $start, string $end): bool

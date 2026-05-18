@@ -8,13 +8,13 @@ use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Console\Command;
+use Laravel\Prompts\Prompt;
 
 use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\intro;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 use function Laravel\Prompts\warning;
-use Laravel\Prompts\Prompt;
 
 final class PruneCommand extends Command
 {
@@ -27,6 +27,7 @@ final class PruneCommand extends Command
     protected $description = 'Prune old checkpoint runs and backup drill records.';
 
     private readonly CommandRun $commandRun;
+
     private readonly BackupDrillRun $backupDrillRun;
 
     public function __construct()

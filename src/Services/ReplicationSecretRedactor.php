@@ -11,7 +11,7 @@ final readonly class ReplicationSecretRedactor
 {
     public function redact(string $input): string
     {
-        $trimmed = trim($input);
+        $trimmed = str($input)->trim()->value();
 
         if ($trimmed === '') {
             return $trimmed;
@@ -20,8 +20,8 @@ final readonly class ReplicationSecretRedactor
         if (preg_match(DsnPattern::REGEX, $trimmed) === 1) {
             $parts = parse_url($trimmed);
 
-            if (is_array($parts) && isset($parts['scheme']) && isset($parts['host'])) {
-                return sprintf('%s://[REDACTED]@%s', $parts['scheme'], $parts['host']);
+            if (is_array($parts) && isset($parts['scheme'], $parts['host'])) {
+                return "{$parts['scheme']}://[REDACTED]@{$parts['host']}";
             }
         }
 

@@ -69,7 +69,7 @@
       "title": "Backup drill pass rate is below threshold",
       "summary": "Drill pass rate is 0.0% in the last 30 day(s), below the configured 100.0% threshold.",
       "recommended_commands": [
-        "checkpoint:enqueue-drill",
+        "checkpoint:drill",
         "checkpoint:status --summary --format=json"
       ],
       "steps": [

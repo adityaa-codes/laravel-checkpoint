@@ -31,7 +31,7 @@ final readonly class DrillTrendAnalyzer
         $recentOutcomes = [];
 
         foreach ($runs as $index => $run) {
-            $result = strtolower((string) $run->overall_result) === 'pass' ? 'pass' : 'fail';
+            $result = str((string) $run->overall_result)->lower()->value() === 'pass' ? 'pass' : 'fail';
 
             if ($index === 0) {
                 $latestResult = $result;
@@ -54,7 +54,7 @@ final readonly class DrillTrendAnalyzer
             }
         }
 
-        $passing = count(array_filter($recentResults, static fn (string $result): bool => $result === 'pass'));
+        $passing = collect($recentResults)->filter(static fn (string $result): bool => $result === 'pass')->count();
         $failing = count($recentResults) - $passing;
         $trajectory = $this->drillTrajectory($recentResults);
         $status = match (true) {
@@ -140,15 +140,9 @@ final readonly class DrillTrendAnalyzer
         }
 
         if ($streakType === null) {
-            return sprintf('Trend %s (n=%d)', $status, $sampleSize);
+            return "Trend {$status} (n={$sampleSize})";
         }
 
-        return sprintf(
-            '%s (%s streak x%d, n=%d)',
-            ucfirst($status),
-            strtoupper($streakType),
-            $streakLength,
-            $sampleSize,
-        );
+        return ucfirst($status).' ('.str($streakType)->upper()->value()." streak x{$streakLength}, n={$sampleSize})";
     }
 }

@@ -9,13 +9,13 @@ use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use Illuminate\Console\Command;
+use Illuminate\Support\Str;
 use Throwable;
 
 use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\intro;
 use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
-use function Laravel\Prompts\password;
 use function Laravel\Prompts\warning;
 
 final class ReplicateCommand extends Command
@@ -69,7 +69,7 @@ final class ReplicateCommand extends Command
                 $this->promptTable(['Field', 'Value'], [
                     ['Mode', $payload['dry_run'] ? 'dry-run' : 'apply'],
                     ['Force overwrite', $payload['force_overwrite'] ? 'yes' : 'no'],
-                    ['Critical tables', implode(', ', $payload['critical_tables']) ?: '-'],
+                    ['Critical tables', collect($payload['critical_tables'])->join(', ') ?: '-'],
                     ['Source', $this->safeEndpointLabel($payload['source'])],
                     ['Destination', $this->safeEndpointLabel($payload['destination'])],
                 ]);
@@ -80,7 +80,7 @@ final class ReplicateCommand extends Command
                 json_encode($payload, JSON_THROW_ON_ERROR),
             );
 
-            $message = $this->queuedMessage((int) $run->getKey());
+            $message = sprintf('Queued Replication Sync run #%d.', (int) $run->getKey());
 
             if ($this->enhancedInteractiveMode()) {
                 outro($message);
@@ -91,7 +91,6 @@ final class ReplicateCommand extends Command
             return self::SUCCESS;
         } catch (Throwable $exception) {
             report($exception);
-
             $this->promptError($exception->getMessage());
 
             return self::FAILURE;
@@ -102,14 +101,14 @@ final class ReplicateCommand extends Command
     {
         $option = $this->option($role);
 
-        if (is_string($option) && trim($option) !== '') {
-            return trim($option);
+        if (is_string($option) && Str::trim($option) !== '') {
+            return Str::trim($option);
         }
 
         $argument = $this->argument($role);
 
-        if (is_string($argument) && trim($argument) !== '') {
-            return trim($argument);
+        if (is_string($argument) && Str::trim($argument) !== '') {
+            return Str::trim($argument);
         }
 
         if ($this->input !== null && ! $this->input->isInteractive()) {
@@ -121,14 +120,7 @@ final class ReplicateCommand extends Command
             ));
         }
 
-        if (app()->runningUnitTests()) {
-            return trim((string) $this->secret(sprintf('Enter %s replication endpoint', $role)));
-        }
-
-        return trim(password(
-            label: sprintf('Enter %s replication endpoint', $role),
-            required: true,
-        ));
+        return Str::trim((string) $this->secret(sprintf('Enter %s replication endpoint', $role)));
     }
 
     /**
@@ -141,28 +133,17 @@ final class ReplicateCommand extends Command
         return is_array($criticalTables) ? $criticalTables : [];
     }
 
-    private function queuedMessage(int $runId): string
-    {
-        $operation = $this->translatedOr('messages.operations.replication_sync', 'Replication Sync');
-
-        return $this->translatedOr(
-            'messages.cli.backup_queued',
-            sprintf('Queued %s run #%d.', $operation, $runId),
-            ['operation' => $operation, 'id' => $runId],
-        );
-    }
-
     private function safeEndpointLabel(string $endpoint): string
     {
         if ($endpoint === '') {
             return '-';
         }
 
-        if (str_starts_with($endpoint, 'profile:')) {
+        if (Str::startsWith($endpoint, 'profile:')) {
             return $endpoint;
         }
 
-        if (str_contains($endpoint, '://')) {
+        if (Str::contains($endpoint, '://')) {
             $parts = parse_url($endpoint);
 
             if (is_array($parts) && isset($parts['scheme'])) {
@@ -173,7 +154,7 @@ final class ReplicateCommand extends Command
             }
         }
 
-        if (str_contains($endpoint, '=')) {
+        if (Str::contains($endpoint, '=')) {
             return 'kv-pairs(redacted)';
         }
 
