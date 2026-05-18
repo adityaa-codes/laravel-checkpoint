@@ -5,12 +5,8 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Jobs;
 
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
-use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
@@ -51,7 +47,7 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $this->resolveDriver()->execute($run);
+        app(BackupDriver::class)->execute($run);
     }
 
     public function uniqueId(): string
@@ -114,38 +110,6 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
             ->error('ProcessCommandRunJob failed', $this->logContext($run, [
                 'error' => $exception->getMessage(),
             ]));
-    }
-
-    private function resolveDriver(): BackupDriver
-    {
-        $driver = (string) config('checkpoint.driver', 'shell');
-        $class = config("checkpoint.drivers.{$driver}.class") ?? $this->defaultDriverClass($driver);
-
-        if (! is_string($class) || $class === '') {
-            throw new ConfigurationException(
-                sprintf('Driver [%s] is not configured.', $driver),
-            );
-        }
-
-        $resolved = resolve($class);
-
-        if (! $resolved instanceof BackupDriver) {
-            throw new ConfigurationException(
-                sprintf('Configured driver [%s] must implement [%s].', $class, BackupDriver::class),
-            );
-        }
-
-        return $resolved;
-    }
-
-    private function defaultDriverClass(string $driver): ?string
-    {
-        return match ($driver) {
-            'shell' => ShellCommandDriver::class,
-            'postgres' => PostgresDriver::class,
-            'mysql' => MysqlDriver::class,
-            default => null,
-        };
     }
 
     /**

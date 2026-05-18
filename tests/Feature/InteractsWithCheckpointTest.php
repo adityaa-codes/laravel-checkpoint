@@ -18,8 +18,7 @@ it('initializes and exposes the fake driver binding', function (): void {
         ->and($this->checkpointFakeDriver())->toBe($driver)
         ->and(resolve(FakeDriver::class))->toBe($driver)
         ->and(resolve(BackupDriver::class))->toBe($driver)
-        ->and(config('checkpoint.driver'))->toBe('fake')
-        ->and(config('checkpoint.drivers.fake.class'))->toBe(FakeDriver::class);
+        ->and(config('checkpoint.driver'))->toBe('fake');
 });
 
 it('asserts queued and failed backup events through the testing trait', function (): void {

@@ -14,22 +14,17 @@ use AdityaaCodes\LaravelCheckpoint\Actions\ComposeRestorePostureHealthChecksActi
 use AdityaaCodes\LaravelCheckpoint\Actions\ComposeVerificationHealthChecksAction;
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use AdityaaCodes\LaravelCheckpoint\Console\BackupCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\CatalogExportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DrillCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\HealthCheckCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\MakeDriverCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\MigrateFromSpatieCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\PitrReadinessCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\RecoverOrphansCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ReplicateCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\ReportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\StatusCommand;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Contracts\ReplicationEndpointParser;
-use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresBackupDrillHandler;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresDriverConfig;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresLogicalBackupHandler;
@@ -41,13 +36,8 @@ use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresReplicationSyncHandl
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresRestoreTargetResolver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresSnapshotService;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
-use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
-use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
-use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
-use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
-use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Services\BackupArtifactUploader;
+use AdityaaCodes\LaravelCheckpoint\Services\CheckpointDriverManager;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputCapture;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandOutputStore;
@@ -58,9 +48,6 @@ use AdityaaCodes\LaravelCheckpoint\Services\ReplicationFailureSuggestionMapper;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\GateProfileConfig;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\HealthCheckConfig;
-use Illuminate\Console\Scheduling\Event as ScheduledEvent;
-use Illuminate\Console\Scheduling\Schedule;
-use Illuminate\Support\Facades\Gate;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -79,10 +66,6 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
                 InstallCommand::class,
                 MakeDriverCommand::class,
                 PruneCommand::class,
-                RecoverOrphansCommand::class,
-                ReportCommand::class,
-                CatalogExportCommand::class,
-                PitrReadinessCommand::class,
                 StatusCommand::class,
                 DrillCommand::class,
                 BackupCommand::class,
@@ -147,6 +130,10 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             $app->make(EnqueueCommandRunAction::class),
         ));
 
+        $this->app->singleton(CheckpointDriverManager::class);
+
+        $this->app->bind(BackupDriver::class, fn ($app): BackupDriver => $app[CheckpointDriverManager::class]->driver());
+
         $this->bindGateProfileConfig();
         $this->bindBackupDriver();
 
@@ -166,14 +153,6 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             $app->make(ComposeBackupDrillHealthChecksAction::class),
             $app->make(ComposeVerificationHealthChecksAction::class),
         ));
-    }
-
-    public function packageBooted(): void
-    {
-        Gate::policy(CommandRun::class, CommandRunPolicy::class);
-        Gate::policy(BackupDrillRun::class, BackupDrillRunPolicy::class);
-
-        $this->registerSchedules();
     }
 
     private function bindGateProfileConfig(): void
@@ -293,32 +272,6 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
                 $app->make(CommandLineRedactor::class),
                 $app->make(BackupArtifactUploader::class),
             );
-        });
-
-        $this->app->bind(function ($app): BackupDriver {
-            $config = $app['config'];
-            $driver = (string) $config->get('checkpoint.driver', 'shell');
-            $class = $config->get("checkpoint.drivers.{$driver}.class")
-                ?? match ($driver) {
-                    'shell' => ShellCommandDriver::class,
-                    'postgres' => PostgresDriver::class,
-                    'mysql' => MysqlDriver::class,
-                    default => null,
-                };
-
-            if (! is_string($class) || $class === '') {
-                throw new ConfigurationException(sprintf('Driver [%s] is not configured.', $driver));
-            }
-
-            $resolved = $app->make($class);
-
-            if (! $resolved instanceof BackupDriver) {
-                throw new ConfigurationException(
-                    sprintf('Configured driver [%s] must implement [%s].', $class, BackupDriver::class),
-                );
-            }
-
-            return $resolved;
         });
     }
 

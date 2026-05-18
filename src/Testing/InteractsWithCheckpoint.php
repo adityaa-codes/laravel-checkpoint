@@ -7,6 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Testing;
 use AdityaaCodes\LaravelCheckpoint\Drivers\FakeDriver;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupQueued;
+use AdityaaCodes\LaravelCheckpoint\Services\CheckpointDriverManager;
 use Illuminate\Support\Facades\Event;
 use PHPUnit\Framework\Assert;
 
@@ -26,10 +27,11 @@ trait InteractsWithCheckpoint
 
         app()->instance(FakeDriver::class, $this->checkpointFakeDriver);
 
+        app(CheckpointDriverManager::class)->extend('fake', function () {
+            return app(FakeDriver::class);
+        });
+
         config()->set('checkpoint.driver', 'fake');
-        config()->set('checkpoint.drivers.fake', [
-            'class' => FakeDriver::class,
-        ]);
 
         return $this->checkpointFakeDriver;
     }

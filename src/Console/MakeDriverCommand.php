@@ -4,17 +4,13 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
-use AdityaaCodes\LaravelCheckpoint\Console\Concerns\UsesLaravelPrompts;
-use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
 use function Laravel\Prompts\text;
 
-final class MakeDriverCommand extends Command
+final class MakeDriverCommand extends CheckpointCommand
 {
-    use UsesLaravelPrompts;
-
     protected $signature = 'checkpoint:make-driver
                             {name : The driver name (e.g. MyCustomDriver)}';
 
@@ -69,17 +65,10 @@ final class MakeDriverCommand extends Command
         $this->promptInfo(sprintf('Driver [%s] created at [%s].', $name, $path));
 
         $this->line('');
-        $this->line('  <fg=green>Next step — add to config/checkpoint.php:</>');
+        $this->line('  <fg=green>Next step — register in AppServiceProvider::boot():</>');
         $this->line('');
-        $this->line(sprintf("  'driver' => '%s',", $driverKey));
-        $this->line("  'drivers' => [");
-        $this->line(sprintf("      '%s' => [", $driverKey));
-        $this->line(sprintf("          'class' => \\%s\\%s::class,", $namespace, $name));
-        $this->line("          'health_binaries' => [");
-        $this->line("              // ['code' => 'mybinary', 'label' => 'mybinary', 'binary' => '/usr/bin/mybinary'],");
-        $this->line('          ],');
-        $this->line('      ],');
-        $this->line('  ],');
+        $this->line(sprintf('  app(\\%s\\Services\\CheckpointDriverManager::class)', 'AdityaaCodes\\LaravelCheckpoint'));
+        $this->line(sprintf("      ->extend('%s', fn (): \\%s\\%s => new \\%s\\%s);", $driverKey, $namespace, $name, $namespace, $name));
 
         return self::SUCCESS;
     }
