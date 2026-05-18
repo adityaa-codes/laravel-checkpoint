@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 final readonly class ReplicationFailureSuggestionMapper
 {
     public function __construct(
-        private ReplicationSecretRedactor $secretRedactor,
+        private CommandLineRedactor $commandLineRedactor,
     ) {}
 
     /**
@@ -217,7 +217,7 @@ final readonly class ReplicationFailureSuggestionMapper
             }
 
             if (is_string($value)) {
-                $diagnostics[$key] = $this->secretRedactor->redact($value);
+                $diagnostics[$key] = $this->commandLineRedactor->redact($value);
 
                 continue;
             }
@@ -240,6 +240,6 @@ final readonly class ReplicationFailureSuggestionMapper
             ->slice(max(0, count($lines) - 3))
             ->implode(' | ');
 
-        return $this->secretRedactor->redact($excerpt);
+        return $this->commandLineRedactor->redact($excerpt);
     }
 }

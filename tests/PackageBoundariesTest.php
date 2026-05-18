@@ -33,10 +33,10 @@ use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationEndpointInputParser;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationRequestFactory;
-use AdityaaCodes\LaravelCheckpoint\Services\ReplicationSecretRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
 
@@ -64,7 +64,7 @@ it('keeps package internals final by default with explicit seams', function (): 
         RestoreSafetyGuard::class,
         ReplicationRequestFactory::class,
         ReplicationEndpointInputParser::class,
-        ReplicationSecretRedactor::class,
+        CommandLineRedactor::class,
     ];
 
     foreach ($finalClasses as $class) {

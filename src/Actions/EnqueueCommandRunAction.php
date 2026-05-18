@@ -9,10 +9,10 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupQueued;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationGovernanceEvaluator;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationRequestFactory;
-use AdityaaCodes\LaravelCheckpoint\Services\ReplicationSecretRedactor;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher as EventDispatcher;
@@ -29,7 +29,7 @@ class EnqueueCommandRunAction
         private readonly Repository $config,
         private readonly ReplicationGovernanceEvaluator $replicationGovernanceEvaluator,
         private readonly ReplicationRequestFactory $replicationRequestFactory,
-        private readonly ReplicationSecretRedactor $replicationSecretRedactor,
+        private readonly CommandLineRedactor $commandLineRedactor,
         private readonly ValidateOperationBinaries $validateOperationBinaries,
     ) {}
 
@@ -114,12 +114,12 @@ class EnqueueCommandRunAction
                     'source' => [
                         'kind' => $request->source->kind->value,
                         'identifier' => $request->source->identifier,
-                        'redacted' => $this->replicationSecretRedactor->redact($request->source->rawInput),
+                        'redacted' => $this->commandLineRedactor->redact($request->source->rawInput),
                     ],
                     'destination' => [
                         'kind' => $request->destination->kind->value,
                         'identifier' => $request->destination->identifier,
-                        'redacted' => $this->replicationSecretRedactor->redact($request->destination->rawInput),
+                        'redacted' => $this->commandLineRedactor->redact($request->destination->rawInput),
                     ],
                     'queue_only' => $request->queueOnly,
                     'dry_run_requested' => $dryRunRequested,
