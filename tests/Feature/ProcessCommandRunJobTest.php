@@ -11,6 +11,7 @@ use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 
@@ -35,7 +36,7 @@ it('uses the configured driver to process a command run', function (): void {
     ]);
 
     $job = new ProcessCommandRunJob($run);
-    $job->handle();
+    Bus::dispatchSync($job);
 
     $run->refresh();
 
@@ -73,7 +74,7 @@ it('skips duplicate delivery when the command run is already running', function 
         'started_at' => now()->subMinute(),
     ]);
 
-    (new ProcessCommandRunJob($run))->handle();
+    Bus::dispatchSync(new ProcessCommandRunJob($run));
 
     expect($driver->calls())->toHaveCount(0);
 });
@@ -102,7 +103,7 @@ it('skips duplicate delivery after the command run has already completed', funct
         'finished_at' => now()->subMinute(),
     ]);
 
-    (new ProcessCommandRunJob($run))->handle();
+    Bus::dispatchSync(new ProcessCommandRunJob($run));
 
     expect($driver->calls())->toHaveCount(0);
 });

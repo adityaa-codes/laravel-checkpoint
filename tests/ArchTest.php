@@ -2,7 +2,13 @@
 
 declare(strict_types=1);
 
+use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
+use AdityaaCodes\LaravelCheckpoint\Console\CheckpointCommand;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
+use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
+use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
+use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
 use Illuminate\Contracts\Queue\ShouldQueue;
 
 arch('src has no app references')
@@ -31,6 +37,22 @@ arch('drivers implement backup driver')
     ->ignoring([
         'AdityaaCodes\\LaravelCheckpoint\\Drivers\\Concerns',
         'AdityaaCodes\\LaravelCheckpoint\\Drivers\\Postgres',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlCommandLineFormatter',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlConfiguration',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlDrillExecutor',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlDriverLogContext',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlMetadataBuilder',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlPitrExecutor',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlProcessBuilder',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlProcessRunner',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlReplicationHandler',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlReplicationMetadataBuilder',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlRestoreExecutor',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlRestoreTargetValidator',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\ShellCommandConfig',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\ShellCommandMetadataBuilder',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\ShellCommandProcessBuilder',
+        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\ShellCommandSnapshotRunner',
     ]);
 
 arch('package classes are final by default')
@@ -38,12 +60,12 @@ arch('package classes are final by default')
     ->classes()
     ->toBeFinal()
     ->ignoring([
-        'AdityaaCodes\\LaravelCheckpoint\\Actions\\EnqueueCommandRunAction',
-        'AdityaaCodes\\LaravelCheckpoint\\Models\\CommandRun',
-        'AdityaaCodes\\LaravelCheckpoint\\Models\\VerificationRun',
-        'AdityaaCodes\\LaravelCheckpoint\\Models\\RestoreDecisionEvent',
-        'AdityaaCodes\\LaravelCheckpoint\\Models\\BackupDrillRun',
-        'AdityaaCodes\\LaravelCheckpoint\\Console\\CheckpointCommand',
+        EnqueueCommandRunAction::class,
+        CommandRun::class,
+        VerificationRun::class,
+        RestoreDecisionEvent::class,
+        BackupDrillRun::class,
+        CheckpointCommand::class,
     ]);
 
 arch('it will not use debugging functions')

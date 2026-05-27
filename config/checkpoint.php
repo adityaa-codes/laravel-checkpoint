@@ -2,185 +2,181 @@
 
 declare(strict_types=1);
 
-/*
-|--------------------------------------------------------------------------
-| Laravel Checkpoint — Database Reliability Layer
-|--------------------------------------------------------------------------
-|
-| This is the published configuration. The package ships with sensible
-| defaults and auto-detects your database driver. Customize anything
-| here after running: php artisan vendor:publish --tag=checkpoint-config
-|
-| Minimal setup: set CP_RESTORE_ALLOWED_ENVIRONMENTS for production.
-| Full setup: publish this config and tune backup strategy, retention,
-| destination disks, encryption, and monitoring thresholds.
-|
-*/
-
 return [
 
-    /*
-    |--------------------------------------------------------------------------
-    | Driver
-    |--------------------------------------------------------------------------
-    |
-    | Which backup engine to use. Auto-detected from DB_CONNECTION if not set:
-    |   mysql/mariadb  → mysql    (mysqldump + mysqlbinlog PITR)
-    |   pgsql/postgres → postgres (pg_dump + pg_basebackup)
-    |   sqlite/other   → shell    (user-provided commands)
-    |
-    | Supported drivers: shell, postgres, mysql
-    | Set CP_DRIVER in your .env to override auto-detection.
-    |
-    | Custom drivers: Implement BackupDriver, then add a drivers.{name}
-    | config section with a 'class' key pointing to your FQCN. Optionally
-    | add 'health_binaries' to register binaries for checkpoint:doctor.
-    |
-    | Run `php artisan checkpoint:make-driver MyDriver` to scaffold one.
-    |
-    | Example custom driver:
-    |
-    |   'driver' => 'my_engine',
-    |   'drivers' => [
-    |       'my_engine' => [
-    |           'class' => App\Drivers\MyEngineDriver::class,
-    |           'health_binaries' => [
-    |               ['code' => 'mybinary', 'label' => 'mybinary', 'binary' => '/usr/bin/mybinary'],
-    |           ],
-    |       ],
-    |   ],
-    |
-    */
-    'driver' => env('CP_DRIVER') ?: match (strtolower(trim((string) config('database.connections.'.config('database.default', 'mysql').'.driver', 'mysql')))) {
-        'pgsql', 'postgres', 'postgresql' => 'postgres',
-        'mysql', 'mariadb' => 'mysql',
-        'sqlite' => 'shell',
-        default => 'shell',
-    },
+    'driver' => env('DB_OPS_DRIVER', 'shell'),
 
-    /*
-    |--------------------------------------------------------------------------
-    | Destination Disks
-    |--------------------------------------------------------------------------
-    |
-    | Laravel filesystem disks where backups are streamed after creation.
-    | Backups are created on local storage first (for speed), then uploaded
-    | to ALL configured disks. Local files are cleaned up after upload.
-    |
-    | Use any disk from config/filesystems.php — local, s3, spaces, gcs.
-    | Set to an empty array to keep backups local only.
-    |
-    */
     'destination' => [
         'disks' => [],
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Cleanup / Retention
-    |--------------------------------------------------------------------------
-    |
-    | Number of days to retain successful backups. Failed backups are kept
-    | for 365 days regardless. The newest backup is always retained.
-    |
-    | Pruning runs weekly via the scheduler. Run checkpoint:prune manually
-    | to trigger immediate cleanup.
-    |
-    */
     'retention_days' => 30,
 
-    /*
-    |--------------------------------------------------------------------------
-    | Archive Encryption
-    |--------------------------------------------------------------------------
-    |
-    | Encrypt backup archives at rest before uploading to destination disks.
-    | The encryption key is derived from Laravel's APP_KEY — no additional
-    | secret required. Encrypted archives use AES-256-CBC.
-    |
-    | Restores automatically decrypt using the same key. Changing APP_KEY
-    | makes existing encrypted backups unrecoverable — rotate keys carefully.
-    |
-    */
     'encryption' => [
         'enabled' => false,
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Queue
-    |--------------------------------------------------------------------------
-    |
-    | Backups and restores run asynchronously via Laravel's queue system.
-    | The timeout should be long enough for your largest database dump.
-    |
-    | Set CP_QUEUE_NAME in .env to isolate Checkpoint jobs from your app queue.
-    | Set CP_QUEUE_TIMEOUT in .env if backups exceed 1 hour (3600s default).
-    |
-    */
     'queue' => [
-        'name' => env('CP_QUEUE_NAME', 'db-ops'),
-        'timeout' => (int) env('CP_QUEUE_TIMEOUT', 3600),
+        'name' => env('DB_OPS_QUEUE_NAME', 'db-ops'),
+        'timeout' => (int) env('DB_OPS_QUEUE_TIMEOUT', 3600),
+        'lock_store' => null,
+        'unique_for' => 3660,
+        'max_attempts' => 1,
+        'orphan_threshold' => 10,
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Restore Safety
-    |--------------------------------------------------------------------------
-    |
-    | Restore operations can destroy data. These gates prevent accidents:
-    |
-    | allowed_environments — Only these environments may run restores.
-    |   Default: local, testing, staging. Set to 'staging' in production.
-    |   Use CP_RESTORE_ALLOWED_ENVIRONMENTS in .env (comma-separated).
-    |
-    | allowed_databases — Only these database names may receive restores.
-    |   Default: all databases allowed. Set to 'checkpoint_shadow' to
-    |   restrict restores to a dedicated shadow database.
-    |   Use CP_RESTORE_ALLOWED_DATABASES in .env (comma-separated).
-    |
-    | Restores in local/testing skip confirmation and verified backup
-    | requirements. In all other environments, confirmation is required
-    | and the backup must have passed a verification check.
-    |
-    */
     'restore' => [
-        'allowed_environments' => array_values(array_filter(array_map(
-            trim(...),
-            explode(',', (string) env('CP_RESTORE_ALLOWED_ENVIRONMENTS', 'local,testing,staging')),
-        ), static fn (string $v): bool => $v !== '')),
-        'allowed_databases' => array_values(array_filter(array_map(
-            trim(...),
-            explode(',', (string) env('CP_RESTORE_ALLOWED_DATABASES', '')),
-        ), static fn (string $v): bool => $v !== '')),
+        'allowed_environments' => ['local', 'testing', 'staging'],
+        'allowed_databases' => [],
+        'allow_in_ci' => false,
+        'require_verified_backup' => false,
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Cleanup / Retention
-    |--------------------------------------------------------------------------
-    |
-    | Grandfather-Father-Son (GFS) retention strategy. No matter how you
-    | configure it, the newest backup is always kept.
-    |
-    | keep_all_backups_for_days — Keep every backup for this many days.
-    | keep_daily_backups_for_days — After that, keep one backup per day.
-    | keep_weekly_backups_for_weeks — Then keep one backup per week.
-    | keep_monthly_backups_for_months — Then keep one backup per month.
-    | keep_yearly_backups_for_years — Then keep one backup per year.
-    |
-    | delete_oldest_when_using_more_megabytes_than — After cleanup, remove
-    |   the oldest backup until total storage is under this limit.
-    |   Set to null for unlimited storage.
-    |
-    */
-    'cleanup' => [
-        'keep_all_backups_for_days' => 7,
-        'keep_daily_backups_for_days' => 16,
-        'keep_weekly_backups_for_weeks' => 8,
-        'keep_monthly_backups_for_months' => 4,
-        'keep_yearly_backups_for_years' => 2,
-        'delete_oldest_when_using_more_megabytes_than' => 5000,
+    'gates' => [
+        'override_profile' => null,
+        'default_profile' => 'production',
+        'environment_profile_map' => [],
+        'code_map' => [],
+        'profiles' => [
+            'local' => ['blocker' => 0, 'warning' => 0, 'advisory' => 0],
+            'staging' => ['blocker' => 0, 'warning' => 0, 'advisory' => 0],
+            'production' => ['blocker' => 0, 'warning' => 0, 'advisory' => 0],
+        ],
     ],
+
+    'observability' => [
+        'backup_drill_pass_rate_window_days' => 30,
+        'backup_drill_min_pass_rate' => 100.0,
+        'max_backup_drill_age_days' => 30,
+        'max_last_known_good_age_hours' => 24,
+        'backup_duration_min_samples' => 3,
+        'backup_duration_anomaly_factor' => 2.0,
+        'alert_cooldown_seconds' => 300,
+    ],
+
+    'reporting' => [
+        'max_recent_runs' => 50,
+    ],
+
+    'output' => [
+        'max_persisted_bytes' => 1048576,
+        'storage' => 'database',
+        'filesystem' => [
+            'disk' => 'local',
+            'path_prefix' => 'checkpoint/command-output',
+            'inline_bytes' => 2048,
+        ],
+    ],
+
+    'notifications' => [
+        'channels' => [],
+        'on_success' => false,
+        'on_failure' => true,
+    ],
+
+    'schedule' => [
+        'backup' => '0 2 * * *',
+        'prune' => '0 3 * * 0',
+        'sweep' => '*/5 * * * *',
+        'prune_keep_backup_drill_days' => 365,
+    ],
+
+    'table_prefix' => 'db_ops_',
+
+    'log_channel' => 'stack',
+
+    'operations_enabled' => true,
+
+    'drivers' => [
+
+        'shell' => [
+            'commands' => [
+                'logical_backup' => '',
+                'logical_restore_latest' => '',
+                'logical_restore_file' => '',
+                'pitr_restore' => '',
+            ],
+            'health_binaries' => [],
+        ],
+
+        'mysql' => [
+            'dump_binary' => env('DB_OPS_MYSQL_DUMP_BINARY', 'mysqldump'),
+            'mysql_binary' => env('DB_OPS_MYSQL_BINARY', 'mysql'),
+            'mysqlbinlog_binary' => env('DB_OPS_MYSQL_BINLOG_BINARY', 'mysqlbinlog'),
+            'extra_args' => [
+                'backup' => [],
+                'restore' => [],
+                'drill' => [],
+            ],
+            'command_timeout_seconds' => 7200,
+            'drill_command' => '',
+            'health_binaries' => [
+                ['code' => 'mysqldump', 'label' => 'mysqldump', 'binary' => 'mysqldump'],
+                ['code' => 'mysql', 'label' => 'mysql', 'binary' => 'mysql'],
+            ],
+            'pitr' => [
+                'binlog_files' => [],
+            ],
+        ],
+
+        'postgres' => [
+
+            'dump_binary' => env('DB_OPS_PG_DUMP_BINARY', 'pg_dump'),
+
+            'restore_binary' => env('DB_OPS_PG_RESTORE_BINARY', 'pg_restore'),
+
+            'format' => env('DB_OPS_PG_FORMAT', 'directory'),
+
+            'jobs' => (int) env('DB_OPS_PG_JOBS', 4),
+
+            'compress_level' => (int) env('DB_OPS_PG_COMPRESS_LEVEL', 6),
+
+            'output_dir' => env('DB_OPS_PG_OUTPUT_DIR', ''),
+
+            'output_prefix' => env('DB_OPS_PG_OUTPUT_PREFIX', 'logical-export'),
+
+            'file_extension' => env('DB_OPS_PG_FILE_EXTENSION', 'dump'),
+
+            'clean' => (bool) env('DB_OPS_PG_CLEAN', true),
+
+            'create' => (bool) env('DB_OPS_PG_CREATE', false),
+
+            'drill_command' => env('DB_OPS_PG_DRILL_COMMAND', ''),
+
+            'command_timeout_seconds' => (int) env('DB_OPS_PG_COMMAND_TIMEOUT', 7200),
+
+            'extra_args' => [
+                'backup' => [],
+                'restore' => [],
+                'drill' => [],
+                'replication' => [],
+            ],
+
+            'binary' => env('DB_OPS_PG_BINARY', 'pg_basebackup'),
+
+            'physical_output_dir' => env('DB_OPS_PG_PHYSICAL_OUTPUT_DIR', ''),
+
+            'physical_extra_args' => [],
+
+            'physical_wal_method' => env('DB_OPS_PG_PHYSICAL_WAL_METHOD', 'stream'),
+
+            'physical_compression' => env('DB_OPS_PG_PHYSICAL_COMPRESSION', 'gzip'),
+
+            'physical_checkpoint' => env('DB_OPS_PG_PHYSICAL_CHECKPOINT', 'fast'),
+
+            'physical_max_rate' => env('DB_OPS_PG_PHYSICAL_MAX_RATE'),
+
+            'host' => env('DB_OPS_PG_HOST'),
+
+            'port' => env('DB_OPS_PG_PORT'),
+
+            'username' => env('DB_OPS_PG_USERNAME'),
+
+            'health_binaries' => ['pg_dump', 'pg_restore', 'pg_basebackup'],
+        ],
+
+    ],
+
+    'temp_dir' => storage_path('app/checkpoint/tmp'),
 
 ];

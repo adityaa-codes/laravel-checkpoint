@@ -5,16 +5,19 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Str;
 
 abstract class CheckpointCommand extends Command
 {
+    use UsesLaravelPrompts;
+
     protected function enhancedInteractiveMode(): bool
     {
         if ($this->input === null) {
             return false;
         }
 
-        return $this->input->isInteractive() && ! app()->runningUnitTests();
+        return $this->input->isInteractive() && ! $this->laravel->runningUnitTests();
     }
 
     /**
@@ -41,16 +44,9 @@ abstract class CheckpointCommand extends Command
         $this->error($message);
     }
 
-    protected function stringOption(string $key): ?string
-    {
-        $value = $this->option($key);
-
-        return is_string($value) ? $value : null;
-    }
-
     protected function policyProfileOverride(): ?string
     {
-        $override = trim($this->stringOption('policy-profile') ?? '');
+        $override = Str::trim($this->stringOption('policy-profile') ?? '');
 
         return $override !== '' ? $override : null;
     }
@@ -87,11 +83,17 @@ abstract class CheckpointCommand extends Command
             'pass' => 2,
         ];
 
-        return array_values(collect($checks)
-            ->sort(fn (array $left, array $right): int => ($rank[$left['status'] ?? 'pass'] ?? 3) <=> ($rank[$right['status'] ?? 'pass'] ?? 3)
-                ?: (($left['check'] ?? '') <=> ($right['check'] ?? '')))
-            ->values()
-            ->all());
+        usort($checks, static function (array $left, array $right) use ($rank): int {
+            $cmp = ($rank[$left['status'] ?? 'pass'] ?? 3) <=> ($rank[$right['status'] ?? 'pass'] ?? 3);
+
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+
+            return ($left['check'] ?? '') <=> ($right['check'] ?? '');
+        });
+
+        return $checks;
     }
 
     /**
@@ -142,7 +144,7 @@ abstract class CheckpointCommand extends Command
             return 'agent';
         }
 
-        return in_array($format, ['table', 'json', 'compact-json'], true) ? $format : 'table';
+        return collect(['table', 'json', 'compact-json'])->containsStrict($format) ? $format : 'table';
     }
 
     protected function priorityLabel(string $status): string

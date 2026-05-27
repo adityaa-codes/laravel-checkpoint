@@ -6,6 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\BuildReplicationCommandPayloadAction;
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
+use AdityaaCodes\LaravelCheckpoint\Enums\CheckpointOperation;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use Illuminate\Support\Str;
 use Throwable;
@@ -72,7 +73,7 @@ final class ReplicateCommand extends CheckpointCommand
             }
 
             $run = $enqueueCommandRun->execute(
-                'replication_sync',
+                CheckpointOperation::Replicate,
                 json_encode($payload, JSON_THROW_ON_ERROR),
             );
 

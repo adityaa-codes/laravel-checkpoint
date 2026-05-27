@@ -5,10 +5,9 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Drivers;
 
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
-use AdityaaCodes\LaravelCheckpoint\Events\BackupCompleted;
-use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
-use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\ValueObjects\DriverContext;
+use AdityaaCodes\LaravelCheckpoint\ValueObjects\DriverResult;
 use Throwable;
 
 /** @internal */
@@ -56,46 +55,36 @@ final class FakeDriver implements BackupDriver
         return $this;
     }
 
-    public function execute(CommandRun $run): void
+    public function execute(DriverContext $context, CommandRun $run): DriverResult
     {
-        $outcome = $this->outcomes[$run->operation] ?? [
+        $this->calls[] = $run;
+
+        $outcome = $this->outcomes[$context->operation] ?? [
             'type' => 'success',
             'exit_code' => 0,
             'output' => 'ok',
         ];
-
-        if (! $run->claimPendingExecution()) {
-            return;
-        }
-
-        $this->calls[] = $run;
-
-        event(new BackupStarted($run));
 
         if ($outcome['type'] === 'throw') {
             if (! isset($outcome['throwable'])) {
                 throw new \LogicException('Throw outcomes must provide a throwable instance.');
             }
 
-            $throwable = $outcome['throwable'];
-            $run->markAsFailed(output: $throwable->getMessage());
-            event(new BackupFailed($run, -1, $throwable->getMessage(), $throwable));
-
-            throw $throwable;
+            throw $outcome['throwable'];
         }
 
         $exitCode = $outcome['exit_code'] ?? 0;
         $output = $outcome['output'] ?? '';
 
         if ($outcome['type'] === 'fail') {
-            $run->markAsFailed($exitCode, $output);
-            event(new BackupFailed($run, $exitCode, $output));
+            $context->result = DriverResult::failure($output, $exitCode);
 
-            return;
+            return $context->result;
         }
 
-        $run->markAsSucceeded($exitCode, $output);
-        event(new BackupCompleted($run, $exitCode, $output));
+        $context->result = DriverResult::success($output, $exitCode);
+
+        return $context->result;
     }
 
     /**
@@ -104,5 +93,10 @@ final class FakeDriver implements BackupDriver
     public function calls(): array
     {
         return $this->calls;
+    }
+
+    public function recordCall(CommandRun $run): void
+    {
+        $this->calls[] = $run;
     }
 }

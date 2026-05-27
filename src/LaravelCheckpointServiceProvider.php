@@ -14,28 +14,40 @@ use AdityaaCodes\LaravelCheckpoint\Actions\ComposeRestorePostureHealthChecksActi
 use AdityaaCodes\LaravelCheckpoint\Actions\ComposeVerificationHealthChecksAction;
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use AdityaaCodes\LaravelCheckpoint\Console\BackupCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\CatalogExportCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\ConfigShowCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoctorHealthCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoctorPitrCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\DoctorReportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DrillCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\HealthCheckCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\MakeDriverCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\MigrateFromSpatieCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\PublishFullConfigCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ReplicateCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\StatusCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\SweepCommand;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Contracts\ReplicationEndpointParser;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresBackupDrillHandler;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresDriverConfig;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresLogicalBackupHandler;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresLogicalRestoreHandler;
+use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresMetadataEnricher;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresPhysicalBackupHandler;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresPhysicalRestoreHandler;
+use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresReplicationDebugRenderer;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresReplicationOrchestrator;
+use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresReplicationResultBuilder;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresReplicationSyncHandler;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresRestoreTargetResolver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresSnapshotService;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
+use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
+use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
+use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
 use AdityaaCodes\LaravelCheckpoint\Services\BackupArtifactUploader;
 use AdityaaCodes\LaravelCheckpoint\Services\CheckpointDriverManager;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
@@ -48,6 +60,10 @@ use AdityaaCodes\LaravelCheckpoint\Services\ReplicationFailureSuggestionMapper;
 use AdityaaCodes\LaravelCheckpoint\Services\RestoreSafetyGuard;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\GateProfileConfig;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\HealthCheckConfig;
+use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Str;
+use Psr\Log\LoggerInterface;
 use Spatie\LaravelPackageTools\Package;
 use Spatie\LaravelPackageTools\PackageServiceProvider;
 
@@ -61,20 +77,58 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             ->hasViews()
             ->hasMigration('create_checkpoint_tables')
             ->hasCommands([
-                DoctorCommand::class,
-                HealthCheckCommand::class,
+                BackupCommand::class,
+                CatalogExportCommand::class,
+                ConfigShowCommand::class,
+                DoctorHealthCommand::class,
+                DoctorPitrCommand::class,
+                DoctorReportCommand::class,
+                DrillCommand::class,
                 InstallCommand::class,
                 MakeDriverCommand::class,
-                PruneCommand::class,
-                StatusCommand::class,
-                DrillCommand::class,
-                BackupCommand::class,
                 MigrateFromSpatieCommand::class,
+                PruneCommand::class,
+                PublishFullConfigCommand::class,
                 ReplicateCommand::class,
+                StatusCommand::class,
+                SweepCommand::class,
             ]);
     }
 
     public function packageRegistered(): void
+    {
+        $this->configureTablePrefix();
+        $this->bindHealthCheckConfig();
+        $this->app->singleton(LaravelCheckpoint::class, fn ($app): LaravelCheckpoint => new LaravelCheckpoint(
+            $app->make(EnqueueCommandRunAction::class),
+        ));
+
+        $this->app->singleton(CheckpointDriverManager::class);
+
+        $this->app->bind(BackupDriver::class, fn ($app): BackupDriver => $app[CheckpointDriverManager::class]->driver());
+
+        $this->bindGateProfileConfig();
+        $this->bindBackupDriver();
+
+        $this->app->bind(
+            ReplicationEndpointParser::class,
+            ReplicationEndpointInputParser::class,
+        );
+
+        $this->bindHealthCheckComposer();
+    }
+
+    private function configureTablePrefix(): void
+    {
+        $prefix = (string) config('checkpoint.table_prefix', 'db_ops_');
+
+        CommandRun::$tablePrefix = $prefix;
+        BackupDrillRun::$tablePrefix = $prefix;
+        RestoreDecisionEvent::$tablePrefix = $prefix;
+        VerificationRun::$tablePrefix = $prefix;
+    }
+
+    private function bindHealthCheckConfig(): void
     {
         $this->app->singleton(HealthCheckConfig::class, function ($app): HealthCheckConfig {
             $config = $app['config'];
@@ -85,7 +139,7 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
                 queueName: (string) $config->get('checkpoint.queue.name', 'db-ops'),
                 logChannel: (string) $config->get('checkpoint.log_channel', 'stack'),
                 environment: (string) $config->get('app.env', 'production'),
-                currentDatabaseName: (string) $config->get('database.connections.'.(string) $config->get('database.default', '').'.database', ''),
+                currentDatabaseName: (string) $config->get('database.connections.'.$config->get('database.default', '').'.database', ''),
                 lockStore: $config->get('checkpoint.queue.lock_store'),
                 bin: [
                     'pgbasebackup' => (string) $config->get('checkpoint.drivers.postgres.binary', 'pg_basebackup'),
@@ -106,44 +160,25 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
                     'alertCooldownSeconds' => max(0, (int) $config->get('checkpoint.observability.alert_cooldown_seconds', 300)),
                 ],
                 restore: [
-                    'allowedEnvironments' => array_values(array_filter(array_map(
-                        static fn (mixed $item): string => is_string($item) ? trim($item) : '',
-                        (array) $config->get('checkpoint.restore.allowed_environments', []),
-                    ), static fn (string $item): bool => $item !== '')),
-                    'allowedDatabases' => array_values(array_filter(array_map(
-                        static fn (mixed $item): string => is_string($item) ? trim($item) : '',
-                        (array) $config->get('checkpoint.restore.allowed_databases', []),
-                    ), static fn (string $item): bool => $item !== '')),
+                    'allowedEnvironments' => $this->cleanList($config->get('checkpoint.restore.allowed_environments', [])),
+                    'allowedDatabases' => $this->cleanList($config->get('checkpoint.restore.allowed_databases', [])),
                     'allowInCi' => (bool) $config->get('checkpoint.restore.allow_in_ci', false),
                     'requireVerifiedBackup' => (bool) $config->get('checkpoint.restore.require_verified_backup', false),
                 ],
                 commandRunsTable: $prefix.'command_runs',
                 backupDrillRunsTable: $prefix.'backup_drill_runs',
                 verificationRunsTable: $prefix.'verification_runs',
-                driverBinaries: array_values((array) $config->get(
-                    'checkpoint.drivers.'.(string) $config->get('checkpoint.driver', 'shell').'.health_binaries',
+                driverBinaries: collect((array) $config->get(
+                    'checkpoint.drivers.'.$config->get('checkpoint.driver', 'shell').'.health_binaries',
                     [],
-                )),
+                ))->values()->all(),
             );
         });
-        $this->app->singleton(LaravelCheckpoint::class, fn ($app): LaravelCheckpoint => new LaravelCheckpoint(
-            $app->make(EnqueueCommandRunAction::class),
-        ));
+    }
 
-        $this->app->singleton(CheckpointDriverManager::class);
-
-        $this->app->bind(BackupDriver::class, fn ($app): BackupDriver => $app[CheckpointDriverManager::class]->driver());
-
-        $this->bindGateProfileConfig();
-        $this->bindBackupDriver();
-
-        $this->app->bind(
-            ReplicationEndpointParser::class,
-            ReplicationEndpointInputParser::class,
-        );
-
+    private function bindHealthCheckComposer(): void
+    {
         $this->app->bind(HealthCheckComposer::class, fn ($app): HealthCheckComposer => new HealthCheckComposer(
-            $app->make(HealthCheckConfig::class),
             $app->make(ComposeConfigHealthChecksAction::class),
             $app->make(ComposeBinaryHealthChecksAction::class),
             $app->make(ComposeDatabaseTableHealthChecksAction::class),
@@ -165,7 +200,7 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
                 overrideProfile: is_string($config->get('checkpoint.gates.override_profile')) ? $config->get('checkpoint.gates.override_profile') : null,
                 defaultProfile: (string) $config->get('checkpoint.gates.default_profile', 'production'),
                 environmentProfileMap: (array) $config->get('checkpoint.gates.environment_profile_map', []),
-                codeMap: array_map(static fn (mixed $v) => max(0, (int) $v), (array) $config->get('checkpoint.gates.code_map', [])),
+                codeMap: (array) $config->get('checkpoint.gates.code_map', []),
                 profiles: (array) $config->get('checkpoint.gates.profiles', []),
             );
         });
@@ -177,168 +212,107 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             $config = $app['config'];
             $database = (string) $config->get('database.connections.'.$config->get('database.default').'.'.'database', '');
 
-            return new PostgresDriverConfig(
-                dumpBinary: (string) $config->get('checkpoint.drivers.postgres.dump_binary', 'pg_dump'),
-                restoreBinary: (string) $config->get('checkpoint.drivers.postgres.restore_binary', 'pg_restore'),
-                format: (string) $config->get('checkpoint.drivers.postgres.format', 'directory'),
-                jobs: (int) $config->get('checkpoint.drivers.postgres.jobs', 4),
-                compressLevel: (int) $config->get('checkpoint.drivers.postgres.compress_level', 6),
-                outputDir: (string) $config->get('checkpoint.drivers.postgres.output_dir', storage_path('app/checkpoint/logical-exports')),
-                outputPrefix: (string) $config->get('checkpoint.drivers.postgres.output_prefix', 'logical-export'),
-                fileExtension: trim((string) $config->get('checkpoint.drivers.postgres.file_extension', 'dump'), '.'),
-                clean: (bool) $config->get('checkpoint.drivers.postgres.clean', true),
-                create: (bool) $config->get('checkpoint.drivers.postgres.create', false),
-                drillCommand: (string) $config->get('checkpoint.drivers.postgres.drill_command', ''),
-                extraArgsBackup: $this->filterExtraArgs($config->get('checkpoint.drivers.postgres.extra_args.backup', [])),
-                extraArgsRestore: $this->filterExtraArgs($config->get('checkpoint.drivers.postgres.extra_args.restore', [])),
-                extraArgsDrill: $this->filterExtraArgs($config->get('checkpoint.drivers.postgres.extra_args.drill', [])),
-                commandTimeoutSeconds: (float) (int) $config->get('checkpoint.drivers.postgres.command_timeout_seconds', 7200),
-                physicalBinary: (string) $config->get('checkpoint.drivers.postgres.binary', 'pg_basebackup'),
-                physicalOutputDir: (string) $config->get('checkpoint.drivers.postgres.physical_output_dir', storage_path('app/checkpoint/basebackups')),
-                logChannel: (string) $config->get('checkpoint.log_channel', 'stack'),
-                databaseName: $database,
+            return PostgresDriverConfig::fromArray(
+                $config->get('checkpoint.drivers.postgres', []),
+                new Filesystem,
+                $database,
             );
         });
 
-        $this->app->bind(PostgresRestoreTargetResolver::class, function ($app): PostgresRestoreTargetResolver {
-            return new PostgresRestoreTargetResolver(
-                $app->make(PostgresDriverConfig::class),
-                $app->make(PostgresSnapshotService::class),
-            );
-        });
+        $this->app->bind(PostgresRestoreTargetResolver::class, fn ($app): PostgresRestoreTargetResolver => new PostgresRestoreTargetResolver(
+            $app->make(PostgresDriverConfig::class),
+            $app->make(PostgresSnapshotService::class),
+            new Filesystem,
+        ));
 
-        $this->app->bind(PostgresReplicationOrchestrator::class, function ($app): PostgresReplicationOrchestrator {
-            return new PostgresReplicationOrchestrator(
-                $app->make(PostgresDriverConfig::class),
-                $app->make(ReplicationFailureSuggestionMapper::class),
-                $app->make(PostgresSnapshotService::class),
-            );
-        });
+        $this->app->bind(PostgresReplicationDebugRenderer::class, PostgresReplicationDebugRenderer::class);
 
-        $this->app->bind(PostgresLogicalBackupHandler::class, function ($app): PostgresLogicalBackupHandler {
-            return new PostgresLogicalBackupHandler(
-                $app->make(PostgresDriverConfig::class),
-                $app->make(PostgresRestoreTargetResolver::class),
-            );
-        });
+        $this->app->bind(PostgresReplicationResultBuilder::class, fn ($app): PostgresReplicationResultBuilder => new PostgresReplicationResultBuilder(
+            $app->make(PostgresReplicationDebugRenderer::class),
+            $app->make(ReplicationFailureSuggestionMapper::class),
+        ));
 
-        $this->app->bind(PostgresLogicalRestoreHandler::class, function ($app): PostgresLogicalRestoreHandler {
-            return new PostgresLogicalRestoreHandler(
-                $app->make(PostgresDriverConfig::class),
-                $app->make(PostgresRestoreTargetResolver::class),
-            );
-        });
+        $this->app->bind(PostgresReplicationOrchestrator::class, fn ($app): PostgresReplicationOrchestrator => new PostgresReplicationOrchestrator(
+            $app->make(PostgresDriverConfig::class),
+            $app->make(PostgresSnapshotService::class),
+            new Filesystem,
+            $app->make(PostgresReplicationResultBuilder::class),
+        ));
 
-        $this->app->bind(PostgresReplicationSyncHandler::class, function ($app): PostgresReplicationSyncHandler {
-            return new PostgresReplicationSyncHandler(
-                $app->make(PostgresDriverConfig::class),
-                $app->make(PostgresReplicationOrchestrator::class),
-            );
-        });
+        $this->app->bind(PostgresLogicalBackupHandler::class, fn ($app): PostgresLogicalBackupHandler => new PostgresLogicalBackupHandler(
+            $app->make(PostgresDriverConfig::class),
+            $app->make(PostgresRestoreTargetResolver::class),
+        ));
 
-        $this->app->bind(PostgresBackupDrillHandler::class, function ($app): PostgresBackupDrillHandler {
-            return new PostgresBackupDrillHandler(
-                $app->make(PostgresDriverConfig::class),
-                $app->make(PostgresRestoreTargetResolver::class),
-            );
-        });
+        $this->app->bind(PostgresLogicalRestoreHandler::class, fn ($app): PostgresLogicalRestoreHandler => new PostgresLogicalRestoreHandler(
+            $app->make(PostgresDriverConfig::class),
+            $app->make(PostgresRestoreTargetResolver::class),
+        ));
 
-        $this->app->bind(PostgresPhysicalBackupHandler::class, function ($app): PostgresPhysicalBackupHandler {
-            return new PostgresPhysicalBackupHandler(
-                $app->make(PostgresDriverConfig::class),
-            );
-        });
+        $this->app->bind(PostgresReplicationSyncHandler::class, fn ($app): PostgresReplicationSyncHandler => new PostgresReplicationSyncHandler(
+            $app->make(PostgresDriverConfig::class),
+            $app->make(PostgresReplicationOrchestrator::class),
+        ));
 
-        $this->app->bind(PostgresPhysicalRestoreHandler::class, function ($app): PostgresPhysicalRestoreHandler {
-            return new PostgresPhysicalRestoreHandler;
-        });
+        $this->app->bind(PostgresBackupDrillHandler::class, fn ($app): PostgresBackupDrillHandler => new PostgresBackupDrillHandler(
+            $app->make(PostgresDriverConfig::class),
+            $app->make(PostgresRestoreTargetResolver::class),
+        ));
 
-        $this->app->bind(PostgresDriver::class, function ($app): PostgresDriver {
-            return new PostgresDriver(
-                $app->make(PostgresDriverConfig::class),
-                $app->make(PostgresSnapshotService::class),
-                [
-                    $app->make(PostgresLogicalBackupHandler::class),
-                    $app->make(PostgresLogicalRestoreHandler::class),
-                    $app->make(PostgresReplicationSyncHandler::class),
-                    $app->make(PostgresBackupDrillHandler::class),
-                    $app->make(PostgresPhysicalBackupHandler::class),
-                    $app->make(PostgresPhysicalRestoreHandler::class),
-                ],
-                $app->make(RestoreSafetyGuard::class),
-                $app->make(PostRestoreVerificationBuilder::class),
-                $app->make(CommandOutputCapture::class),
-                $app->make(CommandOutputStore::class),
-                $app->make(CommandLineRedactor::class),
-                $app->make(BackupArtifactUploader::class),
-            );
-        });
+        $this->app->bind(PostgresPhysicalBackupHandler::class, fn ($app): PostgresPhysicalBackupHandler => new PostgresPhysicalBackupHandler(
+            $app->make(PostgresDriverConfig::class),
+        ));
+
+        $this->app->bind(PostgresPhysicalRestoreHandler::class, fn ($app): PostgresPhysicalRestoreHandler => new PostgresPhysicalRestoreHandler(
+            new Filesystem,
+        ));
+
+        $this->app->bind(PostgresMetadataEnricher::class, fn ($app): PostgresMetadataEnricher => new PostgresMetadataEnricher(
+            $app->make(PostgresSnapshotService::class),
+            $app->make(PostgresDriverConfig::class),
+            $app->make(PostRestoreVerificationBuilder::class),
+        ));
+
+        $this->app->bind(PostgresDriver::class, fn ($app): PostgresDriver => new PostgresDriver(
+            $app->make(PostgresDriverConfig::class),
+            $app->make(PostgresSnapshotService::class),
+            [
+                $app->make(PostgresLogicalBackupHandler::class),
+                $app->make(PostgresLogicalRestoreHandler::class),
+                $app->make(PostgresReplicationSyncHandler::class),
+                $app->make(PostgresBackupDrillHandler::class),
+                $app->make(PostgresPhysicalBackupHandler::class),
+                $app->make(PostgresPhysicalRestoreHandler::class),
+            ],
+            $app->make(RestoreSafetyGuard::class),
+            $app->make(PostgresMetadataEnricher::class),
+            $app->make(CommandOutputCapture::class),
+            $app->make(CommandOutputStore::class),
+            $app->make(CommandLineRedactor::class),
+            $app->make(BackupArtifactUploader::class),
+            $app->make(Dispatcher::class),
+            new Filesystem,
+            $app->make(LoggerInterface::class),
+        ));
     }
 
     /**
      * @return list<string>
      */
-    private function filterExtraArgs(mixed $value): array
+    private function cleanList(mixed $value): array
     {
         if (! is_array($value)) {
             return [];
         }
 
-        return array_values(array_filter(
-            $value,
-            static fn (mixed $arg): bool => is_string($arg) && $arg !== '',
-        ));
-    }
+        $result = [];
 
-    private function registerSchedules(): void
-    {
-        if (! (bool) config('checkpoint.operations_enabled', true)) {
-            return;
+        foreach ($value as $item) {
+            if (is_string($item) && Str::trim($item) !== '') {
+                $result[] = Str::trim($item);
+            }
         }
 
-        $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
-            if ((bool) config('checkpoint.schedule.logical_backup_enabled', true)) {
-                $this->configureScheduledCommand($schedule
-                    ->command('checkpoint:backup')
-                    ->dailyAt((string) config('checkpoint.schedule.logical_backup_daily_at', '16:00'))
-                    ->timezone((string) config('checkpoint.schedule.logical_backup_timezone', 'UTC')));
-            }
-
-            if ((bool) config('checkpoint.schedule.backup_drill_enabled', false)) {
-                $this->configureScheduledCommand($schedule
-                    ->command('checkpoint:drill')
-                    ->dailyAt((string) config('checkpoint.schedule.backup_drill_daily_at', '03:00'))
-                    ->timezone((string) config('checkpoint.schedule.backup_drill_timezone', 'UTC')));
-            }
-
-            if ((bool) config('checkpoint.schedule.health_check_enabled', true)) {
-                $this->configureScheduledCommand(
-                    $schedule->command('checkpoint:health-check')->everyFiveMinutes(),
-                );
-            }
-
-            if ((bool) config('checkpoint.schedule.recover_orphans_enabled', true)) {
-                $this->configureScheduledCommand(
-                    $schedule->command('checkpoint:recover-orphans')->everyTenMinutes(),
-                );
-            }
-
-            if ((bool) config('checkpoint.schedule.prune_enabled', true)) {
-                $this->configureScheduledCommand(
-                    $schedule->command('checkpoint:prune')->weekly(),
-                );
-            }
-        });
-    }
-
-    private function configureScheduledCommand(ScheduledEvent $event): void
-    {
-        if ((bool) config('checkpoint.schedule.without_overlapping', true)) {
-            $event->withoutOverlapping((int) config('checkpoint.schedule.overlap_expires_at', 180));
-        }
-
-        if ((bool) config('checkpoint.schedule.on_one_server', true)) {
-            $event->onOneServer();
-        }
+        return $result;
     }
 }

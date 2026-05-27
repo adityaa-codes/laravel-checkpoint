@@ -21,8 +21,17 @@ use Illuminate\Support\Carbon;
  */
 class RestoreDecisionEvent extends Model
 {
+    public static string $tablePrefix = 'db_ops_';
+
     /** @var array<int, string> */
-    protected $guarded = [];
+    protected $fillable = [
+        'command_run_id',
+        'operation',
+        'decision',
+        'reason',
+        'payload',
+        'created_at',
+    ];
 
     public $timestamps = false;
 
@@ -40,9 +49,6 @@ class RestoreDecisionEvent extends Model
     #[\Override]
     public function getTable(): string
     {
-        return sprintf(
-            '%srestore_decision_events',
-            config('checkpoint.table_prefix', 'db_ops_'),
-        );
+        return sprintf('%srestore_decision_events', static::$tablePrefix);
     }
 }

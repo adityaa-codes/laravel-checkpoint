@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /**
  * @api
@@ -39,8 +40,27 @@ class BackupDrillRun extends Model
     /** @use HasFactory<BackupDrillRunFactory> */
     use HasFactory;
 
+    public static string $tablePrefix = 'db_ops_';
+
     /** @var array<int, string> */
-    protected $guarded = [];
+    protected $fillable = [
+        'run_uuid',
+        'marker_uuid',
+        'marker_email',
+        'marker_count',
+        'marker_result',
+        'rto_target_seconds',
+        'rto_actual_seconds',
+        'rto_result',
+        'rpo_target_seconds',
+        'rpo_actual_seconds',
+        'rpo_result',
+        'overall_result',
+        'executed_by',
+        'executed_at',
+        'created_at',
+        'updated_at',
+    ];
 
     protected static function newFactory(): BackupDrillRunFactory
     {
@@ -64,15 +84,12 @@ class BackupDrillRun extends Model
     #[\Override]
     public function getTable(): string
     {
-        return sprintf(
-            '%sbackup_drill_runs',
-            config('checkpoint.table_prefix', 'db_ops_'),
-        );
+        return sprintf('%sbackup_drill_runs', static::$tablePrefix);
     }
 
     public function isPassing(): bool
     {
-        return strtolower((string) $this->overall_result) === 'pass';
+        return Str::lower($this->overall_result) === 'pass';
     }
 
     /**

@@ -31,8 +31,19 @@ class VerificationRun extends Model
     /** @use HasFactory<VerificationRunFactory> */
     use HasFactory;
 
+    public static string $tablePrefix = 'db_ops_';
+
     /** @var array<int, string> */
-    protected $guarded = [];
+    protected $fillable = [
+        'command_run_id',
+        'verification_type',
+        'status',
+        'verified_at',
+        'metadata',
+        'error_detail',
+        'created_at',
+        'updated_at',
+    ];
 
     protected static function newFactory(): VerificationRunFactory
     {
@@ -53,10 +64,7 @@ class VerificationRun extends Model
     #[\Override]
     public function getTable(): string
     {
-        return sprintf(
-            '%sverification_runs',
-            config('checkpoint.table_prefix', 'db_ops_'),
-        );
+        return sprintf('%sverification_runs', static::$tablePrefix);
     }
 
     /** @return BelongsTo<CommandRun, $this> */

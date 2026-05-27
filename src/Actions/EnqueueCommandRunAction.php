@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Actions;
 
+use AdityaaCodes\LaravelCheckpoint\Enums\CheckpointOperation;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupQueued;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
@@ -18,6 +19,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher as EventDispatcher;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class EnqueueCommandRunAction
 {
@@ -33,15 +35,15 @@ class EnqueueCommandRunAction
         private readonly ValidateOperationBinaries $validateOperationBinaries,
     ) {}
 
-    public function execute(string $operation, ?string $argument = null, ?Model $requestedBy = null): CommandRun
+    public function execute(CheckpointOperation $operation, ?string $argument = null, ?Model $requestedBy = null): CommandRun
     {
         if (! (bool) $this->config->get('checkpoint.operations_enabled', true)) {
             throw new ConfigurationException('Checkpoint operations are disabled (set operations_enabled in config/checkpoint.php).');
         }
 
-        $this->validateOperationBinaries->validate($operation);
+        $this->validateOperationBinaries->validate($operation->value);
 
-        $prepared = $this->preparedOperation($operation, $argument);
+        $prepared = $this->preparedOperation($operation->value, $argument);
 
         $run = $this->database->transaction(fn (): CommandRun => CommandRun::query()->create([
             'operation' => $prepared['operation'],
@@ -87,10 +89,10 @@ class EnqueueCommandRunAction
         );
         $dryRunRequested = (bool) ($payload['dry_run'] ?? true);
         $applyRequested = (bool) ($payload['apply'] ?? ! $dryRunRequested);
-        $forceOverwriteRequested = (bool) ($payload['force_overwrite'] ?? $payload['force'] ?? false);
+        $forceOverwriteRequested = $payload['force_overwrite'] ?? $payload['force'] ?? false;
         $overwriteDestination = (bool) ($payload['overwrite_destination'] ?? $forceOverwriteRequested);
         $criticalTables = is_array($payload['critical_tables'] ?? null)
-            ? array_values(array_unique(array_filter($payload['critical_tables'], static fn (mixed $value): bool => trim((string) $value) !== '')))
+            ? collect($payload['critical_tables'])->filter(static fn (mixed $value): bool => Str::trim($value) !== '')->unique()->values()->all()
             : [];
         $governancePreflight = $this->replicationGovernanceEvaluator->evaluate($request, $applyRequested);
         $this->replicationGovernanceEvaluator->assertAllowed($governancePreflight, $applyRequested);
