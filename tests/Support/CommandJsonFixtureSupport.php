@@ -9,6 +9,8 @@ use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 
 final class CommandJsonFixtureSupport
 {
@@ -27,7 +29,7 @@ final class CommandJsonFixtureSupport
         Date::setTestNow();
 
         foreach (self::$temporaryPitrFiles as $file) {
-            @unlink($file);
+            @File::delete($file);
         }
 
         self::$temporaryPitrFiles = [];
@@ -246,9 +248,9 @@ final class CommandJsonFixtureSupport
         $binlogA = sprintf('/tmp/checkpoint-pitr-fixture%s-binlog-a.log', $suffix);
         $binlogB = sprintf('/tmp/checkpoint-pitr-fixture%s-binlog-b.log', $suffix);
 
-        file_put_contents($baseline, 'baseline');
-        file_put_contents($binlogA, 'binlog-a');
-        file_put_contents($binlogB, 'binlog-b');
+        File::put($baseline, 'baseline');
+        File::put($binlogA, 'binlog-a');
+        File::put($binlogB, 'binlog-b');
         self::$temporaryPitrFiles = [$baseline, $binlogA, $binlogB];
 
         config()->set('checkpoint.drivers.mysql.pitr.binlog_files', [$binlogA, $binlogB]);
@@ -270,8 +272,10 @@ final class CommandJsonFixtureSupport
     {
         foreach (['TEST_TOKEN', 'PARATEST', 'PARATEST_PROCESS', 'LARAVEL_PARALLEL_TESTING_TOKEN'] as $key) {
             $token = getenv($key);
-
-            if (! is_string($token) || trim($token) === '') {
+            if (! is_string($token)) {
+                continue;
+            }
+            if (Str::trim($token) === '') {
                 continue;
             }
 

@@ -7,6 +7,8 @@ namespace AdityaaCodes\LaravelCheckpoint\Actions;
 use AdityaaCodes\LaravelCheckpoint\Actions\Concerns\MakesHealthCheckRows;
 use AdityaaCodes\LaravelCheckpoint\Support\BinaryFinder;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\HealthCheckConfig;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 
 final readonly class ComposeBinaryHealthChecksAction
 {
@@ -37,8 +39,8 @@ final readonly class ComposeBinaryHealthChecksAction
                 code: 'binary.pg_basebackup',
                 label: 'Binary: pg_basebackup',
                 binary: $this->config->bin['pgbasebackup'],
-                configPath: 'checkpoint.drivers.postgres.binary',
-                envKey: 'CP_PGBASEBACKUP_BINARY',
+                configPath: 'database.connections.pgsql.dump.dump_binary_path',
+                envKey: 'N/A (from database config)',
                 driver: $this->config->driver,
                 required: false,
                 includeRemediation: false,
@@ -68,24 +70,24 @@ final readonly class ComposeBinaryHealthChecksAction
                     code: 'driver.binary.postgres.pgbasebackup',
                     label: 'Driver binary: pg_basebackup',
                     binary: $this->config->bin['pgbasebackup'],
-                    configPath: 'checkpoint.drivers.postgres.binary',
-                    envKey: 'CP_PGBASEBACKUP_BINARY',
+                    configPath: 'database.connections.pgsql.dump.dump_binary_path',
+                    envKey: 'N/A (from database config)',
                     driver: $this->config->driver,
                 ),
                 $this->configuredBinaryRow(
                     code: 'driver.binary.postgres.pgdump',
                     label: 'Driver binary: pg_dump',
                     binary: $this->config->bin['pgdump_dump'],
-                    configPath: 'checkpoint.drivers.postgres.dump_binary',
-                    envKey: 'CP_PGDUMP_BINARY',
+                    configPath: 'database.connections.pgsql.dump.dump_binary_path',
+                    envKey: 'N/A (from database config)',
                     driver: $this->config->driver,
                 ),
                 $this->configuredBinaryRow(
                     code: 'driver.binary.postgres.pgrestore',
                     label: 'Driver binary: pg_restore',
                     binary: $this->config->bin['pgdump_restore'],
-                    configPath: 'checkpoint.drivers.postgres.restore_binary',
-                    envKey: 'CP_PGRESTORE_BINARY',
+                    configPath: 'database.connections.pgsql.dump.dump_binary_path',
+                    envKey: 'N/A (from database config)',
                     driver: $this->config->driver,
                 ),
             ],
@@ -94,24 +96,24 @@ final readonly class ComposeBinaryHealthChecksAction
                     code: 'driver.binary.mysql.dump',
                     label: 'Driver binary: mysqldump',
                     binary: $this->config->bin['mysqldump'],
-                    configPath: 'checkpoint.drivers.mysql.dump_binary',
-                    envKey: 'CP_MYSQL_DUMP_BINARY',
+                    configPath: 'database.connections.mysql.dump.dump_binary_path',
+                    envKey: 'N/A (from database config)',
                     driver: $this->config->driver,
                 ),
                 $this->configuredBinaryRow(
                     code: 'driver.binary.mysql.mysql',
                     label: 'Driver binary: mysql',
                     binary: $this->config->bin['mysql'],
-                    configPath: 'checkpoint.drivers.mysql.mysql_binary',
-                    envKey: 'CP_MYSQL_BINARY',
+                    configPath: 'database.connections.mysql.dump.dump_binary_path',
+                    envKey: 'N/A (from database config)',
                     driver: $this->config->driver,
                 ),
                 $this->configuredBinaryRow(
                     code: 'driver.binary.mysql.binlog',
                     label: 'Driver binary: mysqlbinlog',
                     binary: $this->config->bin['mysqlbinlog'],
-                    configPath: 'checkpoint.drivers.mysql.mysqlbinlog_binary',
-                    envKey: 'CP_MYSQL_BINLOG_BINARY',
+                    configPath: 'database.connections.mysql.dump.dump_binary_path',
+                    envKey: 'N/A (from database config)',
                     driver: $this->config->driver,
                 ),
             ],
@@ -130,8 +132,13 @@ final readonly class ComposeBinaryHealthChecksAction
             $code = (string) ($entry['code'] ?? '');
             $label = (string) ($entry['label'] ?? '');
             $binary = (string) ($entry['binary'] ?? '');
-
-            if ($code === '' || $label === '' || $binary === '') {
+            if ($code === '') {
+                continue;
+            }
+            if ($label === '') {
+                continue;
+            }
+            if ($binary === '') {
                 continue;
             }
 
@@ -140,7 +147,7 @@ final readonly class ComposeBinaryHealthChecksAction
                 label: sprintf('Driver binary: %s', $label),
                 binary: $binary,
                 configPath: sprintf('checkpoint.drivers.%s.health_binaries.%s.binary', $this->config->driver, $code),
-                envKey: sprintf('CP_%s_BINARY', strtoupper($code)),
+                envKey: sprintf('CP_%s_BINARY', Str::upper($code)),
                 driver: $this->config->driver,
             );
         }
@@ -161,12 +168,12 @@ final readonly class ComposeBinaryHealthChecksAction
         bool $required = true,
         bool $includeRemediation = true,
     ): array {
-        $trimmedBinary = trim($binary);
+        $trimmedBinary = Str::trim($binary);
         $remediationCommands = $includeRemediation
             ? [
                 sprintf('command -v %s', $trimmedBinary !== '' ? $trimmedBinary : '<binary>'),
-                sprintf('export %s=/absolute/path/to/%s', $envKey, $trimmedBinary !== '' ? basename($trimmedBinary) : '<binary>'),
-                'php artisan checkpoint:doctor --format=json',
+                sprintf('export %s=/absolute/path/to/%s', $envKey, $trimmedBinary !== '' ? File::basename($trimmedBinary) : '<binary>'),
+                'php artisan checkpoint:status --health --format=json',
             ]
             : [];
 

@@ -51,7 +51,7 @@ final readonly class ComposeRestorePostureHealthChecksAction
             ]);
         }
 
-        $currentEnvironmentAllowed = in_array($this->config->environment, $this->config->restore['allowedEnvironments'], true);
+        $currentEnvironmentAllowed = collect($this->config->restore['allowedEnvironments'])->containsStrict($this->config->environment);
 
         return $this->checkRow(
             'restore.posture.environments',
@@ -92,7 +92,7 @@ final readonly class ComposeRestorePostureHealthChecksAction
             ]);
         }
 
-        $databaseAllowlisted = $this->config->currentDatabaseName !== '' && in_array($this->config->currentDatabaseName, $this->config->restore['allowedDatabases'], true);
+        $databaseAllowlisted = $this->config->currentDatabaseName !== '' && collect($this->config->restore['allowedDatabases'])->containsStrict($this->config->currentDatabaseName);
 
         return $this->checkRow(
             'restore.posture.databases',
@@ -224,6 +224,6 @@ final readonly class ComposeRestorePostureHealthChecksAction
 
     private function nonLocalEnvironment(): bool
     {
-        return ! in_array($this->config->environment, ['local', 'testing'], true);
+        return ! collect(['local', 'testing'])->containsStrict($this->config->environment);
     }
 }

@@ -6,7 +6,6 @@ namespace AdityaaCodes\LaravelCheckpoint\Tests;
 
 use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpointServiceProvider;
 use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -23,6 +22,8 @@ class TestCase extends Orchestra
     protected function setUp(): void
     {
         parent::setUp();
+
+        putenv('PATH=/tmp/fake-mysql-bin:'.getenv('PATH'));
 
         Factory::guessFactoryNamesUsing($this->guessFactoryName(...));
 
@@ -43,11 +44,20 @@ class TestCase extends Orchestra
     {
         $app['config']->set('app.env', 'testing');
         $app['config']->set('database.default', 'testing');
+        $app['config']->set('database.connections.mysql', [
+            'dump' => [
+                'dump_binary_path' => '',
+            ],
+        ]);
+
         $app['config']->set('database.connections.testing', [
             'driver' => 'sqlite',
             'database' => ':memory:',
             'prefix' => '',
             'foreign_key_constraints' => true,
+            'dump' => [
+                'dump_binary_path' => '',
+            ],
         ]);
 
         $app['config']->set('checkpoint', [
@@ -55,7 +65,7 @@ class TestCase extends Orchestra
             'user_name_column' => 'name',
             'table_prefix' => 'db_ops_',
             'log_channel' => 'stack',
-            'driver' => 'shell',
+            'driver' => 'mysql',
             'queue' => [
                 'name' => 'db-ops',
                 'max_attempts' => 1,
@@ -235,18 +245,8 @@ class TestCase extends Orchestra
             ],
             'temp_dir' => sys_get_temp_dir().'/checkpoint-tmp',
             'drivers' => [
-                'shell' => [
-                    'class' => ShellCommandDriver::class,
-                    'commands' => [],
-                    'pgbasebackup_stanza' => 'main',
-                    'backup_dir' => '/tmp/checkpoint-tests',
-                    'backup_prefix' => 'backup',
-                    'pre_restore_snapshot' => true,
-                    'command_timeout_seconds' => 5,
-                ],
                 'postgres' => [
                     'class' => PostgresDriver::class,
-                    'binary' => 'pg_basebackup',
                     'physical_output_dir' => sys_get_temp_dir().'/checkpoint-basebackups',
                     'stanza' => 'main',
                     'repo' => 1,
@@ -279,8 +279,6 @@ class TestCase extends Orchestra
                     'backup_standby' => false,
                     'checksum_page' => false,
                     'delta' => false,
-                    'dump_binary' => 'pg_dump',
-                    'restore_binary' => 'pg_restore',
                     'format' => 'directory',
                     'jobs' => 4,
                     'compress_level' => 6,
@@ -300,9 +298,6 @@ class TestCase extends Orchestra
                 ],
                 'mysql' => [
                     'class' => MysqlDriver::class,
-                    'dump_binary' => 'mysqldump',
-                    'mysql_binary' => 'mysql',
-                    'mysqlbinlog_binary' => 'mysqlbinlog',
                     'single_transaction' => true,
                     'quick' => true,
                     'skip_lock_tables' => true,

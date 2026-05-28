@@ -7,24 +7,18 @@ namespace AdityaaCodes\LaravelCheckpoint\Services;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
-use AdityaaCodes\LaravelCheckpoint\Support\StringListFormatter;
 use Carbon\Carbon;
 use Illuminate\Contracts\Config\Repository;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Collection;
 
 /** @internal */
 final readonly class RestoreSafetyGuard
 {
     public function __construct(
         private Repository $config,
-        private StringListFormatter $stringListFormatter,
+        private BlastRadiusAssessor $blastRadius,
+        private RestoreVerificationSignalLocator $verificationSignalLocator,
     ) {}
 
-    /**
-     * @param  array<string, mixed>  $context
-     * @return array<string, mixed>
-     */
     public function ensureSafe(CommandRun $run, array $context = []): array
     {
         if (! $this->isRestoreOperation($run->operation)) {
@@ -41,8 +35,8 @@ final readonly class RestoreSafetyGuard
             $database = $this->ensureDatabaseAllowed();
             $confirmation = $this->ensureConfirmationSatisfied();
             $restoreTarget = $this->ensureRestoreTargetValid($run, $context);
-            $verificationSignal = $this->ensureVerificationSignal($run, $restoreTarget, $context);
-            $blastRadius = $this->blastRadiusAssessment(
+            $verificationSignal = $this->verificationSignalLocator->locate($run, $restoreTarget, $context);
+            $blastRadiusAssessment = $this->blastRadius->assess(
                 operation: $run->operation,
                 environment: $environment,
                 database: $database,
@@ -50,7 +44,7 @@ final readonly class RestoreSafetyGuard
                 verifiedBackupRequired: $verificationSignal['required'],
                 verifiedSignalRunId: $verificationSignal['run_id'],
             );
-            $this->assertBlastRadiusPolicy($blastRadius);
+            $this->blastRadius->assertPolicy($blastRadiusAssessment);
         } catch (ConfigurationException $exception) {
             $this->recordDecisionEvent($run, 'block', 'restore_safety_blocked', [
                 'message' => $exception->getMessage(),
@@ -65,8 +59,8 @@ final readonly class RestoreSafetyGuard
                 'environment' => $environment,
                 'database' => $database !== '' ? $database : null,
                 'target' => $restoreTarget !== '' ? $restoreTarget : null,
-                'pitr_base_target' => $this->pitrBaseTarget($context),
-                'pitr_binlog_files' => $this->pitrBinlogFiles($context),
+                'pitr_base_target' => $this->verificationSignalLocator->pitrBaseTarget($context),
+                'pitr_binlog_files' => $this->verificationSignalLocator->pitrBinlogFiles($context),
                 'confirmation_required' => $confirmation['required'],
                 'confirmation_satisfied_via' => $confirmation['satisfied_via'],
                 'verified_backup_required' => $verificationSignal['required'],
@@ -75,7 +69,7 @@ final readonly class RestoreSafetyGuard
                 'verified_signal_backup_label' => $verificationSignal['backup_label'],
                 'verified_signal_artifact_path' => $verificationSignal['artifact_path'],
                 'verified_signal_last_known_good_at' => $verificationSignal['last_known_good_at'],
-                'blast_radius' => $blastRadius,
+                'blast_radius' => $blastRadiusAssessment,
             ],
         ];
 
@@ -86,10 +80,7 @@ final readonly class RestoreSafetyGuard
         return $audit;
     }
 
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function recordDecisionEvent(CommandRun $run, string $decision, string $reason, array $payload = []): void
+    private function recordDecisionEvent(CommandRun $run, string $decision, string $reason, array $payload): void
     {
         RestoreDecisionEvent::query()->create([
             'command_run_id' => $run->exists ? (int) $run->getKey() : null,
@@ -114,12 +105,10 @@ final readonly class RestoreSafetyGuard
     private function ensureEnvironmentAllowed(): string
     {
         $currentEnvironment = $this->config->get('app.env', 'production');
-        $allowedEnvironments = $this->stringList('checkpoint.restore.allowed_environments');
+        $allowedEnvironments = $this->config->get('checkpoint.restore.allowed_environments', []);
 
         if ($allowedEnvironments !== [] && ! collect($allowedEnvironments)->contains($currentEnvironment)) {
-            throw new ConfigurationException(
-                "Restore operations are blocked in environment [{$currentEnvironment}].",
-            );
+            throw new ConfigurationException("Restore operations are blocked in environment [{$currentEnvironment}].");
         }
 
         return $currentEnvironment;
@@ -127,7 +116,7 @@ final readonly class RestoreSafetyGuard
 
     private function ensureDatabaseAllowed(): string
     {
-        $allowedDatabases = $this->stringList('checkpoint.restore.allowed_databases');
+        $allowedDatabases = $this->config->get('checkpoint.restore.allowed_databases', []);
         $database = $this->config->get(
             'database.connections.'.$this->config->get('database.default').'.database',
             '',
@@ -138,31 +127,20 @@ final readonly class RestoreSafetyGuard
         }
 
         if ($database === '' || ! collect($allowedDatabases)->contains($database)) {
-            throw new ConfigurationException(
-                "Restore operations are blocked for database [{$database}].",
-            );
+            throw new ConfigurationException("Restore operations are blocked for database [{$database}].");
         }
 
         return $database;
     }
 
-    /**
-     * @return array{required:bool,satisfied_via:string}
-     */
     private function ensureConfirmationSatisfied(): array
     {
         if (! $this->config->get('checkpoint.restore.require_confirmation', true)) {
-            return [
-                'required' => false,
-                'satisfied_via' => 'disabled',
-            ];
+            return ['required' => false, 'satisfied_via' => 'disabled'];
         }
 
         if ($this->ciBypassActive()) {
-            return [
-                'required' => true,
-                'satisfied_via' => 'ci_bypass',
-            ];
+            return ['required' => true, 'satisfied_via' => 'ci_bypass'];
         }
 
         $phrase = str($this->config->get('checkpoint.restore.confirmation_phrase', 'RESTORE'))->trim()->value();
@@ -174,18 +152,12 @@ final readonly class RestoreSafetyGuard
             );
         }
 
-        return [
-            'required' => true,
-            'satisfied_via' => 'token',
-        ];
+        return ['required' => true, 'satisfied_via' => 'token'];
     }
 
-    /**
-     * @param  array<string, mixed>  $context
-     */
     private function ensureRestoreTargetValid(CommandRun $run, array $context): string
     {
-        $target = str((string) ($context['restore_target'] ?? $run->argument_text ?? ''))->trim()->value();
+        $target = str($context['restore_target'] ?? $run->argument_text ?? '')->trim()->value();
 
         if ($run->operation !== 'pitr_restore') {
             return $target;
@@ -200,367 +172,15 @@ final readonly class RestoreSafetyGuard
         } catch (\Throwable $exception) {
             report($exception);
 
-            throw new ConfigurationException(
-                "pitr_restore target [{$target}] must be a valid datetime string.",
-            );
+            throw new ConfigurationException("pitr_restore target [{$target}] must be a valid datetime string.", $exception->getCode(), $exception);
         }
 
         return $target;
-    }
-
-    /**
-     * @param  array<string, mixed>  $context
-     * @return array{
-     *     required: bool,
-     *     run_id: int|null,
-     *     operation: string|null,
-     *     backup_label: string|null,
-     *     artifact_path: string|null,
-     *     last_known_good_at: string|null
-     * }
-     */
-    private function ensureVerificationSignal(CommandRun $run, string $restoreTarget, array $context): array
-    {
-        if (! $this->config->get('checkpoint.restore.require_verified_backup', false)) {
-            return [
-                'required' => false,
-                'run_id' => null,
-                'operation' => null,
-                'backup_label' => null,
-                'artifact_path' => null,
-                'last_known_good_at' => null,
-            ];
-        }
-
-        $query = CommandRun::query()
-            ->succeeded()
-            ->whereNotNull('last_known_good_at')
-            ->latest('last_known_good_at')
-            ->latest('id');
-
-        /** @var CommandRun|null $verifiedRun */
-        $verifiedRun = match ($run->operation) {
-            'logical_restore_file', 'logical_restore_latest' => $this->matchingLogicalRestoreVerification($query, $restoreTarget, $context),
-            'pitr_restore' => $this->matchingPitrRestoreVerification($query, $context),
-            default => $query->first(),
-        };
-
-        if (! $verifiedRun instanceof CommandRun) {
-            throw new ConfigurationException(
-                "Restore operation [{$run->operation}] requires a verified backup signal before execution.",
-            );
-        }
-
-        return [
-            'required' => true,
-            'run_id' => (int) $verifiedRun->getKey(),
-            'operation' => $verifiedRun->operation,
-            'backup_label' => $verifiedRun->backup_label,
-            'artifact_path' => $verifiedRun->artifact_path,
-            'last_known_good_at' => $verifiedRun->last_known_good_at?->format('Y-m-d H:i:s'),
-        ];
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function stringList(string $key): array
-    {
-        return $this->stringListFormatter->format($this->config->get($key, []));
     }
 
     private function ciBypassActive(): bool
     {
         return $this->config->get('checkpoint.restore.allow_in_ci', true)
             && $this->config->get('checkpoint.restore.ci', false);
-    }
-
-    /**
-     * @param  Builder<CommandRun>  $query
-     * @param  array<string, mixed>  $context
-     */
-    private function matchingLogicalRestoreVerification(
-        Builder $query,
-        string $restoreTarget,
-        array $context,
-    ): ?CommandRun {
-        $query
-            ->where('operation', 'logical_backup')
-            ->where('artifact_path', $restoreTarget);
-
-        $expectedSnapshot = is_array($context['restore_target_snapshot'] ?? null)
-            ? $context['restore_target_snapshot']
-            : null;
-
-        if ($expectedSnapshot === null) {
-            return $query->first();
-        }
-
-        /** @var Collection<int, CommandRun> $candidates */
-        $candidates = $query->limit(10)->get();
-
-        return $candidates->first(
-            fn (CommandRun $candidate): bool => $this->artifactSnapshotMatches($candidate, $expectedSnapshot)
-                && $this->provenanceMatches($candidate, $context),
-        );
-    }
-
-    /**
-     * @param  Builder<CommandRun>  $query
-     */
-    private function matchingPitrRestoreVerification(
-        Builder $query,
-        array $context,
-    ): ?CommandRun {
-        $baseTarget = $this->pitrBaseTarget($context);
-        $binlogFiles = $this->pitrBinlogFiles($context);
-
-        if ($baseTarget === null || $baseTarget === '') {
-            throw new ConfigurationException(
-                'pitr_restore requires a baseline logical backup artifact when checkpoint.restore.require_verified_backup is enabled.',
-            );
-        }
-
-        if ($binlogFiles === []) {
-            throw new ConfigurationException(
-                'pitr_restore requires a non-empty binlog chain when checkpoint.restore.require_verified_backup is enabled.',
-            );
-        }
-
-        $query
-            ->where('operation', 'logical_backup')
-            ->where('artifact_path', $baseTarget);
-
-        /** @var Collection<int, CommandRun> $candidates */
-        $candidates = $query->limit(10)->get();
-
-        return $candidates->first(
-            fn (CommandRun $candidate): bool => $this->provenanceMatches($candidate, $context),
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $expectedSnapshot
-     */
-    private function artifactSnapshotMatches(CommandRun $candidate, array $expectedSnapshot): bool
-    {
-        $metadata = is_array($candidate->metadata) ? $candidate->metadata : [];
-        $artifactSnapshot = is_array($metadata['artifact_snapshot'] ?? null)
-            ? $metadata['artifact_snapshot']
-            : null;
-
-        if ($artifactSnapshot === null) {
-            return false;
-        }
-
-        foreach (['path', 'file_type', 'device', 'inode', 'mtime', 'size', 'content_signature'] as $key) {
-            if (($artifactSnapshot[$key] ?? null) !== ($expectedSnapshot[$key] ?? null)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * @param  array<string, mixed>  $context
-     */
-    private function provenanceMatches(CommandRun $candidate, array $context): bool
-    {
-        $contextMetadata = is_array($context['metadata'] ?? null) ? $context['metadata'] : [];
-        $expectedDriver = is_string($contextMetadata['driver'] ?? null) ? str($contextMetadata['driver'])->trim()->value() : '';
-        $expectedDatabase = is_string($contextMetadata['database'] ?? null) ? str($contextMetadata['database'])->trim()->value() : '';
-
-        if ($expectedDriver !== '' && $candidate->resolvedDriverName() !== $expectedDriver) {
-            return false;
-        }
-
-        if ($expectedDatabase !== '') {
-            $candidateMetadata = is_array($candidate->metadata) ? $candidate->metadata : [];
-            $candidateDatabase = is_string($candidateMetadata['database'] ?? null)
-                ? str($candidateMetadata['database'])->trim()->value()
-                : '';
-
-            if ($candidateDatabase !== $expectedDatabase) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * @param  array<string, mixed>  $context
-     * @return list<string>
-     */
-    private function pitrBinlogFiles(array $context): array
-    {
-        $contextMetadata = is_array($context['metadata'] ?? null) ? $context['metadata'] : [];
-        $value = $contextMetadata['binlog_files'] ?? [];
-
-        if (! is_array($value)) {
-            return [];
-        }
-
-        return collect($value)
-            ->map(static fn (mixed $item): string => is_string($item) ? str($item)->trim()->value() : '')
-            ->filter(static fn (string $item): bool => $item !== '')
-            ->values()
-            ->all();
-    }
-
-    /**
-     * @param  array<string, mixed>  $context
-     */
-    private function pitrBaseTarget(array $context): ?string
-    {
-        $baseTarget = $context['pitr_base_target'] ?? null;
-
-        if (! is_string($baseTarget)) {
-            return null;
-        }
-
-        $baseTarget = str($baseTarget)->trim()->value();
-
-        return $baseTarget !== '' ? $baseTarget : null;
-    }
-
-    /**
-     * @return array{
-     *   enabled:bool,
-     *   score:int,
-     *   status:string,
-     *   warn_score:int,
-     *   block_score:int,
-     *   factors:list<array{name:string,weight:int,contributes:bool,note:string}>
-     * }
-     */
-    private function blastRadiusAssessment(
-        string $operation,
-        string $environment,
-        string $database,
-        string $restoreTarget,
-        bool $verifiedBackupRequired,
-        ?int $verifiedSignalRunId,
-    ): array {
-        $enabled = $this->config->get('checkpoint.restore.blast_radius.enabled', true);
-        $warnScore = max(0, min(100, $this->config->get('checkpoint.restore.blast_radius.warn_score', 50)));
-        $blockScore = max(0, min(100, $this->config->get('checkpoint.restore.blast_radius.block_score', 80)));
-        $weights = $this->blastRadiusWeights();
-
-        if (! $enabled) {
-            return [
-                'enabled' => false,
-                'score' => 0,
-                'status' => 'disabled',
-                'warn_score' => $warnScore,
-                'block_score' => $blockScore,
-                'factors' => [],
-            ];
-        }
-
-        $envLower = str($environment)->lower()->value();
-        $dbLower = str($database)->lower()->value();
-
-        $factors = [
-            [
-                'name' => 'environment',
-                'weight' => $weights['environment'],
-                'contributes' => str($envLower)->startsWith('prod') || $envLower === 'live',
-                'note' => "restore running in {$environment} environment",
-            ],
-            [
-                'name' => 'database',
-                'weight' => $weights['database'],
-                'contributes' => $database !== '' && ! collect(['checkpoint_shadow', 'checkpoint_restore_shadow'])->contains($dbLower),
-                'note' => $database !== '' ? "database target {$database}" : 'database target unknown',
-            ],
-            [
-                'name' => 'target',
-                'weight' => $weights['target'],
-                'contributes' => $operation === 'logical_restore_latest',
-                'note' => $restoreTarget !== '' ? "restore target {$restoreTarget}" : 'restore target unresolved',
-            ],
-            [
-                'name' => 'verification',
-                'weight' => $weights['verification'],
-                'contributes' => $verifiedBackupRequired && ! is_int($verifiedSignalRunId),
-                'note' => $verifiedBackupRequired
-                    ? (is_int($verifiedSignalRunId)
-                        ? "verified signal linked to run {$verifiedSignalRunId}"
-                        : 'verified signal required but missing')
-                    : 'verified signal requirement disabled',
-            ],
-        ];
-
-        $score = 0;
-
-        foreach ($factors as $factor) {
-            if ($factor['contributes']) {
-                $score += $factor['weight'];
-            }
-        }
-
-        $score = max(0, min(100, $score));
-        $status = $score >= $blockScore ? 'block' : ($score >= $warnScore ? 'warn' : 'pass');
-
-        return [
-            'enabled' => true,
-            'score' => $score,
-            'status' => $status,
-            'warn_score' => $warnScore,
-            'block_score' => $blockScore,
-            'factors' => $factors,
-        ];
-    }
-
-    /**
-     * @param  array{
-     *   enabled:bool,
-     *   score:int,
-     *   status:string,
-     *   warn_score:int,
-     *   block_score:int,
-     *   factors:list<array{name:string,weight:int,contributes:bool,note:string}>
-     * }  $blastRadius
-     */
-    private function assertBlastRadiusPolicy(array $blastRadius): void
-    {
-        if ($blastRadius['enabled'] !== true) {
-            return;
-        }
-
-        if ($blastRadius['status'] !== 'block') {
-            return;
-        }
-
-        throw new ConfigurationException(
-            "Restore blast radius score [{$blastRadius['score']}] exceeds block threshold [{$blastRadius['block_score']}].",
-        );
-    }
-
-    /**
-     * @return array{environment:int,database:int,target:int,verification:int}
-     */
-    private function blastRadiusWeights(): array
-    {
-        $configured = $this->config->get('checkpoint.restore.blast_radius.weights', []);
-        $weights = is_array($configured) ? $configured : [];
-
-        return [
-            'environment' => $this->normalizedWeight($weights['environment'] ?? 30),
-            'database' => $this->normalizedWeight($weights['database'] ?? 25),
-            'target' => $this->normalizedWeight($weights['target'] ?? 20),
-            'verification' => $this->normalizedWeight($weights['verification'] ?? 25),
-        ];
-    }
-
-    private function normalizedWeight(mixed $value): int
-    {
-        if (! is_int($value)) {
-            return 0;
-        }
-
-        return max(0, min(100, $value));
     }
 }

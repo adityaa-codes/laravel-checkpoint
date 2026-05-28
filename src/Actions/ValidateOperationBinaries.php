@@ -6,6 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Actions;
 
 use AdityaaCodes\LaravelCheckpoint\Support\BinaryFinder;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Support\Arr;
 use RuntimeException;
 
 final readonly class ValidateOperationBinaries
@@ -20,7 +21,7 @@ final readonly class ValidateOperationBinaries
      */
     public function validate(string $operation): void
     {
-        $driver = (string) $this->config->get('checkpoint.driver', 'shell');
+        $driver = (string) $this->config->get('checkpoint.driver');
 
         $binaries = $this->binariesForOperation($operation, $driver);
 
@@ -34,7 +35,7 @@ final readonly class ValidateOperationBinaries
             return;
         }
 
-        $names = implode(', ', $missing);
+        $names = Arr::join($missing, ', ');
 
         throw new RuntimeException(sprintf(
             'Operation [%s] requires binary(s) [%s] which are not available. Install the missing binary(s) and retry.',
@@ -53,40 +54,44 @@ final readonly class ValidateOperationBinaries
         $restoreOps = ['logical_restore_file', 'logical_restore_latest'];
         $drillOps = ['backup_drill'];
 
-        $isPitr = in_array($operation, $pitrOps, true);
-        $isBackup = in_array($operation, $backupOps, true);
-        $isRestore = in_array($operation, $restoreOps, true);
-        $isDrill = in_array($operation, $drillOps, true);
+        $isPitr = collect($pitrOps)->containsStrict($operation);
+        $isBackup = collect($backupOps)->containsStrict($operation);
+        $isRestore = collect($restoreOps)->containsStrict($operation);
+        $isDrill = collect($drillOps)->containsStrict($operation);
+
+        $defaultConn = (string) $this->config->get('database.default', 'mysql');
+        $binaryPath = rtrim((string) $this->config->get('database.connections.'.$defaultConn.'.dump.dump_binary_path', ''), '/');
+        $prefix = static fn (string $name): string => $binaryPath !== '' ? $binaryPath.'/'.$name : $name;
 
         return match ($driver) {
-            'mysql' => array_values(array_filter([
+            'mysql' => collect([
                 ($isBackup || $isDrill) ? [
-                    'binary' => (string) $this->config->get('checkpoint.drivers.mysql.dump_binary', 'mysqldump'),
+                    'binary' => $prefix('mysqldump'),
                     'label' => 'mysqldump',
                 ] : null,
                 ($isRestore || $isDrill) ? [
-                    'binary' => (string) $this->config->get('checkpoint.drivers.mysql.mysql_binary', 'mysql'),
+                    'binary' => $prefix('mysql'),
                     'label' => 'mysql',
                 ] : null,
                 $isPitr ? [
-                    'binary' => (string) $this->config->get('checkpoint.drivers.mysql.mysqlbinlog_binary', 'mysqlbinlog'),
+                    'binary' => $prefix('mysqlbinlog'),
                     'label' => 'mysqlbinlog',
                 ] : null,
-            ])),
-            'postgres' => array_values(array_filter([
+            ])->filter()->values()->all(),
+            'postgres' => collect([
                 ($isBackup || $isDrill) ? [
-                    'binary' => (string) $this->config->get('checkpoint.drivers.postgres.binary', 'pg_basebackup'),
+                    'binary' => $prefix('pg_basebackup'),
                     'label' => 'pg_basebackup',
                 ] : null,
                 [
-                    'binary' => (string) $this->config->get('checkpoint.drivers.postgres.dump_binary', 'pg_dump'),
+                    'binary' => $prefix('pg_dump'),
                     'label' => 'pg_dump',
                 ],
                 [
-                    'binary' => (string) $this->config->get('checkpoint.drivers.postgres.restore_binary', 'pg_restore'),
+                    'binary' => $prefix('pg_restore'),
                     'label' => 'pg_restore',
                 ],
-            ])),
+            ])->filter()->values()->all(),
             default => [],
         };
     }

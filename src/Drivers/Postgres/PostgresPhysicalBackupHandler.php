@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Drivers\Postgres;
 
+use AdityaaCodes\LaravelCheckpoint\Enums\PostgresPhysicalCompression;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Symfony\Component\Process\Process;
 
 /** @internal */
-final class PostgresPhysicalBackupHandler implements PostgresOperationHandler
+final readonly class PostgresPhysicalBackupHandler implements PostgresOperationHandler
 {
     public function __construct(
-        private readonly PostgresDriverConfig $config,
+        private PostgresDriverConfig $config,
     ) {}
 
     public function supports(string $operation): bool
@@ -19,13 +20,10 @@ final class PostgresPhysicalBackupHandler implements PostgresOperationHandler
         return $operation === 'physical_backup';
     }
 
-    /**
-     * @param  array<string, mixed>  $plannedMetadata
-     */
     public function buildProcess(CommandRun $run, array $plannedMetadata): Process
     {
         $this->config->ensurePhysicalOutputDirExists();
-        $timestamp = now()->format('Ymd_His');
+        $timestamp = $plannedMetadata['timestamp'] ?? now()->format('Ymd_His');
 
         return new Process(
             $this->command($timestamp),
@@ -43,17 +41,22 @@ final class PostgresPhysicalBackupHandler implements PostgresOperationHandler
         return $this->buildProcess($run, $plannedMetadata)->getCommandLine();
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     public function plannedMetadata(CommandRun $run): array
     {
+        $timestamp = now()->format('Ymd_His');
+        $artifactPath = $this->config->physicalOutputDir.'/backup_'.$timestamp;
+
         return [
+            'timestamp' => $timestamp,
             'backup_type' => 'physical_basebackup',
+            'artifact_path' => $artifactPath,
             'metadata' => [
                 'driver' => 'postgres',
                 'binary' => $this->config->physicalBinary,
                 'output_dir' => $this->config->physicalOutputDir,
+                'wal_method' => $this->config->physicalWalMethod->value,
+                'compression' => $this->config->physicalCompression->value,
+                'checkpoint' => $this->config->physicalCheckpoint->value,
             ],
         ];
     }
@@ -63,13 +66,71 @@ final class PostgresPhysicalBackupHandler implements PostgresOperationHandler
      */
     private function command(string $timestamp): array
     {
-        return [
+        $outputPath = $this->config->physicalOutputDir.'/backup_'.$timestamp;
+
+        $command = [
             $this->config->physicalBinary,
-            '-D', $this->config->physicalOutputDir.'/backup_'.$timestamp,
-            '-Ft',
-            '-z',
-            '-X', 'stream',
-            '-P',
+            '-D', $outputPath,
         ];
+
+        $command = $this->appendFormatAndCompression($command);
+
+        $command[] = '-X';
+        $command[] = $this->config->physicalWalMethod->value;
+
+        $command[] = '-P';
+
+        $command[] = '--checkpoint='.$this->config->physicalCheckpoint->value;
+
+        $command = $this->appendConnectionArgs($command);
+
+        return [
+            ...$command,
+            ...$this->config->physicalExtraArgs,
+        ];
+    }
+
+    /**
+     * @param  list<string>  $command
+     * @return list<string>
+     */
+    private function appendFormatAndCompression(array $command): array
+    {
+        if ($this->config->physicalCompression === PostgresPhysicalCompression::None) {
+            $command[] = '-Fp';
+
+            return $command;
+        }
+
+        $command[] = '-Ft';
+
+        $compressionMap = [
+            PostgresPhysicalCompression::Gzip->value => '-z',
+            PostgresPhysicalCompression::Lz4->value => '--compress-lz4',
+            PostgresPhysicalCompression::Zstd->value => '--compress-zstd',
+        ];
+
+        $compressionFlag = $compressionMap[$this->config->physicalCompression->value] ?? null;
+
+        if ($compressionFlag !== null) {
+            $command[] = $compressionFlag;
+        }
+
+        return $command;
+    }
+
+    /**
+     * @param  list<string>  $command
+     * @return list<string>
+     */
+    private function appendConnectionArgs(array $command): array
+    {
+        $connectionArgs = $this->config->connectionArgs();
+
+        if ($connectionArgs !== []) {
+            return [...$command, ...$connectionArgs];
+        }
+
+        return $command;
     }
 }

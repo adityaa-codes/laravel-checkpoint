@@ -4,18 +4,20 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Services;
 
+use Illuminate\Support\Str;
+
 /** @internal */
 final readonly class CommandLineRedactor
 {
     public function redact(string $commandLine): string
     {
-        $trimmed = trim($commandLine);
+        $trimmed = Str::trim($commandLine);
 
         if ($trimmed === '') {
             return $trimmed;
         }
 
-        if (preg_match('/^[A-Za-z][A-Za-z0-9+.-]*:\/\//', $trimmed) === 1) {
+        if (Str::isMatch('/^[A-Za-z][A-Za-z0-9+.-]*:\/\//', $trimmed)) {
             $parts = parse_url($trimmed);
 
             if (is_array($parts) && isset($parts['scheme'], $parts['host'])) {
@@ -44,6 +46,6 @@ final readonly class CommandLineRedactor
             '$1[REDACTED]$3',
         ];
 
-        return (string) preg_replace($patterns, $replacements, $trimmed);
+        return (string) Str::replaceMatches($patterns, $replacements, $trimmed);
     }
 }

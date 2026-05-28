@@ -309,21 +309,9 @@ function indexNamesForTable(string $table): array
     $driver = $connection->getDriverName();
 
     return match ($driver) {
-        'sqlite' => array_values(array_map(
-            static fn (object $index): string => (string) ($index->name ?? ''),
-            $connection->select(sprintf("PRAGMA index_list('%s')", $table)),
-        )),
-        'mysql' => array_values(array_unique(array_map(
-            static fn (object $index): string => (string) ($index->Key_name ?? ''),
-            $connection->select(sprintf('SHOW INDEX FROM `%s`', $table)),
-        ))),
-        'pgsql' => array_values(array_map(
-            static fn (object $index): string => (string) ($index->indexname ?? ''),
-            $connection->select(
-                'SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND tablename = ?',
-                [$table],
-            ),
-        )),
+        'sqlite' => collect($connection->select(sprintf("PRAGMA index_list('%s')", $table)))->map(static fn (object $index): string => (string) ($index->name ?? ''))->values()->all(),
+        'mysql' => collect($connection->select(sprintf('SHOW INDEX FROM `%s`', $table)))->map(static fn (object $index): string => (string) ($index->Key_name ?? ''))->unique()->values()->all(),
+        'pgsql' => collect($connection->select('SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND tablename = ?', [$table]))->map(static fn (object $index): string => (string) ($index->indexname ?? ''))->values()->all(),
         default => [],
     };
 }

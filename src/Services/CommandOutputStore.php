@@ -8,6 +8,8 @@ use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Filesystem\Factory as FilesystemFactory;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 
 /** @internal */
 final readonly class CommandOutputStore
@@ -30,7 +32,7 @@ final readonly class CommandOutputStore
                     'output_storage' => [
                         'driver' => 'database',
                         'externalized' => false,
-                        'stored_bytes' => strlen($output),
+                        'stored_bytes' => Str::length($output),
                     ],
                 ],
             ];
@@ -55,8 +57,8 @@ final readonly class CommandOutputStore
                     'externalized' => true,
                     'disk' => $disk,
                     'path' => $path,
-                    'stored_bytes' => strlen($output),
-                    'inline_bytes' => strlen((string) $inlineOutput),
+                    'stored_bytes' => Str::length($output),
+                    'inline_bytes' => Str::length((string) $inlineOutput),
                 ],
             ],
         ];
@@ -94,7 +96,7 @@ final readonly class CommandOutputStore
         }
 
         try {
-            $written = file_put_contents($session['temp_path'], $chunk, FILE_APPEND);
+            $written = File::put($session['temp_path'], $chunk, FILE_APPEND);
         } catch (\ErrorException) {
             $written = false;
         }
@@ -150,7 +152,7 @@ final readonly class CommandOutputStore
 
             $inlineBytes = $this->inlineBytes();
             $inlineOutput = $inlineBytes > 0 ? $this->preview($capturedOutput, $inlineBytes) : null;
-            $storedBytes = filesize($session['temp_path']);
+            $storedBytes = File::size($session['temp_path']);
 
             return [
                 'command_output' => $inlineOutput,
@@ -161,7 +163,7 @@ final readonly class CommandOutputStore
                         'disk' => $session['disk'],
                         'path' => $session['path'],
                         'stored_bytes' => $storedBytes === false ? null : $storedBytes,
-                        'inline_bytes' => strlen((string) $inlineOutput),
+                        'inline_bytes' => Str::length((string) $inlineOutput),
                     ],
                 ],
             ];
@@ -251,18 +253,18 @@ final readonly class CommandOutputStore
             throw new ConfigurationException('checkpoint.temp_dir must be a non-empty string.');
         }
 
-        if (file_exists($configured) && ! is_dir($configured)) {
+        if (File::exists($configured) && ! File::isDirectory($configured)) {
             throw new ConfigurationException(sprintf('Unable to create checkpoint temp directory [%s].', $configured));
         }
 
-        if (! is_dir($configured)) {
+        if (! File::isDirectory($configured)) {
             try {
-                $created = mkdir($configured, 0700, true);
+                $created = File::makeDirectory($configured, 0700, true);
             } catch (\ErrorException) {
                 $created = false;
             }
 
-            if (! $created && ! is_dir($configured)) {
+            if (! $created && ! File::isDirectory($configured)) {
                 logger()->error('Unable to create checkpoint temp directory.', ['path' => $configured]);
 
                 throw new ConfigurationException(sprintf('Unable to create checkpoint temp directory [%s].', $configured));
@@ -296,13 +298,13 @@ final readonly class CommandOutputStore
 
     private function preview(string $value, int $maxBytes): string
     {
-        if ($maxBytes < 1 || strlen($value) <= $maxBytes) {
+        if ($maxBytes < 1 || Str::length($value) <= $maxBytes) {
             return $value;
         }
 
         return function_exists('mb_strcut')
             ? mb_strcut($value, 0, $maxBytes, 'UTF-8')
-            : substr($value, 0, $maxBytes);
+            : Str::substr($value, 0, $maxBytes);
     }
 
     /**
@@ -310,9 +312,9 @@ final readonly class CommandOutputStore
      */
     private function discardCapture(array $session): void
     {
-        if (is_file($session['temp_path'])) {
+        if (File::isFile($session['temp_path'])) {
             try {
-                $removed = unlink($session['temp_path']);
+                $removed = File::delete($session['temp_path']);
             } catch (\ErrorException) {
                 $removed = false;
             }

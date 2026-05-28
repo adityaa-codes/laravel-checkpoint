@@ -6,6 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Services;
 
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 final readonly class DrillTrendAnalyzer
 {
@@ -120,7 +121,7 @@ final readonly class DrillTrendAnalyzer
             return 'insufficient_data';
         }
 
-        $latestTwo = array_slice($recentResults, 0, 2);
+        $latestTwo = collect($recentResults)->slice(0, 2)->all();
 
         if ($latestTwo === ['pass', 'pass']) {
             return 'improving';
@@ -143,6 +144,6 @@ final readonly class DrillTrendAnalyzer
             return "Trend {$status} (n={$sampleSize})";
         }
 
-        return ucfirst($status).' ('.str($streakType)->upper()->value()." streak x{$streakLength}, n={$sampleSize})";
+        return Str::ucfirst($status).' ('.str($streakType)->upper()->value()." streak x{$streakLength}, n={$sampleSize})";
     }
 }

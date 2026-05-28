@@ -1,6 +1,6 @@
 {
   "generated_at": "2026-03-11T12:00:00+00:00",
-  "driver": "shell",
+  "driver": "mysql",
   "limit_requested": 2,
   "limit": 2,
   "gates": {
@@ -359,7 +359,7 @@
       "status": "failed",
       "exit_code": 1,
       "failure_reason": "Command exited with code 1.",
-      "next_action": "Run php artisan checkpoint:doctor --full --limit=10 --format=json for full failure context."
+      "next_action": "Run php artisan checkpoint:status --full --limit=10 --format=json for full failure context."
     }
   },
   "breakdown": {
@@ -413,9 +413,9 @@
         "code": "config.driver",
         "check": "Config: driver",
         "status": "pass",
-        "notes": "shell",
+        "notes": "mysql",
         "data": {
-          "driver": "shell"
+          "driver": "mysql"
         },
         "severity": "info"
       },
@@ -480,6 +480,72 @@
           "reason": "not_found"
         },
         "severity": "warning"
+      },
+      {
+        "code": "driver.binary.mysql.dump",
+        "check": "Driver binary: mysqldump",
+        "status": "pass",
+        "notes": "mysqldump",
+        "data": {
+          "binary": "mysqldump",
+          "config_path": "database.connections.mysql.dump.dump_binary_path",
+          "driver": "mysql",
+          "env_key": "N/A (from database config)",
+          "found": true,
+          "path": "mysqldump",
+          "reason": null,
+          "remediation_commands": [
+            "command -v mysqldump",
+            "export N/A (from database config)=/absolute/path/to/mysqldump",
+            "php artisan checkpoint:status --health --format=json"
+          ],
+          "required": true
+        },
+        "severity": "info"
+      },
+      {
+        "code": "driver.binary.mysql.mysql",
+        "check": "Driver binary: mysql",
+        "status": "pass",
+        "notes": "mysql",
+        "data": {
+          "binary": "mysql",
+          "config_path": "database.connections.mysql.dump.dump_binary_path",
+          "driver": "mysql",
+          "env_key": "N/A (from database config)",
+          "found": true,
+          "path": "mysql",
+          "reason": null,
+          "remediation_commands": [
+            "command -v mysql",
+            "export N/A (from database config)=/absolute/path/to/mysql",
+            "php artisan checkpoint:status --health --format=json"
+          ],
+          "required": true
+        },
+        "severity": "info"
+      },
+      {
+        "code": "driver.binary.mysql.binlog",
+        "check": "Driver binary: mysqlbinlog",
+        "status": "pass",
+        "notes": "mysqlbinlog",
+        "data": {
+          "binary": "mysqlbinlog",
+          "config_path": "database.connections.mysql.dump.dump_binary_path",
+          "driver": "mysql",
+          "env_key": "N/A (from database config)",
+          "found": true,
+          "path": "mysqlbinlog",
+          "reason": null,
+          "remediation_commands": [
+            "command -v mysqlbinlog",
+            "export N/A (from database config)=/absolute/path/to/mysqlbinlog",
+            "php artisan checkpoint:status --health --format=json"
+          ],
+          "required": true
+        },
+        "severity": "info"
       },
       {
         "code": "db.command_runs_table",
@@ -810,6 +876,6 @@
     "status": "failed",
     "exit_code": 1,
     "failure_reason": "Command exited with code 1.",
-    "next_action": "Run php artisan checkpoint:doctor --full --limit=10 --format=json for full failure context."
+    "next_action": "Run php artisan checkpoint:status --full --limit=10 --format=json for full failure context."
   }
 }

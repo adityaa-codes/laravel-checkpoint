@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
 
-it('auto-detects driver and completes install', function (): void {
+it('uses configured driver and completes install', function (): void {
     checkpoint_artisan('checkpoint:install --skip-publish --skip-migrate --skip-doctor')
         ->expectsOutputToContain('Driver')
         ->assertSuccessful();
@@ -38,53 +38,41 @@ it('supports the do install command alias', function (): void {
 it('fails when doctor has failures', function (): void {
     config()->set('database.default', 'mysql');
     config()->set('database.connections.mysql.driver', 'mysql');
-    config()->set('checkpoint.drivers.mysql.dump_binary', 'missing-mysqldump');
-    config()->set('checkpoint.drivers.mysql.mysql_binary', 'missing-mysql');
+    config()->set('database.connections.mysql.dump.dump_binary_path', '/nonexistent-binary-path');
 
     checkpoint_artisan('checkpoint:install --skip-publish --skip-migrate')
         ->assertFailed();
 });
 
-it('writes production restore safety setting to environment file', function (): void {
-    $tempDirectory = sys_get_temp_dir().'/checkpoint-install-'.bin2hex(random_bytes(6));
-    mkdir($tempDirectory, 0777, true);
-    $envPath = $tempDirectory.'/.env';
-    file_put_contents($envPath, "APP_NAME=Checkpoint\nAPP_ENV=production\n");
-
-    $originalEnvironmentPath = app()->environmentPath();
-    $originalEnvironmentFile = app()->environmentFile();
+it('outputs production restore safety instructions', function (): void {
+    $originalEnv = app()['env'];
+    app()['env'] = 'production';
 
     try {
-        $command = app(InstallCommand::class);
-        $method = new ReflectionMethod($command, 'promptProductionSafety');
-        $method->setAccessible(true);
+        $exitCode = Artisan::call('checkpoint:install', [
+            '--skip-publish' => true,
+            '--skip-migrate' => true,
+            '--skip-doctor' => true,
+        ]);
 
-        app()->useEnvironmentPath($tempDirectory);
-        app()->loadEnvironmentFrom('.env');
+        $output = Artisan::output();
 
-        $method->invoke($command);
-
-        $contents = (string) file_get_contents($envPath);
-
-        expect($contents)->toContain('CP_RESTORE_ALLOWED_ENVIRONMENTS=staging');
+        expect($exitCode)->toBe(0)
+            ->and($output)->toContain('CP_RESTORE_ALLOWED_ENVIRONMENTS=staging');
     } finally {
-        app()->useEnvironmentPath($originalEnvironmentPath);
-        app()->loadEnvironmentFrom($originalEnvironmentFile);
-
-        if (file_exists($envPath)) {
-            unlink($envPath);
-        }
-
-        if (is_dir($tempDirectory)) {
-            rmdir($tempDirectory);
-        }
+        app()['env'] = $originalEnv;
     }
+});
+
+it('outputs driver persistence instructions', function (): void {
+    checkpoint_artisan('checkpoint:install --skip-publish --skip-migrate --skip-doctor')
+        ->expectsOutputToContain('CP_DRIVER=')
+        ->assertSuccessful();
 });
 
 it('builds publish parameters using checkpoint package tags', function (): void {
     $command = app(InstallCommand::class);
     $method = new ReflectionMethod($command, 'publishParameters');
-    $method->setAccessible(true);
 
     $config = $method->invoke($command, 'checkpoint-config', false);
     $migrations = $method->invoke($command, 'checkpoint-migrations', true);

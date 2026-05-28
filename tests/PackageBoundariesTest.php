@@ -3,14 +3,12 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
-use AdityaaCodes\LaravelCheckpoint\Console\DoctorCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\HealthCheckCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\StatusCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\SweepCommand;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\FakeDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupCompleted;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillCompleted;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillFreshnessAlarmTriggered;
@@ -29,8 +27,6 @@ use AdityaaCodes\LaravelCheckpoint\LaravelCheckpoint;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpointServiceProvider;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
-use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
-use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandRunCatalog;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationEndpointInputParser;
@@ -40,13 +36,11 @@ use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
 
 it('keeps package internals final by default with explicit seams', function (): void {
     $finalClasses = [
-        DoctorCommand::class,
-        HealthCheckCommand::class,
+        SweepCommand::class,
         InstallCommand::class,
         PruneCommand::class,
         StatusCommand::class,
         FakeDriver::class,
-        ShellCommandDriver::class,
         ConfigurationException::class,
         CheckpointArgumentException::class,
         InvalidOperationException::class,
@@ -54,8 +48,6 @@ it('keeps package internals final by default with explicit seams', function (): 
         ProcessCommandRunJob::class,
         LaravelCheckpoint::class,
         LaravelCheckpointServiceProvider::class,
-        BackupDrillRunPolicy::class,
-        CommandRunPolicy::class,
         CommandRunCatalog::class,
         RestoreSafetyGuard::class,
         ReplicationRequestFactory::class,
@@ -125,13 +117,7 @@ it('exposes public properties only for intentional payload seams', function (): 
     ];
 
     foreach ($allowedPublicProperties as $class => $allowedProperties) {
-        $publicProperties = array_map(
-            static fn (ReflectionProperty $property): string => $property->getName(),
-            array_filter(
-                new ReflectionClass($class)->getProperties(ReflectionProperty::IS_PUBLIC),
-                static fn (ReflectionProperty $property): bool => $property->getDeclaringClass()->getName() === $class,
-            ),
-        );
+        $publicProperties = collect((new ReflectionClass($class))->getProperties(ReflectionProperty::IS_PUBLIC))->filter(static fn (ReflectionProperty $property): bool => $property->getDeclaringClass()->getName() === $class)->map(static fn (ReflectionProperty $property): string => $property->getName())->all();
 
         sort($publicProperties);
         sort($allowedProperties);

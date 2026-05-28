@@ -4,49 +4,49 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Drivers\Postgres;
 
+use AdityaaCodes\LaravelCheckpoint\Enums\PostgresFormat;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
-use Illuminate\Support\Facades\File;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 
-/** @internal */
 final class PostgresSnapshotService
 {
+    public function __construct(
+        private Filesystem $filesystem,
+    ) {}
+
     /**
      * @return array{path:string,file_type:string,device:int|null,inode:int|null,mtime:int|null,size:int|null,content_signature:string|null}
      */
-    public function snapshot(string $realTargetPath, string $format): array
+    public function snapshot(string $realTargetPath, PostgresFormat $format): array
     {
         clearstatcache(true, $realTargetPath);
 
-        if (! File::exists($realTargetPath)) {
-            throw new ConfigurationException(
-                sprintf('Configured logical restore target [%s] does not exist.', $realTargetPath),
-            );
+        if (! $this->filesystem->exists($realTargetPath)) {
+            throw ConfigurationException::targetNotFound($realTargetPath);
         }
 
         $stats = stat($realTargetPath);
 
         if ($stats === false) {
-            throw new ConfigurationException(
-                sprintf('Configured logical restore target [%s] does not exist.', $realTargetPath),
-            );
+            throw ConfigurationException::targetNotFound($realTargetPath);
         }
 
         return [
             'path' => $realTargetPath,
-            'file_type' => $format,
-            'device' => (int) $stats['dev'],
-            'inode' => (int) $stats['ino'],
-            'mtime' => (int) $stats['mtime'],
-            'size' => $format === 'custom' ? (int) $stats['size'] : null,
-            'content_signature' => $format === 'directory' ? $this->contentSignature($realTargetPath) : null,
+            'file_type' => $format->value,
+            'device' => $stats['dev'],
+            'inode' => $stats['ino'],
+            'mtime' => $stats['mtime'],
+            'size' => $format === PostgresFormat::Custom ? $stats['size'] : null,
+            'content_signature' => $format === PostgresFormat::Directory ? $this->contentSignature($realTargetPath) : null,
         ];
     }
 
     /**
      * @return array<string, mixed>|null
      */
-    public function safeSnapshot(string $path, string $format): ?array
+    public function safeSnapshot(string $path, PostgresFormat $format): ?array
     {
         try {
             return $this->snapshot($path, $format);
@@ -57,15 +57,15 @@ final class PostgresSnapshotService
 
     public function pathSize(string $path): ?int
     {
-        if (File::isFile($path)) {
-            return File::size($path);
+        if ($this->filesystem->isFile($path)) {
+            return $this->filesystem->size($path);
         }
 
-        if (! File::isDirectory($path)) {
+        if (! $this->filesystem->isDirectory($path)) {
             return null;
         }
 
-        return collect(File::allFiles($path))
+        return collect($this->filesystem->allFiles($path))
             ->sum(fn (\SplFileInfo $file): int => $file->getSize());
     }
 
@@ -74,7 +74,7 @@ final class PostgresSnapshotService
         $entries = collect();
         $baseLength = Str::length(Str::rtrim($path, DIRECTORY_SEPARATOR)) + 1;
 
-        foreach (File::allFiles($path) as $file) {
+        foreach ($this->filesystem->allFiles($path) as $file) {
             $entries->push(collect([
                 Str::substr($file->getPathname(), $baseLength),
                 'file',
@@ -84,23 +84,19 @@ final class PostgresSnapshotService
             ])->join('|'));
         }
 
-        foreach (File::directories($path) as $directory) {
+        foreach ($this->filesystem->directories($path) as $directory) {
             $entries->push(collect([
                 Str::substr($directory, $baseLength),
                 'dir',
                 (string) (stat($directory)['ino'] ?? '0'),
                 '0',
-                (string) File::lastModified($directory),
+                (string) $this->filesystem->lastModified($directory),
             ])->join('|'));
         }
 
-        return hash('sha1', $entries->sort()->join("\n"));
+        return hash('sha256', $entries->sort()->join("\n"));
     }
 
-    /**
-     * @param  array<string, mixed>  $current
-     * @param  array<string, mixed>  $expected
-     */
     public function snapshotChanged(array $current, array $expected): bool
     {
         foreach (['path', 'file_type', 'device', 'inode', 'mtime', 'size', 'content_signature'] as $key) {

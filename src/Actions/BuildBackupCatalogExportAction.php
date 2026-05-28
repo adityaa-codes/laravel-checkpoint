@@ -8,6 +8,7 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -140,8 +141,8 @@ final readonly class BuildBackupCatalogExportAction
 
         /** @var array<int, VerificationRun> $latestByCommandRun */
         $latestByCommandRun = $runs
-            ->unique(static fn (VerificationRun $run): int => (int) $run->command_run_id)
-            ->keyBy(static fn (VerificationRun $run): int => (int) $run->command_run_id)
+            ->unique(static fn (VerificationRun $run): int => $run->command_run_id)
+            ->keyBy(static fn (VerificationRun $run): int => $run->command_run_id)
             ->all();
 
         return $latestByCommandRun;
@@ -220,8 +221,8 @@ final readonly class BuildBackupCatalogExportAction
             return $value;
         }
 
-        if (array_is_list($value)) {
-            return array_map($this->normalizeValue(...), $value);
+        if (Arr::isList($value)) {
+            return collect($value)->map($this->normalizeValue(...))->all();
         }
 
         ksort($value);

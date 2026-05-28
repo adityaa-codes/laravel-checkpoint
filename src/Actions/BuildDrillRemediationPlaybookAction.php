@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Actions;
 
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
+use Illuminate\Support\Str;
 
 final readonly class BuildDrillRemediationPlaybookAction
 {
@@ -30,7 +31,7 @@ final readonly class BuildDrillRemediationPlaybookAction
         array $trend,
     ): array {
         $passRatePercent = $total > 0 ? round(($passing / $total) * 100, 1) : 0.0;
-        $latestResult = $latestRun instanceof BackupDrillRun ? strtolower((string) $latestRun->overall_result) : null;
+        $latestResult = $latestRun instanceof BackupDrillRun ? Str::lower($latestRun->overall_result) : null;
         $latestRunUuid = $latestRun?->run_uuid;
         $latestAgeDays = $latestRun instanceof BackupDrillRun
             ? max(0, (int) ceil($latestRun->executed_at->diffInHours(now()) / 24))
@@ -80,7 +81,7 @@ final readonly class BuildDrillRemediationPlaybookAction
                 summary: sprintf('Latest drill run %s is %d day(s) old and exceeds the %d-day freshness target.', (string) $latestRunUuid, (int) $latestAgeDays, $maxAgeDays),
                 recommendedCommands: [
                     'checkpoint:drill',
-                    'checkpoint:doctor --format=json',
+                    'checkpoint:status --health --format=json',
                 ],
                 steps: [
                     'Run a fresh backup drill and confirm it completes.',
@@ -98,8 +99,8 @@ final readonly class BuildDrillRemediationPlaybookAction
                 title: 'Backup drill trend is degrading',
                 summary: 'Recent drill outcomes show a degrading trajectory. Investigate repeated failure patterns before the next restore event.',
                 recommendedCommands: [
-                    'checkpoint:doctor --full --format=json',
-                    'checkpoint:doctor --agent',
+                    'checkpoint:status --full --format=json',
+                    'checkpoint:status --health --format=json',
                 ],
                 steps: [
                     'Inspect the latest failing drill outcomes and identify recurring failure stages.',
@@ -136,7 +137,7 @@ final readonly class BuildDrillRemediationPlaybookAction
                 title: 'Latest backup drill failed',
                 summary: 'The most recent drill run failed even though aggregate trend and pass-rate are currently acceptable.',
                 recommendedCommands: [
-                    'checkpoint:doctor --full --format=json',
+                    'checkpoint:status --full --format=json',
                 ],
                 steps: [
                     'Review the latest drill failure reason and remediation notes.',
@@ -190,8 +191,8 @@ final readonly class BuildDrillRemediationPlaybookAction
             'severity' => $severity,
             'title' => $title,
             'summary' => $summary,
-            'recommended_commands' => array_values(array_unique($recommendedCommands)),
-            'steps' => array_values(array_unique($steps)),
+            'recommended_commands' => collect($recommendedCommands)->unique()->values()->all(),
+            'steps' => collect($steps)->unique()->values()->all(),
             'evidence' => $evidence,
         ];
     }

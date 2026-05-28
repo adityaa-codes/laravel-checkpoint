@@ -23,6 +23,8 @@ final readonly class OperationalReportBuilder
         private HealthCheckComposer $healthCheckComposer,
         private BreakdownAggregator $breakdownAggregator,
         private DrillTrendAnalyzer $drillTrendAnalyzer,
+        private RunPayloadFormatter $formatter,
+        private RunMetadataExtractor $metadataExtractor,
     ) {}
 
     /**
@@ -30,72 +32,41 @@ final readonly class OperationalReportBuilder
      */
     public function recentRuns(int $limit): array
     {
-        /** @var list<array<string, mixed>> $runs */
-        $runs = CommandRun::query()
+        return CommandRun::query()
             ->select([
-                'id',
-                'operation',
-                'status',
-                'exit_code',
-                'backup_type',
-                'backup_label',
-                'stanza',
-                'repository',
-                'verification_state',
-                'restore_target',
-                'argument_text',
-                'restore_confirmation_satisfied_via',
-                'restore_verified_signal_run_id',
-                'restore_post_verification_result',
-                'last_known_good_at',
-                'started_at',
-                'finished_at',
-                'metadata',
+                'id', 'operation', 'status', 'exit_code', 'backup_type', 'backup_label',
+                'stanza', 'repository', 'verification_state', 'restore_target', 'argument_text',
+                'restore_confirmation_satisfied_via', 'restore_verified_signal_run_id',
+                'restore_post_verification_result', 'last_known_good_at', 'started_at',
+                'finished_at', 'metadata',
             ])
             ->latest('id')
             ->limit(max(1, $limit))
             ->get()
-            ->map(function (CommandRun $run): array {
-                $payload = [
-                    'id' => (int) $run->getKey(),
-                    'operation' => $run->operation,
-                    'status' => $run->status->value,
-                    'exit_code' => $run->exit_code,
-                    'backup' => $this->backupSummary($run),
-                    'verification_state' => $run->verification_state,
-                    'restore_target' => $run->restore_target,
-                    'restore_audit' => $this->restoreAuditPayload($run),
-                    'post_restore_verification' => $this->postRestoreVerificationPayload($run),
-                    'last_known_good_at' => $run->last_known_good_at?->format('Y-m-d H:i:s'),
-                    'started_at' => $run->started_at?->format('Y-m-d H:i:s'),
-                    'finished_at' => $run->finished_at?->format('Y-m-d H:i:s'),
-                ];
-
-                $replication = $this->replicationPayload($run);
-
-                if ($replication !== null) {
-                    $payload['replication'] = $replication;
-                }
-
-                return $payload;
-            })
+            ->map(fn (CommandRun $run): array => collect([
+                'id' => (int) $run->getKey(),
+                'operation' => $run->operation,
+                'status' => $run->status->value,
+                'exit_code' => $run->exit_code,
+                'backup' => $this->formatter->backupSummary($run),
+                'verification_state' => $run->verification_state,
+                'restore_target' => $run->restore_target,
+                'restore_audit' => $this->metadataExtractor->restoreAudit($run),
+                'post_restore_verification' => $this->metadataExtractor->postRestoreVerification($run),
+                'last_known_good_at' => $run->last_known_good_at?->format('Y-m-d H:i:s'),
+                'started_at' => $run->started_at?->format('Y-m-d H:i:s'),
+                'finished_at' => $run->finished_at?->format('Y-m-d H:i:s'),
+                'replication' => $this->metadataExtractor->replication($run),
+            ])->filter(fn (mixed $value, string $key): bool => $key !== 'replication' || $value !== null)->all())
             ->values()
             ->all();
-
-        return $runs;
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     public function summary(): array
     {
         return $this->summaryFromSnapshot($this->summarySnapshot());
     }
 
-    /**
-     * @return array{recent_runs:list<array<string, mixed>>,summary:array<string, mixed>,breakdown:array<string,mixed>,verification:array<string,mixed>,health:array{ok:bool,checks:list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>}}
-     */
     public function reportPayload(int $limit): array
     {
         $snapshot = $this->summarySnapshot();
@@ -115,9 +86,6 @@ final readonly class OperationalReportBuilder
         ];
     }
 
-    /**
-     * @return list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>
-     */
     public function healthChecks(): array
     {
         $snapshot = $this->summarySnapshot();
@@ -126,18 +94,11 @@ final readonly class OperationalReportBuilder
         return $this->healthCheckComposer->healthChecksFromSnapshot($snapshot, $drillTrend, $this->verificationSummary());
     }
 
-    /**
-     * @param  list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>}>  $checks
-     */
     public function healthOk(array $checks): bool
     {
         return $this->healthCheckComposer->healthOk($checks);
     }
 
-    /**
-     * @param  array{command_run_counts:array{pending_runs:int,running_runs:int,failed_runs_24h:int},drill_window_days:int,drill_summary:array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int},last_known_good:?CommandRun,latest_verified:?CommandRun,latest_restore_failure:?CommandRun,latest_restore_run:?CommandRun,latest_failed_run:?CommandRun}  $snapshot
-     * @return array<string, mixed>
-     */
     private function summaryFromSnapshot(array $snapshot): array
     {
         $commandRunCounts = $snapshot['command_run_counts'];
@@ -149,16 +110,16 @@ final readonly class OperationalReportBuilder
             'pending_runs' => $commandRunCounts['pending_runs'],
             'running_runs' => $commandRunCounts['running_runs'],
             'failed_runs_24h' => $commandRunCounts['failed_runs_24h'],
-            'latest_failed_run' => $this->latestFailedRunPayload($snapshot['latest_failed_run']),
-            'last_known_good_backup' => $this->summarySignalPayload($snapshot['last_known_good'], 'last_known_good_at'),
-            'latest_verified_backup' => $this->summarySignalPayload($snapshot['latest_verified'], 'verified_at'),
+            'latest_failed_run' => $this->formatter->latestFailedRun($snapshot['latest_failed_run']),
+            'last_known_good_backup' => $this->formatter->summarySignal($snapshot['last_known_good'], 'last_known_good_at'),
+            'latest_verified_backup' => $this->formatter->summarySignal($snapshot['latest_verified'], 'verified_at'),
             'latest_backup_drill' => $this->drillPayload($drillSummary['latest']),
             'latest_failed_backup_drill' => $this->drillPayload($drillSummary['latest_failed']),
             'backup_drill_pass_rate' => $this->drillPassRatePayload($drillSummary['total'], $drillSummary['passing'], $drillWindowDays),
             'backup_drill_trend' => $drillTrend,
             'backup_drill_remediation_playbook' => $this->backupDrillRemediationPlaybook($drillSummary, $drillWindowDays, $drillTrend),
             'latest_restore_run' => $this->restoreRunPayload($snapshot['latest_restore_run']),
-            'latest_restore_failure' => $this->restoreFailurePayload($snapshot['latest_restore_failure']),
+            'latest_restore_failure' => $this->formatter->restoreFailure($snapshot['latest_restore_failure']),
         ];
 
         $summary['backup_drill_pass_rate_30d'] = $summary['backup_drill_pass_rate'];
@@ -166,9 +127,61 @@ final readonly class OperationalReportBuilder
         return $summary;
     }
 
-    /**
-     * @return array{pending_runs:int,running_runs:int,failed_runs_24h:int}
-     */
+    private function restoreRunPayload(?CommandRun $run): array
+    {
+        if (! $run instanceof CommandRun) {
+            return ['label' => '-', 'timestamp' => null, 'operation' => null, 'status' => null, 'target' => null, 'audit' => null, 'post_restore_verification' => null];
+        }
+
+        $target = $run->restore_target ?? $run->argument_text;
+        $label = "{$run->operation} [{$run->status->value}]";
+
+        if ($target !== null && $target !== '') {
+            $label .= " ({$target})";
+        }
+
+        $audit = $this->metadataExtractor->restoreAudit($run);
+        $postRestoreVerification = $this->metadataExtractor->postRestoreVerification($run);
+        $summary = $run->restoreAuditSummary();
+        $postVerificationSummary = $run->restorePostVerificationSummary();
+
+        $parts = [];
+
+        if ($summary['confirmation_satisfied_via'] !== null) {
+            $parts[] = 'confirm='.$summary['confirmation_satisfied_via'];
+        }
+
+        if ($summary['verified_signal_run_id'] !== null) {
+            $parts[] = 'verified_run='.$summary['verified_signal_run_id'];
+        }
+
+        $aggregateResult = $postVerificationSummary['aggregate_result'];
+        if ($aggregateResult !== null && $aggregateResult !== '') {
+            $parts[] = 'post_verify='.$aggregateResult;
+        }
+
+        if ($parts !== []) {
+            $label .= ' {'.implode(', ', $parts).'}';
+        }
+
+        $timestamp = $run->finished_at ?? $run->started_at;
+
+        if ($timestamp instanceof Carbon) {
+            $label .= " at {$timestamp->format('Y-m-d H:i:s')}";
+        }
+
+        return [
+            'label' => $label,
+            'timestamp' => $timestamp?->format('Y-m-d H:i:s'),
+            'operation' => $run->operation,
+            'status' => $run->status->value,
+            'target' => $target,
+            'audit' => $audit,
+            'blast_radius' => $audit['blast_radius'] ?? null,
+            'post_restore_verification' => $postRestoreVerification,
+        ];
+    }
+
     private function commandRunSummaryCounts(): array
     {
         return [
@@ -178,9 +191,6 @@ final readonly class OperationalReportBuilder
         ];
     }
 
-    /**
-     * @return array{command_run_counts:array{pending_runs:int,running_runs:int,failed_runs_24h:int},drill_window_days:int,drill_summary:array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int},last_known_good:?CommandRun,latest_verified:?CommandRun,latest_restore_failure:?CommandRun,latest_restore_run:?CommandRun,latest_failed_run:?CommandRun}
-     */
     private function summarySnapshot(): array
     {
         $restoreOperations = ['logical_restore_file', 'logical_restore_latest', 'pitr_restore', 'physical_restore'];
@@ -229,11 +239,6 @@ final readonly class OperationalReportBuilder
         return max(1, $this->config->get('checkpoint.observability.backup_drill_pass_rate_window_days', 30));
     }
 
-    /**
-     * @param  array{latest:?BackupDrillRun,latest_failed:?BackupDrillRun,total:int,passing:int}  $summary
-     * @param  array<string,mixed>  $trend
-     * @return array{signature:string,severity:'info'|'warn'|'critical',title:string,summary:string,recommended_commands:list<string>,steps:list<string>,evidence:array<string,mixed>}
-     */
     private function backupDrillRemediationPlaybook(array $summary, int $windowDays, array $trend): array
     {
         $minPassRate = max(0.0, min(100.0, $this->config->get('checkpoint.observability.backup_drill_min_pass_rate', 100.0)));
@@ -250,341 +255,35 @@ final readonly class OperationalReportBuilder
         );
     }
 
-    private function backupSummary(CommandRun $run): string
-    {
-        $parts = collect([$run->backup_type, $run->backup_label])->filter()->all();
-
-        return $parts === [] ? '-' : collect($parts)->implode(':');
-    }
-
-    /**
-     * @return array{label:string,timestamp:string|null,operation:string|null}
-     */
-    private function summarySignalPayload(?CommandRun $run, string $timestampField): array
-    {
-        if (! $run instanceof CommandRun) {
-            return ['label' => '-', 'timestamp' => null, 'operation' => null];
-        }
-
-        /** @var Carbon|null $timestamp */
-        $timestamp = $run->{$timestampField};
-        $summary = $this->backupSummary($run);
-
-        if ($summary === '-') {
-            $summary = $run->operation;
-        }
-
-        return [
-            'label' => $timestamp instanceof Carbon ? "{$summary} at {$timestamp->format('Y-m-d H:i:s')}" : $summary,
-            'timestamp' => $timestamp?->format('Y-m-d H:i:s'),
-            'operation' => $run->operation,
-        ];
-    }
-
-    /**
-     * @return array{label:string,timestamp:string|null,operation:string|null,status:string|null,exit_code:int|null,failure_reason:string|null,next_action:string|null}
-     */
-    private function latestFailedRunPayload(?CommandRun $run): array
-    {
-        if (! $run instanceof CommandRun) {
-            return [
-                'label' => '-',
-                'timestamp' => null,
-                'operation' => null,
-                'status' => null,
-                'exit_code' => null,
-                'failure_reason' => null,
-                'next_action' => null,
-            ];
-        }
-
-        $timestamp = $run->finished_at ?? $run->started_at;
-        $reason = $this->resolveFailureReason($run);
-        $nextAction = $this->nextActionForFailure($run, $reason);
-
-        $exitLabel = $run->exit_code !== null ? (string) $run->exit_code : '-';
-        $atLabel = $timestamp instanceof Carbon ? ' at '.$timestamp->format('Y-m-d H:i:s') : '';
-
-        return [
-            'label' => "{$run->operation} [failed] (exit: {$exitLabel}){$atLabel}",
-            'timestamp' => $timestamp?->format('Y-m-d H:i:s'),
-            'operation' => $run->operation,
-            'status' => $run->status->value,
-            'exit_code' => $run->exit_code,
-            'failure_reason' => $reason,
-            'next_action' => $nextAction,
-        ];
-    }
-
-    /**
-     * @return array{label:string,timestamp:string|null,operation:string|null,target:string|null}
-     */
-    private function restoreFailurePayload(?CommandRun $run): array
-    {
-        if (! $run instanceof CommandRun) {
-            return ['label' => '-', 'timestamp' => null, 'operation' => null, 'target' => null];
-        }
-
-        $target = $run->restore_target ?? $run->argument_text;
-        $label = $run->operation;
-
-        if (is_string($target) && $target !== '') {
-            $label .= " ({$target})";
-        }
-
-        if ($run->finished_at instanceof Carbon) {
-            $label .= " at {$run->finished_at->format('Y-m-d H:i:s')}";
-        }
-
-        return [
-            'label' => $label,
-            'timestamp' => $run->finished_at?->format('Y-m-d H:i:s'),
-            'operation' => $run->operation,
-            'target' => $target,
-        ];
-    }
-
-    /**
-     * @return list<string>
-     */
     private function failedRunSummaryColumns(): array
     {
-        return [
-            'id',
-            'operation',
-            'status',
-            'exit_code',
-            'command_output',
-            'started_at',
-            'finished_at',
-            'metadata',
-        ];
+        return ['id', 'operation', 'status', 'exit_code', 'command_output', 'started_at', 'finished_at', 'metadata'];
     }
 
-    private function resolveFailureReason(CommandRun $run): ?string
-    {
-        if (is_string($run->command_output) && str($run->command_output)->trim()->isNotEmpty()) {
-            $line = str(strtok($run->command_output, "\n") ?: '')->trim()->value();
-
-            if ($line !== '') {
-                return mb_substr($line, 0, 240);
-            }
-        }
-
-        if ($run->exit_code !== null) {
-            return "Command exited with code {$run->exit_code}.";
-        }
-
-        return null;
-    }
-
-    private function nextActionForFailure(CommandRun $run, ?string $reason): string
-    {
-        if (
-            $run->operation === 'logical_backup'
-            && is_string($reason)
-            && str($reason)->contains('No shell command configured')
-        ) {
-            return 'Set CP_CMD_LOGICAL_BACKUP, then run php artisan checkpoint:backup.';
-        }
-
-        return 'Run php artisan checkpoint:doctor --full --limit=10 --format=json for full failure context.';
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function restoreRunPayload(?CommandRun $run): array
-    {
-        if (! $run instanceof CommandRun) {
-            return [
-                'label' => '-',
-                'timestamp' => null,
-                'operation' => null,
-                'status' => null,
-                'target' => null,
-                'audit' => null,
-                'post_restore_verification' => null,
-            ];
-        }
-
-        $target = $run->restore_target ?? $run->argument_text;
-        $label = "{$run->operation} [{$run->status->value}]";
-
-        if (is_string($target) && $target !== '') {
-            $label .= " ({$target})";
-        }
-
-        $audit = $this->restoreAuditPayload($run);
-        $postRestoreVerification = $this->postRestoreVerificationPayload($run);
-        $summary = $run->restoreAuditSummary();
-        $postVerificationSummary = $run->restorePostVerificationSummary();
-        $confirmation = $summary['confirmation_satisfied_via'];
-        $verifiedRunId = $summary['verified_signal_run_id'];
-        $postVerificationResult = $postVerificationSummary['aggregate_result'];
-
-        if ($confirmation !== null || is_int($verifiedRunId) || is_string($postVerificationResult)) {
-            $parts = [];
-
-            if ($confirmation !== null) {
-                $parts[] = 'confirm='.$confirmation;
-            }
-
-            if (is_int($verifiedRunId)) {
-                $parts[] = 'verified_run='.$verifiedRunId;
-            }
-
-            if (is_string($postVerificationResult) && $postVerificationResult !== '') {
-                $parts[] = 'post_verify='.$postVerificationResult;
-            }
-
-            $label .= ' {'.collect($parts)->implode(', ').'}';
-        }
-
-        $timestamp = $run->finished_at ?? $run->started_at;
-
-        if ($timestamp instanceof Carbon) {
-            $label .= " at {$timestamp->format('Y-m-d H:i:s')}";
-        }
-
-        return [
-            'label' => $label,
-            'timestamp' => $timestamp?->format('Y-m-d H:i:s'),
-            'operation' => $run->operation,
-            'status' => $run->status->value,
-            'target' => $target,
-            'audit' => $audit,
-            'blast_radius' => is_array($audit['blast_radius'] ?? null) ? $audit['blast_radius'] : null,
-            'post_restore_verification' => $postRestoreVerification,
-        ];
-    }
-
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function restoreAuditPayload(CommandRun $run): ?array
-    {
-        $metadata = is_array($run->metadata) ? $run->metadata : [];
-        $restoreAudit = is_array($metadata['restore_audit'] ?? null) ? $metadata['restore_audit'] : [];
-        $summary = $run->restoreAuditSummary();
-
-        if ($summary['confirmation_satisfied_via'] !== null) {
-            $restoreAudit['confirmation_satisfied_via'] = $summary['confirmation_satisfied_via'];
-        }
-
-        if ($summary['verified_signal_run_id'] !== null) {
-            $restoreAudit['verified_signal_run_id'] = $summary['verified_signal_run_id'];
-        }
-
-        $postVerificationSummary = $run->restorePostVerificationSummary();
-
-        if ($postVerificationSummary['aggregate_result'] !== null) {
-            $postVerification = is_array($restoreAudit['post_restore_verification'] ?? null)
-                ? $restoreAudit['post_restore_verification']
-                : [];
-            $postVerification['aggregate_result'] = $postVerificationSummary['aggregate_result'];
-            $restoreAudit['post_restore_verification'] = $postVerification;
-        }
-
-        return $restoreAudit !== [] ? $restoreAudit : null;
-    }
-
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function postRestoreVerificationPayload(CommandRun $run): ?array
-    {
-        $metadata = is_array($run->metadata) ? $run->metadata : [];
-        $restoreAudit = is_array($metadata['restore_audit'] ?? null) ? $metadata['restore_audit'] : [];
-        $postVerification = is_array($restoreAudit['post_restore_verification'] ?? null)
-            ? $restoreAudit['post_restore_verification']
-            : [];
-        $summary = $run->restorePostVerificationSummary();
-
-        if ($summary['aggregate_result'] !== null) {
-            $postVerification['aggregate_result'] = $summary['aggregate_result'];
-        }
-
-        return $postVerification !== [] ? $postVerification : null;
-    }
-
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function replicationPayload(CommandRun $run): ?array
-    {
-        $metadata = is_array($run->metadata) ? $run->metadata : [];
-        $replication = is_array($metadata['replication'] ?? null) ? $metadata['replication'] : null;
-
-        if ($replication === null) {
-            return null;
-        }
-
-        return [
-            'engine' => $replication['engine'] ?? null,
-            'source' => is_array($replication['source'] ?? null) ? $replication['source'] : null,
-            'destination' => is_array($replication['destination'] ?? null) ? $replication['destination'] : null,
-            'queue_only' => $replication['queue_only'] ?? null,
-            'dry_run_requested' => $replication['dry_run_requested'] ?? null,
-            'apply_requested' => $replication['apply_requested'] ?? null,
-            'force_requested' => $replication['force_requested'] ?? null,
-            'overwrite_destination' => $replication['overwrite_destination'] ?? null,
-            'governance_preflight' => is_array($replication['governance_preflight'] ?? null) ? $replication['governance_preflight'] : null,
-            'result' => $replication['result'] ?? null,
-            'sanity' => is_array($replication['sanity'] ?? null) ? $replication['sanity'] : null,
-            'failure_analysis' => is_array($replication['failure_analysis'] ?? null) ? $replication['failure_analysis'] : null,
-            'failure_context' => is_array($replication['failure_context'] ?? null) ? $replication['failure_context'] : null,
-        ];
-    }
-
-    /**
-     * @return list<string>
-     */
     private function summarySignalColumns(): array
     {
-        return [
-            'id',
-            'operation',
-            'backup_type',
-            'backup_label',
-            'verified_at',
-            'last_known_good_at',
-        ];
+        return ['id', 'operation', 'backup_type', 'backup_label', 'verified_at', 'last_known_good_at'];
     }
 
-    /**
-     * @return list<string>
-     */
     private function restoreSummaryColumns(): array
     {
         return [
-            'id',
-            'operation',
-            'status',
-            'argument_text',
-            'restore_target',
-            'restore_confirmation_satisfied_via',
-            'restore_verified_signal_run_id',
-            'restore_post_verification_result',
-            'started_at',
-            'finished_at',
-            'metadata',
+            'id', 'operation', 'status', 'argument_text', 'restore_target',
+            'restore_confirmation_satisfied_via', 'restore_verified_signal_run_id',
+            'restore_post_verification_result', 'started_at', 'finished_at', 'metadata',
         ];
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     private function drillPayload(?BackupDrillRun $run): array
     {
         if (! $run instanceof BackupDrillRun) {
             return ['label' => '-', 'timestamp' => null, 'run_uuid' => null, 'overall_result' => null, 'executed_by' => null];
         }
 
-        $statusUpper = str((string) $run->overall_result)->upper()->value();
+        $statusUpper = str($run->overall_result)->upper()->value();
         $label = "{$run->run_uuid} [{$statusUpper}]";
 
-        if (is_string($run->executed_by) && $run->executed_by !== '') {
+        if ($run->executed_by !== null && $run->executed_by !== '') {
             $label .= " by {$run->executed_by}";
         }
 
@@ -599,9 +298,6 @@ final readonly class OperationalReportBuilder
         ];
     }
 
-    /**
-     * @return array{label:string,window_days:int,total:int,passing:int,pass_rate_percent:float|null}
-     */
     private function drillPassRatePayload(int $total, int $passing, int $windowDays): array
     {
         if ($total < 1) {
@@ -619,9 +315,6 @@ final readonly class OperationalReportBuilder
         ];
     }
 
-    /**
-     * @return array<string,mixed>
-     */
     private function verificationSummary(): array
     {
         $total = VerificationRun::query()->count();
@@ -631,18 +324,9 @@ final readonly class OperationalReportBuilder
 
         if (! $latest instanceof VerificationRun) {
             return [
-                'total_runs' => 0,
-                'verified_runs' => 0,
-                'failed_runs' => 0,
-                'success_rate_percent' => null,
-                'health_status' => 'warn',
-                'latest' => [
-                    'id' => null,
-                    'command_run_id' => null,
-                    'verification_type' => null,
-                    'status' => null,
-                    'verified_at' => null,
-                ],
+                'total_runs' => 0, 'verified_runs' => 0, 'failed_runs' => 0,
+                'success_rate_percent' => null, 'health_status' => 'warn',
+                'latest' => ['id' => null, 'command_run_id' => null, 'verification_type' => null, 'status' => null, 'verified_at' => null],
             ];
         }
 
@@ -654,7 +338,7 @@ final readonly class OperationalReportBuilder
             'health_status' => $failed > 0 ? 'warn' : 'pass',
             'latest' => [
                 'id' => (int) $latest->getKey(),
-                'command_run_id' => (int) $latest->command_run_id,
+                'command_run_id' => $latest->command_run_id,
                 'verification_type' => $latest->verification_type,
                 'status' => $latest->status,
                 'verified_at' => $latest->verified_at?->format('Y-m-d H:i:s'),

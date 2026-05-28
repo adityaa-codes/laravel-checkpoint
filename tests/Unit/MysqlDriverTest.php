@@ -2,11 +2,15 @@
 
 declare(strict_types=1);
 
+use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlConfiguration;
 use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
+use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlMetadataBuilder;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Services\ReplicationFailureSuggestionMapper;
+use AdityaaCodes\LaravelCheckpoint\ValueObjects\DriverContext;
+use Illuminate\Support\Facades\File;
 use Symfony\Component\Process\Process;
 
 it('builds mysqldump backup commands from structured config', function (): void {
@@ -16,10 +20,10 @@ it('builds mysqldump backup commands from structured config', function (): void 
         throw new RuntimeException('Unable to allocate a temporary mysql output path.');
     }
 
-    unlink($outputDir);
-    mkdir($outputDir, 0755, true);
+    File::delete($outputDir);
+    File::makeDirectory($outputDir, 0755, true);
 
-    config()->set('checkpoint.drivers.mysql.dump_binary', 'mysqldump');
+    config()->set('database.connections.mysql.dump.dump_binary_path', '');
     config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
     config()->set('checkpoint.drivers.mysql.output_prefix', 'nightly');
     config()->set('checkpoint.drivers.mysql.file_extension', 'sql');
@@ -33,7 +37,7 @@ it('builds mysqldump backup commands from structured config', function (): void 
         'operation' => 'logical_backup',
     ]);
 
-    $process = buildMysqlProcess(new MysqlDriver, $run);
+    $process = buildMysqlProcess(resolveMysqlDriver(), $run);
 
     expect($process)->toBeInstanceOf(Process::class)
         ->and($process->getCommandLine())->toContain('mysqldump')
@@ -52,11 +56,11 @@ it('builds mysqlbinlog commands for pitr restore targets', function (): void {
         throw new RuntimeException('Unable to allocate a temporary mysql temp directory path.');
     }
 
-    unlink($tempDir);
-    mkdir($tempDir, 0755, true);
+    File::delete($tempDir);
+    File::makeDirectory($tempDir, 0755, true);
 
     config()->set('checkpoint.temp_dir', $tempDir);
-    config()->set('checkpoint.drivers.mysql.mysqlbinlog_binary', 'mysqlbinlog');
+    config()->set('database.connections.mysql.dump.dump_binary_path', '');
     config()->set('checkpoint.drivers.mysql.pitr.binlog_files', ['/var/lib/mysql/binlog.000001', '/var/lib/mysql/binlog.000002']);
     config()->set('checkpoint.drivers.mysql.extra_args.pitr_binlog', ['--read-from-remote-server']);
 
@@ -65,7 +69,7 @@ it('builds mysqlbinlog commands for pitr restore targets', function (): void {
         'argument_text' => '2026-03-24 11:00:00',
     ]);
 
-    $process = buildMysqlProcess(new MysqlDriver, $run, [
+    $process = buildMysqlProcess(resolveMysqlDriver(), $run, [
         'restore_target' => '2026-03-24 11:00:00',
     ]);
 
@@ -85,10 +89,10 @@ it('rejects mysql temp directory paths that cannot be used for temp files', func
 
     config()->set('checkpoint.temp_dir', $tempDirFile);
 
-    $driver = new MysqlDriver;
-    $method = new ReflectionMethod($driver, 'tempDir');
+    $config = resolve(MysqlConfiguration::class);
+    $method = new ReflectionMethod($config, 'tempDir');
 
-    expect(fn (): mixed => $method->invoke($driver))
+    expect(fn (): mixed => $method->invoke($config))
         ->toThrow(ConfigurationException::class, sprintf('Unable to create checkpoint temp directory [%s].', $tempDirFile));
 });
 
@@ -106,12 +110,12 @@ it('rejects restore paths outside the configured mysql output directory', functi
     }
 
     $outsideTarget = $outsideTargetBase.'.sql';
-    rename($outsideTargetBase, $outsideTarget);
+    File::move($outsideTargetBase, $outsideTarget);
 
-    unlink($outputDir);
-    mkdir($outputDir, 0755, true);
+    File::delete($outputDir);
+    File::makeDirectory($outputDir, 0755, true);
 
-    config()->set('checkpoint.drivers.mysql.mysql_binary', 'mysql');
+    config()->set('database.connections.mysql.dump.dump_binary_path', '');
     config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
     config()->set('checkpoint.drivers.mysql.file_extension', 'sql');
 
@@ -120,7 +124,7 @@ it('rejects restore paths outside the configured mysql output directory', functi
         'argument_text' => $outsideTarget,
     ]);
 
-    expect(fn (): Process => buildMysqlProcess(new MysqlDriver, $run))
+    expect(fn (): Process => buildMysqlProcess(resolveMysqlDriver(), $run))
         ->toThrow(ConfigurationException::class, sprintf(
             'logical_restore_file target [%s] must be inside the configured mysql output directory.',
             $outsideTarget,
@@ -134,17 +138,17 @@ it('rejects restore commands when the validated mysql restore file changes befor
         throw new RuntimeException('Unable to allocate a temporary mysql restore-file path.');
     }
 
-    unlink($outputDir);
-    mkdir($outputDir, 0755, true);
+    File::delete($outputDir);
+    File::makeDirectory($outputDir, 0755, true);
 
     $target = $outputDir.'/nightly-2026-03-11.sql';
-    file_put_contents($target, 'original');
+    File::put($target, 'original');
 
-    config()->set('checkpoint.drivers.mysql.mysql_binary', 'mysql');
+    config()->set('database.connections.mysql.dump.dump_binary_path', '');
     config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
     config()->set('checkpoint.drivers.mysql.file_extension', 'sql');
 
-    $driver = new MysqlDriver;
+    $driver = resolveMysqlDriver();
     $run = CommandRun::factory()->make([
         'operation' => 'logical_restore_file',
         'argument_text' => 'nightly-2026-03-11',
@@ -152,12 +156,12 @@ it('rejects restore commands when the validated mysql restore file changes befor
 
     $plannedMetadata = plannedMysqlMetadata($driver, $run);
 
-    unlink($target);
-    file_put_contents($target, 'replacement');
+    File::delete($target);
+    File::put($target, 'replacement');
 
     expect(fn (): Process => buildMysqlProcess($driver, $run, $plannedMetadata))
         ->toThrow(ConfigurationException::class, sprintf(
-            'logical restore target [%s] changed after validation and must be selected again.',
+            'Target [%s] changed after validation and must be selected again.',
             $target,
         ));
 });
@@ -169,10 +173,12 @@ it('records metadata for successful mysql logical backups', function (): void {
         throw new RuntimeException('Unable to allocate a temporary mysql execute path.');
     }
 
-    unlink($outputDir);
-    mkdir($outputDir, 0755, true);
+    File::delete($outputDir);
+    File::makeDirectory($outputDir, 0755, true);
 
-    config()->set('checkpoint.drivers.mysql.dump_binary', fakeMysqlScript(<<<'SH'
+    $binDir = sys_get_temp_dir().'/mysql-bin-'.random_int(10000, 99999);
+    File::makeDirectory($binDir, 0755);
+    File::put($binDir.'/mysqldump', <<<'SH'
 #!/bin/sh
 set -e
 for arg in "$@"; do
@@ -185,7 +191,9 @@ for arg in "$@"; do
 done
 printf 'backup complete'
 SH
-    ));
+    );
+    File::chmod($binDir.'/mysqldump', 0755);
+    config()->set('database.connections.mysql.dump.dump_binary_path', $binDir);
     config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
     config()->set('checkpoint.drivers.mysql.output_prefix', 'mysql-export');
     config()->set('checkpoint.drivers.mysql.file_extension', 'sql');
@@ -196,11 +204,19 @@ SH
         'attempts' => 0,
     ]);
 
-    (new MysqlDriver)->execute($run);
+    $context = new DriverContext(
+        operation: $run->operation,
+        argument: $run->argument_text,
+        driverName: 'mysql',
+        metadata: [],
+        runUuid: (string) $run->getKey(),
+    );
+
+    (resolveMysqlDriver())->execute($context, $run);
 
     $run->refresh();
 
-    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+    expect($context->isSuccessful())->toBeTrue()
         ->and($run->command_output)->toContain('backup complete')
         ->and($run->artifact_path)->toBe($outputDir.'/mysql-export-'.$run->getKey().'.sql')
         ->and($run->metadata)->toMatchArray([
@@ -216,11 +232,11 @@ it('captures pitr baseline and binlog chain metadata during planning', function 
         throw new RuntimeException('Unable to allocate a temporary mysql PITR metadata path.');
     }
 
-    unlink($outputDir);
-    mkdir($outputDir, 0755, true);
+    File::delete($outputDir);
+    File::makeDirectory($outputDir, 0755, true);
 
     $baseline = $outputDir.'/mysql-export-100.sql';
-    file_put_contents($baseline, 'baseline');
+    File::put($baseline, 'baseline');
 
     config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
     config()->set('checkpoint.drivers.mysql.output_prefix', 'mysql-export');
@@ -238,7 +254,7 @@ it('captures pitr baseline and binlog chain metadata during planning', function 
         'last_known_good_at' => now(),
     ]);
 
-    $driver = new MysqlDriver;
+    $driver = resolveMysqlDriver();
     $run = CommandRun::factory()->make([
         'operation' => 'pitr_restore',
         'argument_text' => '2026-03-24 11:00:00',
@@ -260,16 +276,20 @@ it('records post-restore verification contract for mysql logical restores', func
         throw new RuntimeException('Unable to allocate a temporary mysql restore audit path.');
     }
 
-    unlink($outputDir);
-    mkdir($outputDir, 0755, true);
+    File::delete($outputDir);
+    File::makeDirectory($outputDir, 0755, true);
 
     $target = $outputDir.'/nightly-2026-03-11.sql';
-    file_put_contents($target, 'restore source');
+    File::put($target, 'restore source');
 
     config()->set('checkpoint.restore.require_confirmation', true);
     config()->set('checkpoint.restore.confirmation_phrase', 'CONFIRM-RESTORE');
     config()->set('checkpoint.restore.confirmation_token', 'CONFIRM-RESTORE');
-    config()->set('checkpoint.drivers.mysql.mysql_binary', fakeMysqlScript("#!/bin/sh\nprintf 'restore complete'\n"));
+    $binDir = sys_get_temp_dir().'/mysql-bin-'.random_int(10000, 99999);
+    File::makeDirectory($binDir, 0755);
+    File::put($binDir.'/mysql', "#!/bin/sh\nprintf 'restore complete'\n");
+    File::chmod($binDir.'/mysql', 0755);
+    config()->set('database.connections.mysql.dump.dump_binary_path', $binDir);
     config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
     config()->set('checkpoint.drivers.mysql.file_extension', 'sql');
 
@@ -280,11 +300,19 @@ it('records post-restore verification contract for mysql logical restores', func
         'attempts' => 0,
     ]);
 
-    (new MysqlDriver)->execute($run);
+    $context = new DriverContext(
+        operation: $run->operation,
+        argument: $run->argument_text,
+        driverName: 'mysql',
+        metadata: [],
+        runUuid: (string) $run->getKey(),
+    );
+
+    (resolveMysqlDriver())->execute($context, $run);
 
     $run->refresh();
 
-    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+    expect($context->isSuccessful())->toBeTrue()
         ->and($run->metadata)->toMatchArray([
             'driver' => 'mysql',
             'database' => ':memory:',
@@ -330,10 +358,10 @@ it('records post-restore verification contract for mysql logical restores', func
 });
 
 it('does not persist mysql pitr baseline artifacts into non-existent command run columns', function (): void {
-    $driver = new MysqlDriver;
-    $method = new ReflectionMethod($driver, 'persistedPlannedMetadata');
+    $builder = resolve(MysqlMetadataBuilder::class);
+    $method = new ReflectionMethod($builder, 'persistedPlannedMetadata');
 
-    $persisted = $method->invoke($driver, [
+    $persisted = $method->invoke($builder, [
         'restore_target' => '2026-03-24 11:00:00',
         'restore_target_snapshot' => ['path' => '/tmp/snapshot.sql'],
         'pitr_base_target' => '/tmp/mysql-baseline.sql',
@@ -359,10 +387,12 @@ it('redacts mysql command lines before persisting and logging them', function ()
         throw new RuntimeException('Unable to allocate a temporary mysql redaction path.');
     }
 
-    unlink($outputDir);
-    mkdir($outputDir, 0755, true);
+    File::delete($outputDir);
+    File::makeDirectory($outputDir, 0755, true);
 
-    config()->set('checkpoint.drivers.mysql.dump_binary', fakeMysqlScript(<<<'SH'
+    $binDir = sys_get_temp_dir().'/mysql-bin-'.random_int(10000, 99999);
+    File::makeDirectory($binDir, 0755);
+    File::put($binDir.'/mysqldump', <<<'SH'
 #!/bin/sh
 set -e
 for arg in "$@"; do
@@ -375,7 +405,9 @@ for arg in "$@"; do
 done
 printf 'backup complete'
 SH
-    ));
+    );
+    File::chmod($binDir.'/mysqldump', 0755);
+    config()->set('database.connections.mysql.dump.dump_binary_path', $binDir);
     config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
     config()->set('checkpoint.drivers.mysql.output_prefix', 'mysql-export');
     config()->set('checkpoint.drivers.mysql.file_extension', 'sql');
@@ -392,7 +424,15 @@ SH
         'attempts' => 0,
     ]);
 
-    (new MysqlDriver)->execute($run);
+    $context = new DriverContext(
+        operation: $run->operation,
+        argument: $run->argument_text,
+        driverName: 'mysql',
+        metadata: [],
+        runUuid: (string) $run->getKey(),
+    );
+
+    (resolveMysqlDriver())->execute($context, $run);
 
     $run->refresh();
 
@@ -422,7 +462,7 @@ it('plans replication_sync metadata with explicit default safety gates', functio
         ],
     ]);
 
-    $metadata = plannedMysqlMetadata(new MysqlDriver, $run);
+    $metadata = plannedMysqlMetadata(resolveMysqlDriver(), $run);
 
     expect($metadata['metadata']['replication']['engine'] ?? null)->toBe('mysql')
         ->and($metadata['metadata']['replication']['dry_run_requested'] ?? null)->toBeTrue()
@@ -447,7 +487,7 @@ it('rejects replication_sync on mysql driver when replication engine is not mysq
         ],
     ]);
 
-    expect(fn (): array => plannedMysqlMetadata(new MysqlDriver, $run))
+    expect(fn (): array => plannedMysqlMetadata(resolveMysqlDriver(), $run))
         ->toThrow(ConfigurationException::class, 'Unsupported replication engine [pgsql] for mysql driver. mysql driver supports mysql -> mysql only.');
 });
 
@@ -458,8 +498,8 @@ it('runs replication_sync as dry-run-only by default and records conservative sa
         throw new RuntimeException('Unable to allocate a temporary mysql replication path.');
     }
 
-    unlink($outputDir);
-    mkdir($outputDir, 0755, true);
+    File::delete($outputDir);
+    File::makeDirectory($outputDir, 0755, true);
 
     $tempDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-repl-temp-');
 
@@ -467,10 +507,12 @@ it('runs replication_sync as dry-run-only by default and records conservative sa
         throw new RuntimeException('Unable to allocate a temporary mysql replication temp path.');
     }
 
-    unlink($tempDir);
-    mkdir($tempDir, 0755, true);
+    File::delete($tempDir);
+    File::makeDirectory($tempDir, 0755, true);
 
-    config()->set('checkpoint.drivers.mysql.dump_binary', fakeMysqlScript(<<<'SH'
+    $binDir = sys_get_temp_dir().'/mysql-bin-'.random_int(10000, 99999);
+    File::makeDirectory($binDir, 0755);
+    File::put($binDir.'/mysqldump', <<<'SH'
 #!/bin/sh
 for arg in "$@"; do
   case "$arg" in
@@ -482,7 +524,9 @@ for arg in "$@"; do
 done
 printf 'dry-run export ok'
 SH
-    ));
+    );
+    File::chmod($binDir.'/mysqldump', 0755);
+    config()->set('database.connections.mysql.dump.dump_binary_path', $binDir);
     config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
     config()->set('checkpoint.temp_dir', $tempDir);
 
@@ -502,10 +546,18 @@ SH
         ],
     ]);
 
-    (new MysqlDriver)->execute($run);
+    $context = new DriverContext(
+        operation: $run->operation,
+        argument: $run->argument_text,
+        driverName: 'mysql',
+        metadata: is_array($run->metadata) ? $run->metadata : [],
+        runUuid: (string) $run->getKey(),
+    );
+
+    (resolveMysqlDriver())->execute($context, $run);
     $run->refresh();
 
-    expect($run->status)->toBe(CommandRunStatus::Succeeded)
+    expect($context->isSuccessful())->toBeTrue()
         ->and($run->command_output)->toContain('[replication_sync:dry_run]')
         ->and($run->metadata['replication']['result'] ?? null)->toBe('dry_run_only')
         ->and($run->metadata['replication']['sanity']['method'] ?? null)->toBe('artifact_hash')
@@ -520,15 +572,19 @@ it('adds structured failure analysis and debug suggestions for mysql replication
         throw new RuntimeException('Unable to allocate a temporary mysql replication path.');
     }
 
-    unlink($outputDir);
-    mkdir($outputDir, 0755, true);
+    File::delete($outputDir);
+    File::makeDirectory($outputDir, 0755, true);
 
-    config()->set('checkpoint.drivers.mysql.dump_binary', fakeMysqlScript(<<<'SH'
+    $binDir = sys_get_temp_dir().'/mysql-bin-'.random_int(10000, 99999);
+    File::makeDirectory($binDir, 0755);
+    File::put($binDir.'/mysqldump', <<<'SH'
 #!/bin/sh
 echo 'ERROR 1045 (28000): Access denied for user "repl"@"10.0.0.5" (using password: YES)'
 exit 1
 SH
-    ));
+    );
+    File::chmod($binDir.'/mysqldump', 0755);
+    config()->set('database.connections.mysql.dump.dump_binary_path', $binDir);
     config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
 
     $run = CommandRun::query()->create([
@@ -547,10 +603,18 @@ SH
         ],
     ]);
 
-    (new MysqlDriver)->execute($run);
+    $context = new DriverContext(
+        operation: $run->operation,
+        argument: $run->argument_text,
+        driverName: 'mysql',
+        metadata: is_array($run->metadata) ? $run->metadata : [],
+        runUuid: (string) $run->getKey(),
+    );
+
+    (resolveMysqlDriver())->execute($context, $run);
     $run->refresh();
 
-    expect($run->status)->toBe(CommandRunStatus::Failed)
+    expect($context->isSuccessful())->toBeFalse()
         ->and($run->command_output)->toContain('[replication_sync:debug]')
         ->and($run->command_output)->toContain('category: auth_credential_failure')
         ->and($run->metadata['replication']['failure_analysis']['diagnostics']['destination'] ?? null)->toBe('profile:mysql-local')
@@ -577,7 +641,15 @@ it('fails replication_sync when endpoints indicate remote or cross-host semantic
     ]);
 
     expect(function () use ($run): void {
-        (new MysqlDriver)->execute($run);
+        $context = new DriverContext(
+            operation: $run->operation,
+            argument: $run->argument_text,
+            driverName: 'mysql',
+            metadata: is_array($run->metadata) ? $run->metadata : [],
+            runUuid: (string) $run->getKey(),
+        );
+
+        (resolveMysqlDriver())->execute($context, $run);
     })
         ->toThrow(ConfigurationException::class, 'mysql replication execution currently supports only local/configured endpoint semantics.');
 });
@@ -589,8 +661,8 @@ it('blocks mysql replication apply when governance preflight disallows execution
         throw new RuntimeException('Unable to allocate a temporary mysql replication governance path.');
     }
 
-    unlink($outputDir);
-    mkdir($outputDir, 0755, true);
+    File::delete($outputDir);
+    File::makeDirectory($outputDir, 0755, true);
 
     $tempDir = tempnam(sys_get_temp_dir(), 'checkpoint-mysql-repl-governance-temp-');
 
@@ -598,10 +670,12 @@ it('blocks mysql replication apply when governance preflight disallows execution
         throw new RuntimeException('Unable to allocate a temporary mysql replication governance temp path.');
     }
 
-    unlink($tempDir);
-    mkdir($tempDir, 0755, true);
+    File::delete($tempDir);
+    File::makeDirectory($tempDir, 0755, true);
 
-    config()->set('checkpoint.drivers.mysql.dump_binary', fakeMysqlScript(<<<'SH'
+    $binDir = sys_get_temp_dir().'/mysql-bin-'.random_int(10000, 99999);
+    File::makeDirectory($binDir, 0755);
+    File::put($binDir.'/mysqldump', <<<'SH'
 #!/bin/sh
 for arg in "$@"; do
   case "$arg" in
@@ -613,7 +687,9 @@ for arg in "$@"; do
 done
 printf 'dry-run export ok'
 SH
-    ));
+    );
+    File::chmod($binDir.'/mysqldump', 0755);
+    config()->set('database.connections.mysql.dump.dump_binary_path', $binDir);
     config()->set('checkpoint.drivers.mysql.output_dir', $outputDir);
     config()->set('checkpoint.temp_dir', $tempDir);
 
@@ -640,7 +716,15 @@ SH
     ]);
 
     expect(function () use ($run): void {
-        (new MysqlDriver)->execute($run);
+        $context = new DriverContext(
+            operation: $run->operation,
+            argument: $run->argument_text,
+            driverName: 'mysql',
+            metadata: is_array($run->metadata) ? $run->metadata : [],
+            runUuid: (string) $run->getKey(),
+        );
+
+        (resolveMysqlDriver())->execute($context, $run);
     })
         ->toThrow(ConfigurationException::class, 'Replication apply is blocked by governance preflight at execution time: outside_change_window.');
 });
@@ -661,10 +745,18 @@ it('maps checksum mismatch signatures in replication failure analysis', function
  */
 function buildMysqlProcess(MysqlDriver $driver, CommandRun $run, array $plannedMetadata = []): Process
 {
+    $context = new DriverContext(
+        operation: $run->operation,
+        argument: $run->argument_text,
+        driverName: 'mysql',
+        metadata: [],
+        runUuid: (string) $run->getKey(),
+    );
+
     $method = new ReflectionMethod($driver, 'buildProcess');
 
     /** @var Process $process */
-    $process = $method->invoke($driver, $run, $plannedMetadata);
+    $process = $method->invoke($driver, $context, $run, $plannedMetadata);
 
     return $process;
 }
@@ -674,10 +766,18 @@ function buildMysqlProcess(MysqlDriver $driver, CommandRun $run, array $plannedM
  */
 function plannedMysqlMetadata(MysqlDriver $driver, CommandRun $run): array
 {
+    $context = new DriverContext(
+        operation: $run->operation,
+        argument: $run->argument_text,
+        driverName: 'mysql',
+        metadata: [],
+        runUuid: (string) $run->getKey(),
+    );
+
     $method = new ReflectionMethod($driver, 'plannedMetadata');
 
     /** @var array<string, mixed> $metadata */
-    $metadata = $method->invoke($driver, $run);
+    $metadata = $method->invoke($driver, $context, $run);
 
     return $metadata;
 }
@@ -690,8 +790,13 @@ function fakeMysqlScript(string $contents): string
         throw new RuntimeException('Unable to allocate a temporary mysql test script.');
     }
 
-    file_put_contents($path, $contents."\n");
-    chmod($path, 0755);
+    File::put($path, $contents."\n");
+    File::chmod($path, 0755);
 
     return $path;
+}
+
+function resolveMysqlDriver(): MysqlDriver
+{
+    return app(MysqlDriver::class);
 }

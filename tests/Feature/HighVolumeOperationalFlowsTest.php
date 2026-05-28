@@ -79,7 +79,7 @@ it('returns bounded recent report results for high command-run volume', function
         'updated_at' => now()->subHours(6),
     ]);
 
-    Artisan::call('checkpoint:doctor', ['--full' => true, '--limit' => 50, '--format' => 'json']);
+    Artisan::call('checkpoint:status', ['--full' => true, '--limit' => 50, '--format' => 'json']);
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
@@ -107,7 +107,7 @@ it('counts stale orphaned runs correctly at high volume', function (): void {
         'updated_at' => now()->subMinutes(5),
     ]);
 
-    Artisan::call('checkpoint:doctor', ['--format' => 'json']);
+    Artisan::call('checkpoint:status', ['--health' => true, '--format' => 'json']);
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
@@ -137,7 +137,7 @@ it('re-dispatches stale orphan batches with correct aggregate metadata at scale'
         'updated_at' => now()->subMinutes(35),
     ]);
 
-    checkpoint_artisan('checkpoint:health-check')->assertSuccessful();
+    checkpoint_artisan('checkpoint:sweep')->assertSuccessful();
 
     Bus::assertDispatchedTimes(ProcessCommandRunJob::class, 120);
     Event::assertDispatchedTimes(OrphanRunRedispatched::class, 120);

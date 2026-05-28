@@ -31,7 +31,7 @@ final class MakeDriverCommand extends CheckpointCommand
 
         $name = Str::studly($name);
 
-        if (! str_ends_with($name, 'Driver')) {
+        if (! Str::endsWith($name, 'Driver')) {
             $name .= 'Driver';
         }
 

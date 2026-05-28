@@ -7,15 +7,14 @@ namespace AdityaaCodes\LaravelCheckpoint\Services;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
-use AdityaaCodes\LaravelCheckpoint\Drivers\ShellCommandDriver;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use Illuminate\Support\Manager;
 
 final class CheckpointDriverManager extends Manager
 {
-    public function getDefaultDriver(): ?string
+    public function getDefaultDriver(): string
     {
-        return (string) $this->config->get('checkpoint.driver', 'shell');
+        return (string) $this->config->get('checkpoint.driver');
     }
 
     protected function createMysqlDriver(): BackupDriver
@@ -30,12 +29,13 @@ final class CheckpointDriverManager extends Manager
 
     protected function createShellDriver(): BackupDriver
     {
-        return $this->resolveConfigurableDriver('shell', ShellCommandDriver::class);
+        throw new ConfigurationException('Shell driver has been removed. Use postgres or mysql driver.');
     }
 
     /**
      * @throws ConfigurationException
      */
+    #[\Override]
     protected function createDriver($driver): BackupDriver
     {
         if (isset($this->customCreators[$driver])) {
@@ -62,6 +62,7 @@ final class CheckpointDriverManager extends Manager
     /**
      * @return array<string, mixed>
      */
+    #[\Override]
     protected function callCustomCreator($driver): BackupDriver
     {
         $config = $this->config->get("checkpoint.drivers.{$driver}", []);

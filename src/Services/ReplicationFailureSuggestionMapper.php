@@ -230,7 +230,7 @@ final readonly class ReplicationFailureSuggestionMapper
 
     private function redactedExcerpt(string $output): string
     {
-        $lines = collect(preg_split('/\R/', $output) ?: [])
+        $lines = collect(Str::of($output)->split('/\R/') ?: [])
             ->map(fn (string $line): string => str($line)->trim()->value())
             ->filter(fn (string $line): bool => $line !== '')
             ->values()

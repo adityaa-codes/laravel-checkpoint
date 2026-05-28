@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
+use AdityaaCodes\LaravelCheckpoint\Enums\CheckpointOperation;
 use Throwable;
 
 final class DrillCommand extends CheckpointCommand
@@ -16,13 +17,9 @@ final class DrillCommand extends CheckpointCommand
     public function handle(EnqueueCommandRunAction $enqueueCommandRun): int
     {
         try {
-            $run = $enqueueCommandRun->execute('backup_drill');
+            $run = $enqueueCommandRun->execute(CheckpointOperation::Drill);
 
             $this->promptInfo(sprintf('Queued Backup Drill run #%d.', (int) $run->getKey()));
-
-            if ($this->enhancedInteractiveMode()) {
-                \Laravel\Prompts\note('Monitor progress: php artisan checkpoint:doctor --full');
-            }
 
             return self::SUCCESS;
         } catch (Throwable $exception) {

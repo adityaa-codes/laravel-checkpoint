@@ -10,7 +10,6 @@ use Laravel\Prompts\Prompt;
 
 use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\intro;
-use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 use function Laravel\Prompts\warning;
 
@@ -37,9 +36,6 @@ final class PruneCommand extends CheckpointCommand
 
         if ($this->enhancedInteractiveMode()) {
             intro($dryRun ? 'Prune Checkpoint Records (Dry Run)' : 'Prune Checkpoint Records');
-            note('What: remove aged operational rows according to prune model rules.');
-            note('When: periodic maintenance to keep operational tables lean.');
-            note('Next: run checkpoint:doctor --full to confirm retained history looks healthy.');
         }
 
         if ($dryRun) {

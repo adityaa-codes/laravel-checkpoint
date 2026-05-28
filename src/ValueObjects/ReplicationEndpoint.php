@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\ValueObjects;
 
 use AdityaaCodes\LaravelCheckpoint\Enums\ReplicationEngine;
+use Illuminate\Support\Arr;
 
 /** @internal */
 final readonly class ReplicationEndpoint
@@ -27,7 +28,7 @@ final readonly class ReplicationEndpoint
             ReplicationEndpointKind::Dsn => sprintf('%s://[REDACTED]', $this->engine?->value ?? 'dsn'),
             ReplicationEndpointKind::KeyValue => sprintf(
                 'kv:%s',
-                implode(',', array_keys($this->attributes)),
+                Arr::join(collect($this->attributes)->keys()->all(), ','),
             ),
             ReplicationEndpointKind::Prompt => 'prompt:[PENDING_INPUT]',
         };

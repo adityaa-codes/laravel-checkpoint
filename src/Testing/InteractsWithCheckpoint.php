@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Testing;
 
+use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\FakeDriver;
+use AdityaaCodes\LaravelCheckpoint\Enums\CheckpointOperation;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupQueued;
-use AdityaaCodes\LaravelCheckpoint\Services\CheckpointDriverManager;
 use Illuminate\Support\Facades\Event;
 use PHPUnit\Framework\Assert;
 
@@ -26,20 +27,17 @@ trait InteractsWithCheckpoint
         $this->checkpointFakeDriver = new FakeDriver;
 
         app()->instance(FakeDriver::class, $this->checkpointFakeDriver);
-
-        app(CheckpointDriverManager::class)->extend('fake', function () {
-            return app(FakeDriver::class);
-        });
-
-        config()->set('checkpoint.driver', 'fake');
+        app()->instance(BackupDriver::class, $this->checkpointFakeDriver);
 
         return $this->checkpointFakeDriver;
     }
 
-    public function assertBackupQueued(string $operation, ?string $argument = null): static
+    public function assertBackupQueued(CheckpointOperation|string $operation, ?string $argument = null): static
     {
-        Event::assertDispatched(function (BackupQueued $event) use ($operation, $argument): bool {
-            if ($event->run->operation !== $operation) {
+        $operationValue = $operation instanceof CheckpointOperation ? $operation->value : $operation;
+
+        Event::assertDispatched(function (BackupQueued $event) use ($operationValue, $argument): bool {
+            if ($event->run->operation !== $operationValue) {
                 return false;
             }
 
@@ -53,9 +51,11 @@ trait InteractsWithCheckpoint
         return $this;
     }
 
-    public function assertBackupNotQueued(string $operation): static
+    public function assertBackupNotQueued(CheckpointOperation|string $operation): static
     {
-        Event::assertNotDispatched(BackupQueued::class, fn (BackupQueued $event): bool => $event->run->operation === $operation);
+        $operationValue = $operation instanceof CheckpointOperation ? $operation->value : $operation;
+
+        Event::assertNotDispatched(BackupQueued::class, fn (BackupQueued $event): bool => $event->run->operation === $operationValue);
 
         return $this;
     }
@@ -67,9 +67,11 @@ trait InteractsWithCheckpoint
         return $this;
     }
 
-    public function assertBackupFailed(string $operation): static
+    public function assertBackupFailed(CheckpointOperation|string $operation): static
     {
-        Event::assertDispatched(fn (BackupFailed $event): bool => $event->run->operation === $operation);
+        $operationValue = $operation instanceof CheckpointOperation ? $operation->value : $operation;
+
+        Event::assertDispatched(fn (BackupFailed $event): bool => $event->run->operation === $operationValue);
 
         return $this;
     }

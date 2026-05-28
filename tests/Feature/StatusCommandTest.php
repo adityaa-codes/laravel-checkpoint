@@ -48,7 +48,7 @@ it('shows an operator-facing summary of recent checkpoint health signals', funct
                 ['Failed runs (24h)', '1'],
                 ['Latest failed run', 'logical_restore_file [failed] (exit: 1) at 2026-03-11 11:42:00'],
                 ['Latest failed reason', 'Command exited with code 1.'],
-                ['Latest failed next action', 'Run php artisan checkpoint:doctor --full --limit=10 --format=json for full failure context.'],
+                ['Latest failed next action', 'Run php artisan checkpoint:status --full --limit=10 --format=json for full failure context.'],
                 ['Last known good backup', 'full:20260311-010101F at 2026-03-11 11:50:00'],
                 ['Latest verified backup', 'full:20260311-010101F at 2026-03-11 11:55:00'],
                 ['Latest backup drill', 'drill-fail-001 [FAIL] by ops-user at 2026-03-11 09:00:00'],
@@ -73,7 +73,7 @@ it('renders triage-first brief status output with cause and action', function ()
         ->expectsOutputToContain('Checkpoint triage (brief)')
         ->expectsOutputToContain('Failed (24h): 1 | Pending: 1 | Running: 1')
         ->expectsOutputToContain('Cause: Command exited with code 1.')
-        ->expectsOutputToContain('Action now: Run php artisan checkpoint:doctor --full --limit=10 --format=json for full failure context.')
+        ->expectsOutputToContain('Action now: Run php artisan checkpoint:status --full --limit=10 --format=json for full failure context.')
         ->assertSuccessful();
 
     OperatorCommandTestSupport::resetTime();
@@ -142,7 +142,7 @@ it('renders summary signals as machine-readable json', function (): void {
             'status' => 'failed',
             'exit_code' => 1,
             'failure_reason' => 'Command exited with code 1.',
-            'next_action' => 'Run php artisan checkpoint:doctor --full --limit=10 --format=json for full failure context.',
+            'next_action' => 'Run php artisan checkpoint:status --full --limit=10 --format=json for full failure context.',
         ])
         ->and($report['summary']['last_known_good_backup'])->toMatchArray([
             'label' => 'full:20260311-010101F at 2026-03-11 11:50:00',
@@ -230,7 +230,7 @@ it('renders summary signals as machine-readable json', function (): void {
 
 it('fails for unsupported status output formats', function (): void {
     checkpoint_artisan('checkpoint:status --format=xml')
-        ->expectsOutput('The --format option must be table, json, or compact-json.')
+        ->expectsOutput('The --format option must be table or json.')
         ->assertFailed();
 });
 
@@ -238,28 +238,33 @@ it('renders compact agent-friendly status output for runs', function (): void {
     OperatorCommandTestSupport::freezeTime();
     OperatorCommandTestSupport::seedRecentRuns();
 
-    Artisan::call('checkpoint:status', ['--limit' => 1, '--agent' => true]);
+    Artisan::call('checkpoint:status', ['--limit' => 1, '--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
         ->and($report['version'])->toBe(1)
         ->and($report['surface'])->toBe('status')
-        ->and($report['result'])->toBe('passed')
-        ->and($report['code'])->toBe('status.runs.ok')
-        ->and($report['compact'])->toMatchArray([
-            'verdict' => 'PASS',
-            'severity' => 'NONE',
+        ->and($report['mode'])->toBe('runs')
+        ->and($report['limit'])->toBe(1)
+        ->and($report['gates'])->toMatchArray([
+            'profile' => 'local',
+            'profile_source' => 'environment',
             'exit_code' => 0,
         ])
-        ->and($report['data']['mode'])->toBe('runs')
-        ->and($report['data']['run_count'])->toBe(1)
-        ->and($report['data']['runs'])->toHaveCount(1)
-        ->and($report['data']['slo'])->toBeArray()
-        ->and($report['data']['slo'])->toHaveKeys(['window', 'indicators', 'overall_status'])
-        ->and($report['data']['slo']['indicators'])->toBeArray()
-        ->and($report['data']['slo']['indicators'][0])->toHaveKeys(['name', 'target', 'current', 'status', 'unit'])
-        ->and($report['suggestions'])->toBeArray();
+        ->and($report['runs'])->toHaveCount(1)
+        ->and($report['runs'][0])->toMatchArray([
+            'id' => 2,
+            'operation' => 'physical_backup',
+            'status' => 'succeeded',
+            'exit_code' => 0,
+            'backup' => 'full:20260311-010101F',
+            'verification_state' => 'verified',
+            'restore_target' => null,
+            'restore_audit' => null,
+            'post_restore_verification' => null,
+            'last_known_good_at' => '2026-03-11 11:50:00',
+        ]);
 
     OperatorCommandTestSupport::resetTime();
 });
@@ -268,27 +273,24 @@ it('renders compact agent-friendly status output for summary', function (): void
     OperatorCommandTestSupport::freezeTime();
     OperatorCommandTestSupport::seedOperatorSummaryState();
 
-    Artisan::call('checkpoint:status', ['--summary' => true, '--agent' => true]);
+    Artisan::call('checkpoint:status', ['--summary' => true, '--format' => 'json']);
 
     $report = json_decode(Artisan::output(), true);
 
     expect($report)->toBeArray()
         ->and($report['version'])->toBe(1)
         ->and($report['surface'])->toBe('status')
-        ->and($report['result'])->toBe('partial')
-        ->and($report['code'])->toBe('status.summary.degraded')
-        ->and($report['compact'])->toMatchArray([
-            'verdict' => 'WARN',
-            'severity' => 'P1',
+        ->and($report['mode'])->toBe('summary')
+        ->and($report['gates'])->toMatchArray([
+            'profile' => 'local',
+            'profile_source' => 'environment',
             'exit_code' => 0,
         ])
-        ->and($report['data']['mode'])->toBe('summary')
-        ->and($report['data']['summary']['failed_runs_24h'])->toBe(1)
-        ->and($report['data']['slo'])->toBeArray()
-        ->and($report['data']['slo'])->toHaveKeys(['window', 'indicators', 'overall_status'])
-        ->and($report['data']['slo']['indicators'])->toBeArray()
-        ->and($report['data']['slo']['indicators'][0])->toHaveKeys(['name', 'target', 'current', 'status', 'unit'])
-        ->and($report['suggestions'])->toBeArray();
+        ->and($report['summary'])->toMatchArray([
+            'pending_runs' => 1,
+            'running_runs' => 0,
+            'failed_runs_24h' => 1,
+        ]);
 
     OperatorCommandTestSupport::resetTime();
 });

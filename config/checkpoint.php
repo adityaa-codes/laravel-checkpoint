@@ -2,36 +2,164 @@
 
 declare(strict_types=1);
 
+/*
+|--------------------------------------------------------------------------
+| Laravel Checkpoint — Configuration
+|--------------------------------------------------------------------------
+|
+| This is the published configuration file. Review every section and
+| adjust values for your environment.
+|
+| Most users only need to set: CP_DRIVER, destination.disks, retention_days.
+| All other keys have sensible defaults shown below.
+|
+| For binary paths (pg_dump, mysqldump, etc.), configure the `dump` key
+| inside Laravel's own config/database.php per connection — just like
+| spatie/laravel-backup.
+|
+| Only three env vars are used by default:
+|   CP_DRIVER    — which driver to use (postgres, mysql)
+|   CP_BACKUP_ARCHIVE_PASSWORD  — encryption password (null = disabled)
+|   CP_RESTORE_ALLOWED_ENVIRONMENTS — comma-separated envs where restore is allowed
+|
+*/
+
 return [
 
-    'driver' => env('DB_OPS_DRIVER', 'shell'),
+    /*
+    |--------------------------------------------------------------------------
+    | Driver
+    |--------------------------------------------------------------------------
+    |
+    | The backup driver to use. Must match one of the keys in the `drivers`
+    | section below. No default — this MUST be set.
+    |
+    | Supported: postgres, mysql
+    |
+    | Set via CP_DRIVER env var. The install wizard auto-detects this from
+    | your DB_CONNECTION.
+    |
+    */
+    'driver' => env('CP_DRIVER'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Destination Disks
+    |--------------------------------------------------------------------------
+    |
+    | Laravel filesystem disk names where backup artifacts are uploaded.
+    | Disks are defined in config/filesystems.php. Empty array = local only
+    | (artifacts stay in the output_dir but are NOT copied to remote storage).
+    |
+    */
     'destination' => [
         'disks' => [],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Retention
+    |--------------------------------------------------------------------------
+    |
+    | Number of days to retain successful backups. Failed backups are
+    | always kept for 365 days regardless of this setting.
+    |
+    */
     'retention_days' => 30,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Encryption
+    |--------------------------------------------------------------------------
+    |
+    | Enable AES-256-GCM streaming encryption for backup artifacts.
+    | When enabled, a key is derived from CP_BACKUP_ARCHIVE_PASSWORD.
+    | Set the env var to null or leave it unset to skip encryption.
+    |
+    */
     'encryption' => [
         'enabled' => false,
+        'password' => env('CP_BACKUP_ARCHIVE_PASSWORD'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Queue
+    |--------------------------------------------------------------------------
+    |
+    | All backup, restore, replication, and drill operations are queued by
+    | default. Configure the queue name, timeout, and locking behavior here.
+    |
+    | timeout — seconds before the queue worker kills the job. Must match
+    |           or exceed the --timeout value passed to `queue:work`.
+    | heartbeat_interval_seconds — how often the driver records a heartbeat
+    |           during long-running operations (pg_dump, pg_restore, etc.).
+    | heartbeat_grace_seconds — extra grace period before sweep marks a
+    |           running job as timed out when heartbeats have stopped.
+    |
+    */
     'queue' => [
-        'name' => env('DB_OPS_QUEUE_NAME', 'db-ops'),
-        'timeout' => (int) env('DB_OPS_QUEUE_TIMEOUT', 3600),
+        'name' => 'db-ops',
+        'timeout' => 3600,
         'lock_store' => null,
         'unique_for' => 3660,
         'max_attempts' => 1,
         'orphan_threshold' => 10,
+        'heartbeat_interval_seconds' => 30,
+        'heartbeat_grace_seconds' => 60,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Restore Safety
+    |--------------------------------------------------------------------------
+    |
+    | Guardrails to prevent accidental restores in production.
+    |
+    | allowed_environments — env names where restore is permitted
+    | allowed_databases    — specific database names allowed as restore targets
+    |                        (empty array = allow all databases)
+    | allow_in_ci          — bypass confirmation in CI (dangerous, off by default)
+    | require_verified_backup — only allow restore from verified backup signals
+    |
+    */
     'restore' => [
-        'allowed_environments' => ['local', 'testing', 'staging'],
+        'allowed_environments' => collect(explode(',', env('CP_RESTORE_ALLOWED_ENVIRONMENTS', 'local,testing,staging')))
+            ->map(trim(...))
+            ->filter(fn ($v) => $v !== '')
+            ->values()
+            ->all(),
         'allowed_databases' => [],
         'allow_in_ci' => false,
         'require_verified_backup' => false,
+        'confirmation_phrase' => 'RESTORE',
+        'blast_radius' => [
+            'enabled' => true,
+            'warn_score' => 50,
+            'block_score' => 80,
+            'weights' => [
+                'environment' => 30,
+                'database' => 25,
+                'target' => 20,
+                'verification' => 25,
+            ],
+        ],
+        'verification' => [
+            'mode' => 'moderate',
+            'tables' => ['*'],
+        ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Gates — Policy Profiles
+    |--------------------------------------------------------------------------
+    |
+    | Gate policies control exit codes for CI/automation. Each profile
+    | defines blocker, warning, and advisory thresholds. The active profile
+    | is selected by environment or override.
+    |
+    */
     'gates' => [
         'override_profile' => null,
         'default_profile' => 'production',
@@ -44,6 +172,15 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Observability
+    |--------------------------------------------------------------------------
+    |
+    | Thresholds for SLO alerts and health monitoring.
+    | Drills, backup freshness, and anomaly detection are policed here.
+    |
+    */
     'observability' => [
         'backup_drill_pass_rate_window_days' => 30,
         'backup_drill_min_pass_rate' => 100.0,
@@ -54,10 +191,30 @@ return [
         'alert_cooldown_seconds' => 300,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Reporting
+    |--------------------------------------------------------------------------
+    |
+    | Maximum number of recent runs shown in status and report commands.
+    |
+    */
     'reporting' => [
         'max_recent_runs' => 50,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Command Output Storage
+    |--------------------------------------------------------------------------
+    |
+    | Where and how command output is persisted.
+    |
+    | storage      — 'database' (inline) or 'filesystem' (externalized)
+    | max_persisted_bytes — truncate output above this limit
+    | filesystem.* — only used when storage is 'filesystem'
+    |
+    */
     'output' => [
         'max_persisted_bytes' => 1048576,
         'storage' => 'database',
@@ -68,12 +225,35 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Notifications
+    |--------------------------------------------------------------------------
+    |
+    | Notification channels for backup/drill/health events.
+    | Empty channels array = no notifications sent.
+    |
+    */
     'notifications' => [
         'channels' => [],
         'on_success' => false,
         'on_failure' => true,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Schedule
+    |--------------------------------------------------------------------------
+    |
+    | Cron expressions for scheduled commands. Use Laravel's scheduler in
+    | routes/console.php to register these — these values are only used
+    | as documentation/defaults.
+    |
+    |   Schedule::command('checkpoint:backup')->cron('0 2 * * *');
+    |   Schedule::command('checkpoint:prune')->cron('0 3 * * 0');
+    |   Schedule::command('checkpoint:sweep')->cron('*\/5 * * * *');
+    |
+    */
     'schedule' => [
         'backup' => '0 2 * * *',
         'prune' => '0 3 * * 0',
@@ -81,39 +261,84 @@ return [
         'prune_keep_backup_drill_days' => 365,
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Table Prefix
+    |--------------------------------------------------------------------------
+    |
+    | Prefix for checkpoint's internal tables (command_runs, backup_drill_runs,
+    | restore_decision_events, verification_runs). Change this if you need
+    | multiple installations in the same database.
+    |
+    */
     'table_prefix' => 'db_ops_',
 
+    /*
+    |--------------------------------------------------------------------------
+    | Log Channel
+    |--------------------------------------------------------------------------
+    |
+    | The Laravel log channel used for checkpoint operational logs.
+    |
+    */
     'log_channel' => 'stack',
 
+    /*
+    |--------------------------------------------------------------------------
+    | Operations Enabled
+    |--------------------------------------------------------------------------
+    |
+    | Master switch to disable all checkpoint operations.
+    | Set to false to prevent any backup/restore/replication from running.
+    |
+    */
     'operations_enabled' => true,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Drivers
+    |--------------------------------------------------------------------------
+    |
+    | Per-driver configuration. Binary paths are resolved from
+    | config/database.php connections using the `dump.dump_binary_path` key —
+    | the same convention as spatie/laravel-backup.
+    |
+    | Example for config/database.php:
+    |
+    |   'pgsql' => [
+    |       'dump' => [
+    |           'dump_binary_path' => '/usr/bin',  // directory only
+    |           'timeout' => 60 * 5,
+    |       ],
+    |   ],
+    |
+    */
     'drivers' => [
 
-        'shell' => [
-            'commands' => [
-                'logical_backup' => '',
-                'logical_restore_latest' => '',
-                'logical_restore_file' => '',
-                'pitr_restore' => '',
-            ],
-            'health_binaries' => [],
-        ],
-
         'mysql' => [
-            'dump_binary' => env('DB_OPS_MYSQL_DUMP_BINARY', 'mysqldump'),
-            'mysql_binary' => env('DB_OPS_MYSQL_BINARY', 'mysql'),
-            'mysqlbinlog_binary' => env('DB_OPS_MYSQL_BINLOG_BINARY', 'mysqlbinlog'),
+
+            /*
+            |----------------------------------------------------------
+            | Binary paths are read from config/database.php:
+            |   connections.mysql.dump.dump_binary_path
+            |----------------------------------------------------------
+            */
+
             'extra_args' => [
                 'backup' => [],
                 'restore' => [],
                 'drill' => [],
             ],
+
             'command_timeout_seconds' => 7200,
+
             'drill_command' => '',
+
             'health_binaries' => [
                 ['code' => 'mysqldump', 'label' => 'mysqldump', 'binary' => 'mysqldump'],
                 ['code' => 'mysql', 'label' => 'mysql', 'binary' => 'mysql'],
             ],
+
             'pitr' => [
                 'binlog_files' => [],
             ],
@@ -121,29 +346,32 @@ return [
 
         'postgres' => [
 
-            'dump_binary' => env('DB_OPS_PG_DUMP_BINARY', 'pg_dump'),
+            /*
+            |----------------------------------------------------------
+            | Binary paths are read from config/database.php:
+            |   connections.pgsql.dump.dump_binary_path
+            |----------------------------------------------------------
+            */
 
-            'restore_binary' => env('DB_OPS_PG_RESTORE_BINARY', 'pg_restore'),
+            'format' => 'directory',
 
-            'format' => env('DB_OPS_PG_FORMAT', 'directory'),
+            'jobs' => 4,
 
-            'jobs' => (int) env('DB_OPS_PG_JOBS', 4),
+            'compress_level' => 6,
 
-            'compress_level' => (int) env('DB_OPS_PG_COMPRESS_LEVEL', 6),
+            'output_dir' => storage_path('app/checkpoint/logical-exports'),
 
-            'output_dir' => env('DB_OPS_PG_OUTPUT_DIR', ''),
+            'output_prefix' => 'logical-export',
 
-            'output_prefix' => env('DB_OPS_PG_OUTPUT_PREFIX', 'logical-export'),
+            'file_extension' => 'dump',
 
-            'file_extension' => env('DB_OPS_PG_FILE_EXTENSION', 'dump'),
+            'clean' => true,
 
-            'clean' => (bool) env('DB_OPS_PG_CLEAN', true),
+            'create' => false,
 
-            'create' => (bool) env('DB_OPS_PG_CREATE', false),
+            'drill_command' => '',
 
-            'drill_command' => env('DB_OPS_PG_DRILL_COMMAND', ''),
-
-            'command_timeout_seconds' => (int) env('DB_OPS_PG_COMMAND_TIMEOUT', 7200),
+            'command_timeout_seconds' => 7200,
 
             'extra_args' => [
                 'backup' => [],
@@ -152,25 +380,23 @@ return [
                 'replication' => [],
             ],
 
-            'binary' => env('DB_OPS_PG_BINARY', 'pg_basebackup'),
-
-            'physical_output_dir' => env('DB_OPS_PG_PHYSICAL_OUTPUT_DIR', ''),
+            'physical_output_dir' => storage_path('app/checkpoint/basebackups'),
 
             'physical_extra_args' => [],
 
-            'physical_wal_method' => env('DB_OPS_PG_PHYSICAL_WAL_METHOD', 'stream'),
+            'physical_wal_method' => 'stream',
 
-            'physical_compression' => env('DB_OPS_PG_PHYSICAL_COMPRESSION', 'gzip'),
+            'physical_compression' => 'gzip',
 
-            'physical_checkpoint' => env('DB_OPS_PG_PHYSICAL_CHECKPOINT', 'fast'),
+            'physical_checkpoint' => 'fast',
 
-            'physical_max_rate' => env('DB_OPS_PG_PHYSICAL_MAX_RATE'),
+            'physical_max_rate' => null,
 
-            'host' => env('DB_OPS_PG_HOST'),
-
-            'port' => env('DB_OPS_PG_PORT'),
-
-            'username' => env('DB_OPS_PG_USERNAME'),
+            'pitr' => [
+                'wal_directory' => '',
+                'restore_command' => '',
+                'recovery_target_action' => 'promote',
+            ],
 
             'health_binaries' => ['pg_dump', 'pg_restore', 'pg_basebackup'],
         ],

@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use Throwable;
 
 use function Laravel\Prompts\confirm;
@@ -30,7 +33,7 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
     private const array COMMAND_MAP = [
         'backup:run' => 'checkpoint:backup',
         'backup:clean' => 'checkpoint:prune',
-        'backup:monitor' => 'checkpoint:doctor --format=json',
+        'backup:monitor' => 'checkpoint:status --health --format=json',
         'backup:list' => 'checkpoint:status',
     ];
 
@@ -43,6 +46,7 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
         'backup_dir' => ['config_path' => 'checkpoint.drivers.shell.backup_dir', 'default' => '', 'label' => 'Backup destination directory'],
         'schedule_time' => ['config_path' => 'checkpoint.schedule.logical_backup_daily_at', 'default' => '', 'label' => 'Scheduled backup time'],
         'retention_default_days' => ['config_path' => 'checkpoint.retention_days', 'default' => '', 'label' => 'Retention days'],
+        'retention_hot_days' => ['config_path' => 'checkpoint.retention_days', 'default' => '', 'label' => 'Retention days (hot)'],
     ];
 
     /**
@@ -75,15 +79,14 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
             $this->renderCommandMap();
             $this->renderInteractiveIntroAndPlan($spatieConfig, $isDryRun);
             $this->handleMigrationDecision($mapped, $isDryRun, $isForced);
+
+            if ($this->option('remove-spatie') && ! $isDryRun) {
+                $this->removeSpatiePackage($isForced);
+            }
+
             $this->renderGapNotes();
 
             if ($this->enhancedInteractiveMode()) {
-                $this->newLine();
-                note('After migration:');
-                note('1. Review config/checkpoint.php for driver-specific settings.');
-                note('2. Run php artisan checkpoint:install to validate your setup.');
-                note('3. Run php artisan checkpoint:backup to test your first backup.');
-                note('4. Start a queue worker: php artisan queue:work --queue=db-ops');
                 outro('Migration plan ready.');
             }
 
@@ -91,8 +94,8 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
         } catch (Throwable $exception) {
             report($exception);
 
-            foreach (preg_split('/\r\n|\r|\n/', $exception->getMessage()) ?: [] as $line) {
-                if (trim($line) !== '') {
+            foreach (Str::of($exception->getMessage())->split('/\\r\\n|\\r|\\n/')->all() ?: [] as $line) {
+                if (Str::trim($line) !== '') {
                     $this->promptError($line);
                 }
             }
@@ -108,9 +111,6 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
     {
         if ($this->enhancedInteractiveMode()) {
             intro('Spatie → Laravel Checkpoint Migration');
-            note('What: guided migration of backup configuration from spatie/laravel-backup to laravel-checkpoint.');
-            note('When: you want to replace Spatie\'s backup package with checkpoint\'s db-ops workflow.');
-            note('Scope: database backup, retention, and health monitoring.');
         }
 
         if (! $isDryRun && $this->enhancedInteractiveMode()) {
@@ -126,10 +126,10 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
     private function handleMigrationDecision(array $mapped, bool $isDryRun, bool $isForced): void
     {
         if (! $isDryRun && $isForced) {
-            $this->applyMigration($mapped);
+            $this->displayMigrationPlan($mapped);
         } elseif (! $isDryRun) {
-            if ($isForced || confirm(label: 'Apply these migration changes?', default: true)) {
-                $this->applyMigration($mapped);
+            if (confirm(label: 'Apply these migration changes?', default: true)) {
+                $this->displayMigrationPlan($mapped);
             } else {
                 note('Migration cancelled. Run with --dry-run to preview the plan at any time.');
             }
@@ -140,22 +140,19 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
     {
         $composerPath = base_path('composer.json');
 
-        if (! file_exists($composerPath)) {
+        if (! File::exists($composerPath)) {
             return false;
         }
 
-        $composer = json_decode((string) file_get_contents($composerPath), true);
+        $composer = json_decode(File::get($composerPath), true);
 
         if (! is_array($composer)) {
             return false;
         }
 
-        $packages = array_merge(
-            array_keys($composer['require'] ?? []),
-            array_keys($composer['require-dev'] ?? []),
-        );
+        $packages = collect($composer['require'] ?? [])->keys()->merge(collect($composer['require-dev'] ?? [])->keys())->all();
 
-        return in_array('spatie/laravel-backup', $packages, true);
+        return collect($packages)->containsStrict('spatie/laravel-backup');
     }
 
     /**
@@ -165,7 +162,7 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
     {
         $path = config_path('backup.php');
 
-        if (! file_exists($path)) {
+        if (! File::exists($path)) {
             return [];
         }
 
@@ -200,7 +197,7 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
      */
     private function mapDatabaseDriverConfig(): array
     {
-        $databaseDriver = $this->detectDatabaseDriver() ?: 'shell';
+        $databaseDriver = $this->detectDatabaseDriver() ?: 'mysql';
 
         return [
             'config_path' => 'checkpoint.driver',
@@ -272,6 +269,33 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
             (int) ($spatieConfig['backup']['cleanup']['default_strategy']['keep_yearly_backups_for_years'] ?? 0) * 365,
         );
 
+        $tierKeys = [
+            'keep_all_backups_for_days',
+            'keep_daily_backups_for_days',
+            'keep_weekly_backups_for_weeks',
+            'keep_monthly_backups_for_months',
+            'keep_yearly_backups_for_years',
+        ];
+
+        $activeTierCount = 0;
+
+        foreach ($tierKeys as $tier) {
+            $val = (int) ($spatieConfig['cleanup']['default_strategy'][$tier]
+                ?? $spatieConfig['backup']['cleanup']['default_strategy'][$tier]
+                ?? 0);
+
+            if ($val > 0) {
+                $activeTierCount++;
+            }
+        }
+
+        if ($activeTierCount > 1) {
+            warning(sprintf(
+                'Spatie multi-tier retention (daily/weekly/monthly/yearly) has been collapsed to a single retention_days value (%d days). Review config/checkpoint.php after migration.',
+                $longestRetention
+            ));
+        }
+
         if ($longestRetention > 0) {
             $configs['retention_default_days'] = [
                 'config_path' => 'checkpoint.retention_days',
@@ -286,20 +310,19 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
     private function detectDatabaseDriver(): string
     {
         $defaultConnection = (string) config('database.default', '');
-        $driver = strtolower(trim((string) config('database.connections.'.$defaultConnection.'.driver', $defaultConnection)));
+        $driver = Str::lower(Str::trim((string) config('database.connections.'.$defaultConnection.'.driver', $defaultConnection)));
 
         return match ($driver) {
             'pgsql', 'postgres', 'postgresql' => 'postgres',
             'mysql', 'mariadb' => 'mysql',
-            'sqlite' => 'shell',
-            default => 'shell',
+            default => 'postgres',
         };
     }
 
     /**
      * @param  array<string, array{config_path:string, value:string, label:string}>  $mapped
      */
-    private function applyMigration(array $mapped): void
+    private function displayMigrationPlan(array $mapped): void
     {
         $isDryRun = (bool) $this->option('dry-run');
 
@@ -312,10 +335,7 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
         if ($mapped !== []) {
             $this->line('');
             $this->line('Publish config and set these values in config/checkpoint.php:');
-            $this->promptTable(['Config key', 'Value', 'Description'], array_map(
-                static fn (array $item): array => [(string) $item['config_path'], (string) $item['value'], (string) $item['label']],
-                $mapped,
-            ));
+            $this->promptTable(['Config key', 'Value', 'Description'], collect($mapped)->map(static fn (array $item): array => [$item['config_path'], $item['value'], $item['label']])->all());
         }
 
         $this->promptInfo('Config published and migration plan applied. Review config/checkpoint.php.');
@@ -335,17 +355,17 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
         }
     }
 
-    private function removeSpatiePackage(): void
+    private function removeSpatiePackage(bool $isForced): void
     {
         $composerPath = base_path('composer.json');
 
-        if (! file_exists($composerPath)) {
+        if (! File::exists($composerPath)) {
             $this->promptWarning('composer.json not found. Cannot remove spatie/laravel-backup automatically.');
 
             return;
         }
 
-        $composer = json_decode((string) file_get_contents($composerPath), true);
+        $composer = json_decode(File::get($composerPath), true);
 
         if (! is_array($composer)) {
             $this->promptWarning('Could not parse composer.json.');
@@ -367,17 +387,15 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
         }
 
         $encoded = json_encode($composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)."\n";
-        file_put_contents($composerPath, $encoded);
+        File::put($composerPath, $encoded);
 
         $this->promptInfo('Removed spatie/laravel-backup from composer.json. Run composer update to complete removal.');
 
         $backupConfigPath = config_path('backup.php');
 
-        if (file_exists($backupConfigPath)) {
-            if (confirm(label: 'Delete config/backup.php?', default: true)) {
-                unlink($backupConfigPath);
-                $this->promptInfo('Deleted config/backup.php.');
-            }
+        if (File::exists($backupConfigPath) && ($isForced || confirm(label: 'Delete config/backup.php?', default: true))) {
+            File::delete($backupConfigPath);
+            $this->promptInfo('Deleted config/backup.php.');
         }
     }
 
@@ -416,7 +434,7 @@ final class MigrateFromSpatieCommand extends CheckpointCommand
         if (is_array($disks) && $disks !== []) {
             $steps[] = [
                 'step' => '3. Map storage disk',
-                'action' => sprintf('Set checkpoint.output.filesystem.disk = %s (from Spatie destination disks).', implode(', ', array_map('strval', $disks))),
+                'action' => sprintf('Set checkpoint.output.filesystem.disk = %s (from Spatie destination disks).', Arr::join(collect($disks)->map(strval(...))->all(), ', ')),
             ];
         }
 

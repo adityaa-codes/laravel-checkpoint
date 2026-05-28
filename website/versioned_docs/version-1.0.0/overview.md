@@ -37,7 +37,7 @@ The package currently registers these commands:
 - `checkpoint:retention-policy`
 - `checkpoint:record-drill`
 - `checkpoint:replicate`
-- `checkpoint:health-check`
+- `checkpoint:sweep`
 - `checkpoint:recover-orphans`
 - `checkpoint:prune`
 

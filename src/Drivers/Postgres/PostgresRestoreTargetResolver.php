@@ -5,31 +5,31 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Drivers\Postgres;
 
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
+use AdityaaCodes\LaravelCheckpoint\Enums\PostgresFormat;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
-use Illuminate\Support\Facades\File;
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 
 /** @internal */
-final class PostgresRestoreTargetResolver
+final readonly class PostgresRestoreTargetResolver
 {
     public function __construct(
-        private readonly PostgresDriverConfig $config,
-        private readonly PostgresSnapshotService $snapshot,
+        private PostgresDriverConfig $config,
+        private PostgresSnapshotService $snapshot,
+        private Filesystem $filesystem,
     ) {}
 
-    public function resolveForRestoreWithFormat(CommandRun $run, string $format): string
+    public function resolveForRestoreWithFormat(CommandRun $run, PostgresFormat $format): string
     {
         return match ($run->operation) {
             'logical_restore_latest' => $this->latestBackupTarget($format),
             'logical_restore_file' => $this->restorePathFromArgument($run, $format),
-            default => throw new ConfigurationException(
-                sprintf('Unsupported Postgres restore operation [%s].', $run->operation),
-            ),
+            default => throw ConfigurationException::unsupportedOperation($run->operation, 'Postgres restore'),
         };
     }
 
-    public function latestBackupTarget(string $format): string
+    public function latestBackupTarget(PostgresFormat $format): string
     {
         $trackedTarget = $this->latestTrackedBackupTarget($format);
 
@@ -37,18 +37,20 @@ final class PostgresRestoreTargetResolver
             return $trackedTarget;
         }
 
-        $candidates = File::glob($this->config->outputDir.'/'.$this->config->outputPrefix.'-*', GLOB_NOSORT) ?: [];
+        $candidates = $this->filesystem->glob($this->config->outputDir.'/'.$this->config->outputPrefix.'-*', GLOB_NOSORT) ?: [];
         $candidates = collect($candidates)
-            ->filter(fn (string $candidate): bool => $format === 'directory' ? File::isDirectory($candidate) : File::isFile($candidate))
+            ->filter(fn (string $candidate): bool => $format === PostgresFormat::Directory
+                ? $this->filesystem->isDirectory($candidate)
+                : $this->filesystem->isFile($candidate))
             ->values()
             ->all();
 
         if ($candidates === []) {
-            throw new ConfigurationException('No logical backup exports were found for logical_restore_latest.');
+            throw ConfigurationException::noBackupExportsFound();
         }
 
         $candidates = collect($candidates)
-            ->sortByDesc(fn (string $path): int => File::lastModified($path))
+            ->sortByDesc(fn (string $path): int => $this->filesystem->lastModified($path))
             ->values()
             ->all();
 
@@ -59,7 +61,7 @@ final class PostgresRestoreTargetResolver
     {
         $basePath = $this->config->outputDir.'/'.$this->config->outputPrefix.'-'.$run->getKey();
 
-        return $this->config->format === 'directory'
+        return $this->config->format === PostgresFormat::Directory
             ? $basePath
             : $basePath.'.'.$this->config->fileExtension;
     }
@@ -67,7 +69,7 @@ final class PostgresRestoreTargetResolver
     /**
      * @return array{restore_target:string,restore_target_snapshot:array<string,mixed>}
      */
-    public function resolvedRestoreTargetMetadata(CommandRun $run, string $format): array
+    public function resolvedRestoreTargetMetadata(CommandRun $run, PostgresFormat $format): array
     {
         $target = $this->resolveForRestoreWithFormat($run, $format);
 
@@ -77,22 +79,17 @@ final class PostgresRestoreTargetResolver
         ];
     }
 
-    /**
-     * @param  array<string, mixed>|null  $expectedSnapshot
-     */
-    public function validatedRestoreTarget(string $resolvedPath, string $format, ?array $expectedSnapshot = null): string
+    public function validatedRestoreTarget(string $resolvedPath, PostgresFormat $format, ?array $expectedSnapshot = null): string
     {
         $realOutputDir = realpath($this->config->outputDir);
         $realTargetPath = realpath($resolvedPath);
 
         if ($realOutputDir === false) {
-            throw new ConfigurationException('Unable to resolve the configured postgres output directory.');
+            throw ConfigurationException::cannotResolveDirectory('postgres output');
         }
 
         if ($realTargetPath === false) {
-            throw new ConfigurationException(
-                sprintf('Configured logical restore target [%s] does not exist.', $resolvedPath),
-            );
+            throw ConfigurationException::targetNotFound($resolvedPath);
         }
 
         $realOutputDir = Str::finish($realOutputDir, '/');
@@ -101,35 +98,27 @@ final class PostgresRestoreTargetResolver
             || Str::startsWith($realTargetPrefix, $realOutputDir);
 
         if (! $isContained) {
-            throw new ConfigurationException(
-                sprintf('logical_restore_file target [%s] must be inside the configured postgres output directory.', $resolvedPath),
-            );
+            throw ConfigurationException::targetEscapesOutputDir($resolvedPath);
         }
 
-        if ($format === 'directory' && ! File::isDirectory($realTargetPath)) {
-            throw new ConfigurationException(
-                sprintf('logical_restore_file target [%s] must be a directory export.', $resolvedPath),
-            );
+        if ($format === PostgresFormat::Directory && ! $this->filesystem->isDirectory($realTargetPath)) {
+            throw ConfigurationException::targetNotDirectory($resolvedPath);
         }
 
-        if ($format === 'custom' && ! File::isFile($realTargetPath)) {
-            throw new ConfigurationException(
-                sprintf('logical_restore_file target [%s] must be a restoreable file export.', $resolvedPath),
-            );
+        if ($format === PostgresFormat::Custom && ! $this->filesystem->isFile($realTargetPath)) {
+            throw ConfigurationException::targetNotFile($resolvedPath);
         }
 
         $currentSnapshot = $this->snapshot->snapshot($realTargetPath, $format);
 
         if ($expectedSnapshot !== null && $this->snapshot->snapshotChanged($currentSnapshot, $expectedSnapshot)) {
-            throw new ConfigurationException(
-                sprintf('logical restore target [%s] changed after validation and must be selected again.', $resolvedPath),
-            );
+            throw ConfigurationException::targetChangedAfterValidation($resolvedPath);
         }
 
         return $realTargetPath;
     }
 
-    private function latestTrackedBackupTarget(string $format): ?string
+    private function latestTrackedBackupTarget(PostgresFormat $format): ?string
     {
         $runs = CommandRun::query()
             ->where('operation', 'logical_backup')
@@ -141,10 +130,7 @@ final class PostgresRestoreTargetResolver
             ->get();
 
         foreach ($runs as $run) {
-            if (! is_string($run->artifact_path)) {
-                continue;
-            }
-            if (Str::trim((string) $run->artifact_path) === '') {
+            if ($run->artifact_path === null || trim($run->artifact_path) === '') {
                 continue;
             }
             try {
@@ -157,19 +143,19 @@ final class PostgresRestoreTargetResolver
         return null;
     }
 
-    private function restorePathFromArgument(CommandRun $run, string $format): string
+    private function restorePathFromArgument(CommandRun $run, PostgresFormat $format): string
     {
-        $argument = Str::trim((string) ($run->argument_text ?? ''));
+        $argument = trim($run->argument_text ?? '');
 
         if ($argument === '') {
-            throw new ConfigurationException('logical_restore_file requires a backup path or export name.');
+            throw ConfigurationException::missingRestoreArgument();
         }
 
         $resolvedPath = Str::startsWith($argument, '/')
             ? $argument
             : $this->config->outputDir.'/'.Str::ltrim($argument, '/');
 
-        if ($format === 'custom' && File::extension($resolvedPath) === '') {
+        if ($format === PostgresFormat::Custom && pathinfo($resolvedPath, PATHINFO_EXTENSION) === '') {
             $resolvedPath .= '.'.$this->config->fileExtension;
         }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Services;
 
+use AdityaaCodes\LaravelCheckpoint\ValueObjects\GateDecision;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\GateProfileConfig;
 use Illuminate\Support\Carbon;
 use Throwable;
@@ -18,19 +19,8 @@ final readonly class GatePolicyEvaluator
     /**
      * @param  list<array{code:string,check:string,status:string,notes:string,data:array<string,mixed>,severity?:string}>  $checks
      * @param  array<string,mixed>  $summary
-     * @return array{
-     *   profile:string,
-     *   profile_source:'override'|'environment'|'default',
-     *   verdict:'pass'|'warn'|'fail',
-     *   failed_gate:'none'|'safety'|'evidence'|'policy',
-     *   safety_failed:bool,
-     *   evidence_failed:bool,
-     *   warning_count:int,
-     *   failed_count:int,
-     *   exit_code:int
-     * }
      */
-    public function evaluate(array $checks, array $summary = [], ?string $profileOverride = null): array
+    public function evaluate(array $checks, array $summary = [], ?string $profileOverride = null): GateDecision
     {
         try {
             ['profile' => $profile, 'source' => $profileSource] = $this->resolvedProfile($profileOverride);
@@ -51,74 +41,24 @@ final readonly class GatePolicyEvaluator
             $warnExit = ($policy['exit_on_warn'] ?? false) && ! $safetyFailed && ! $evidenceFailed && $warningCount > 0;
 
             if ($safetyFailed) {
-                return [
-                    'profile' => $profile,
-                    'profile_source' => $profileSource,
-                    'verdict' => 'fail',
-                    'failed_gate' => 'safety',
-                    'safety_failed' => true,
-                    'evidence_failed' => $evidenceFailed,
-                    'warning_count' => $warningCount,
-                    'failed_count' => $failedCount,
-                    'exit_code' => $codeMap['safety_fail'],
-                ];
+                return new GateDecision($profile, $profileSource, 'fail', 'safety', $codeMap['safety_fail']);
             }
 
             if ($evidenceFailed) {
-                return [
-                    'profile' => $profile,
-                    'profile_source' => $profileSource,
-                    'verdict' => 'fail',
-                    'failed_gate' => 'evidence',
-                    'safety_failed' => false,
-                    'evidence_failed' => true,
-                    'warning_count' => $warningCount,
-                    'failed_count' => $failedCount,
-                    'exit_code' => $codeMap['evidence_fail'],
-                ];
+                return new GateDecision($profile, $profileSource, 'fail', 'evidence', $codeMap['evidence_fail']);
             }
 
             if ($warnExit) {
-                return [
-                    'profile' => $profile,
-                    'profile_source' => $profileSource,
-                    'verdict' => 'warn',
-                    'failed_gate' => 'none',
-                    'safety_failed' => false,
-                    'evidence_failed' => false,
-                    'warning_count' => $warningCount,
-                    'failed_count' => $failedCount,
-                    'exit_code' => $codeMap['warn'],
-                ];
+                return new GateDecision($profile, $profileSource, 'warn', 'none', $codeMap['warn']);
             }
 
-            return [
-                'profile' => $profile,
-                'profile_source' => $profileSource,
-                'verdict' => 'pass',
-                'failed_gate' => 'none',
-                'safety_failed' => false,
-                'evidence_failed' => false,
-                'warning_count' => $warningCount,
-                'failed_count' => $failedCount,
-                'exit_code' => $codeMap['pass'],
-            ];
+            return new GateDecision($profile, $profileSource, 'pass', 'none', $codeMap['pass']);
         } catch (Throwable $exception) {
             report($exception);
 
             $codeMap = $this->codeMap();
 
-            return [
-                'profile' => 'unknown',
-                'profile_source' => 'default',
-                'verdict' => 'fail',
-                'failed_gate' => 'policy',
-                'safety_failed' => false,
-                'evidence_failed' => false,
-                'warning_count' => 0,
-                'failed_count' => 0,
-                'exit_code' => $codeMap['policy_error'],
-            ];
+            return new GateDecision('unknown', 'default', 'fail', 'policy', $codeMap['policy_error']);
         }
     }
 
@@ -176,7 +116,7 @@ final readonly class GatePolicyEvaluator
     {
         $profiles = $this->config->profiles;
 
-        if (! isset($profiles[$profile]) || ! is_array($profiles[$profile])) {
+        if (! isset($profiles[$profile]) || false) {
             return [
                 'exit_on_warn' => false,
                 'safety' => [
@@ -218,8 +158,8 @@ final readonly class GatePolicyEvaluator
     private function normalizeChecks(array $checks): array
     {
         return collect($checks)->map(static fn (array $check): array => [
-            'code' => (string) ($check['code'] ?? ''),
-            'status' => (string) ($check['status'] ?? 'warn'),
+            'code' => $check['code'] ?? '',
+            'status' => $check['status'] ?? 'warn',
         ])->all();
     }
 

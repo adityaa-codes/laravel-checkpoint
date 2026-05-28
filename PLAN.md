@@ -37,7 +37,7 @@ you try to restore it. Checkpoint exists to make recovery proven, not assumed.
 ### CLI Surface
 `checkpoint:install`, `checkpoint:doctor`, `checkpoint:status`, `checkpoint:report`,
 `checkpoint:backup`, `checkpoint:restore`, `checkpoint:drill`, `checkpoint:prune`,
-`checkpoint:recover-orphans`, `checkpoint:health-check`, `checkpoint:migrate-from-spatie`,
+`checkpoint:recover-orphans`, `checkpoint:sweep`, `checkpoint:migrate-from-spatie`,
 `checkpoint:catalog-export`, `checkpoint:record-drill`, `checkpoint:test`
 
 Output modes: `table` (human), `json` (full envelope), `agent` (compact), `compact-json` (null-stripped).

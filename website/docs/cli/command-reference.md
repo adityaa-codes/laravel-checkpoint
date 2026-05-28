@@ -9,7 +9,7 @@ This page explains what each command does, when to use it, and what the paramete
 ## Command groups
 
 - **Operator commands** — `checkpoint:enqueue-backup`, `checkpoint:enqueue-drill`, `checkpoint:enqueue`, `checkpoint:replicate`, `checkpoint:status`
-- **Health & diagnostics** — `checkpoint:doctor`, `checkpoint:report`, `checkpoint:pitr-readiness`, `checkpoint:health-check`
+- **Health & diagnostics** — `checkpoint:doctor`, `checkpoint:report`, `checkpoint:pitr-readiness`, `checkpoint:sweep`
 - **Maintenance & governance** — `checkpoint:prune`, `checkpoint:retention-policy`, `checkpoint:recover-orphans`, `checkpoint:catalog-export`
 - **Drills** — `checkpoint:enqueue-drill`, `checkpoint:record-drill`
 
@@ -357,7 +357,7 @@ php artisan checkpoint:pitr-readiness "2026-03-11 11:30:00" --format=json
 
 ## Maintenance commands
 
-`checkpoint:health-check`
+`checkpoint:sweep`
 
 What it does:
 
@@ -371,7 +371,7 @@ When to use it:
 Example:
 
 ```bash
-php artisan checkpoint:health-check
+php artisan checkpoint:sweep
 ```
 
 `checkpoint:recover-orphans`

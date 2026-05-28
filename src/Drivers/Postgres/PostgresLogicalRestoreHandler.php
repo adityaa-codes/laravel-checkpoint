@@ -4,25 +4,23 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Drivers\Postgres;
 
+use AdityaaCodes\LaravelCheckpoint\Enums\PostgresFormat;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Symfony\Component\Process\Process;
 
 /** @internal */
-final class PostgresLogicalRestoreHandler implements PostgresOperationHandler
+final readonly class PostgresLogicalRestoreHandler implements PostgresOperationHandler
 {
     public function __construct(
-        private readonly PostgresDriverConfig $config,
-        private readonly PostgresRestoreTargetResolver $targetResolver,
+        private PostgresDriverConfig $config,
+        private PostgresRestoreTargetResolver $targetResolver,
     ) {}
 
     public function supports(string $operation): bool
     {
-        return in_array($operation, ['logical_restore_file', 'logical_restore_latest'], true);
+        return $operation === 'logical_restore_file' || $operation === 'logical_restore_latest';
     }
 
-    /**
-     * @param  array<string, mixed>  $plannedMetadata
-     */
     public function buildProcess(CommandRun $run, array $plannedMetadata): Process
     {
         return new Process(
@@ -41,23 +39,19 @@ final class PostgresLogicalRestoreHandler implements PostgresOperationHandler
         return $this->buildProcess($run, $plannedMetadata)->getCommandLine();
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     public function plannedMetadata(CommandRun $run): array
     {
         return [
             ...$this->targetResolver->resolvedRestoreTargetMetadata($run, $this->config->format),
             'metadata' => [
                 'driver' => 'postgres',
-                'format' => $this->config->format,
+                'format' => $this->config->format->value,
                 'jobs' => $this->config->jobs,
             ],
         ];
     }
 
     /**
-     * @param  array<string, mixed>  $plannedMetadata
      * @return list<string>
      */
     private function command(CommandRun $run, array $plannedMetadata): array
@@ -67,10 +61,10 @@ final class PostgresLogicalRestoreHandler implements PostgresOperationHandler
         $command = [
             $this->config->restoreBinary,
             '--dbname='.$this->config->databaseName,
-            '--format='.$format,
+            '--format='.$format->value,
         ];
 
-        if ($format === 'directory') {
+        if ($format === PostgresFormat::Directory) {
             $command[] = '--jobs='.$this->config->jobs;
         }
 
@@ -82,6 +76,12 @@ final class PostgresLogicalRestoreHandler implements PostgresOperationHandler
             $command[] = '--create';
         }
 
+        $connectionArgs = $this->config->connectionArgs();
+
+        if ($connectionArgs !== []) {
+            $command = [...$command, ...$connectionArgs];
+        }
+
         return [
             ...$command,
             ...$this->config->extraArgs('restore'),
@@ -89,15 +89,10 @@ final class PostgresLogicalRestoreHandler implements PostgresOperationHandler
         ];
     }
 
-    /**
-     * @param  array<string, mixed>  $plannedMetadata
-     */
-    private function resolveRestoreTarget(CommandRun $run, array $plannedMetadata, string $format): string
+    private function resolveRestoreTarget(CommandRun $run, array $plannedMetadata, PostgresFormat $format): string
     {
-        if (is_string($plannedMetadata['restore_target'] ?? null) && $plannedMetadata['restore_target'] !== '') {
-            $snapshot = is_array($plannedMetadata['restore_target_snapshot'] ?? null)
-                ? $plannedMetadata['restore_target_snapshot']
-                : null;
+        if (isset($plannedMetadata['restore_target']) && $plannedMetadata['restore_target'] !== '') {
+            $snapshot = $plannedMetadata['restore_target_snapshot'] ?? null;
 
             return $this->targetResolver->validatedRestoreTarget($plannedMetadata['restore_target'], $format, $snapshot);
         }

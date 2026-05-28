@@ -14,12 +14,10 @@ use AdityaaCodes\LaravelCheckpoint\Actions\ComposeRestorePostureHealthChecksActi
 use AdityaaCodes\LaravelCheckpoint\Actions\ComposeVerificationHealthChecksAction;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
-use AdityaaCodes\LaravelCheckpoint\ValueObjects\HealthCheckConfig;
 
 final readonly class HealthCheckComposer
 {
     public function __construct(
-        private HealthCheckConfig $config,
         private ComposeConfigHealthChecksAction $configChecks,
         private ComposeBinaryHealthChecksAction $binaryChecks,
         private ComposeDatabaseTableHealthChecksAction $tableChecks,

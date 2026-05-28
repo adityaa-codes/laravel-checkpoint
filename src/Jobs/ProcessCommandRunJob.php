@@ -39,11 +39,14 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
 
     private string $configuredDriver;
 
+    public int $timeout;
+
     public function __construct(public readonly CommandRun $run)
     {
         $this->onQueue(config('checkpoint.queue.name', 'db-ops'));
         $this->logChannel = (string) config('checkpoint.log_channel', 'stack');
-        $this->configuredDriver = (string) config('checkpoint.driver', 'shell');
+        $this->configuredDriver = (string) config('checkpoint.driver');
+        $this->timeout = max(60, (int) config('checkpoint.queue.timeout', 3600));
     }
 
     public function handle(

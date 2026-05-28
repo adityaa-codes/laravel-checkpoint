@@ -40,7 +40,7 @@ it('matches the doctor json fixture', function (): void {
     CommandJsonFixtureSupport::seedOperatorState();
 
     CommandJsonFixtureSupport::withEmptyPath(function (): void {
-        Artisan::call('checkpoint:doctor', ['--format' => 'json']);
+        Artisan::call('checkpoint:status', ['--health' => true, '--format' => 'json']);
     });
 
     checkpoint_assert_matches_fixture(
@@ -57,7 +57,7 @@ it('matches the operational report json fixture', function (): void {
     CommandJsonFixtureSupport::seedOperatorState();
 
     CommandJsonFixtureSupport::withEmptyPath(function (): void {
-        Artisan::call('checkpoint:doctor', ['--full' => true, '--limit' => 2, '--format' => 'json']);
+        Artisan::call('checkpoint:status', ['--full' => true, '--limit' => 2, '--format' => 'json']);
     });
 
     checkpoint_assert_matches_fixture(
@@ -72,7 +72,7 @@ it('matches the catalog export json fixture', function (): void {
     CommandJsonFixtureSupport::freezeTime();
     CommandJsonFixtureSupport::seedCatalogExports();
 
-    Artisan::call('checkpoint:status', ['--catalog' => true, '--format' => 'json', '--limit' => 10]);
+    Artisan::call('checkpoint:catalog:export', ['--format' => 'json', '--limit' => 10]);
 
     checkpoint_assert_matches_fixture(
         json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR),
@@ -86,7 +86,7 @@ it('matches the pitr readiness json fixture', function (): void {
     CommandJsonFixtureSupport::freezeTime();
     CommandJsonFixtureSupport::seedPitrReadinessState();
 
-    Artisan::call('checkpoint:doctor', ['--pitr' => true, '--target' => '2026-03-11 11:30:00', '--format' => 'json']);
+    Artisan::call('checkpoint:restore', ['--pitr-dry-run' => true, '--target' => '2026-03-11 11:30:00', '--format' => 'json']);
 
     checkpoint_assert_matches_fixture(
         json_decode(Artisan::output(), true, 512, JSON_THROW_ON_ERROR),

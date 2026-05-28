@@ -30,7 +30,7 @@ it('throws when filesystem persistence fails during inline persist', function ()
 
     $store = new CommandOutputStore(config(), $factory, resolve(CommandOutputCapture::class));
 
-    expect(fn () => $store->persist($run, 'payload'))
+    expect(fn (): array => $store->persist($run, 'payload'))
         ->toThrow(
             ConfigurationException::class,
             sprintf('Unable to persist command output to [failing:checkpoint/test-output/command-run-%d.log].', $run->getKey()),

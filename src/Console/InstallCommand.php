@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use Laravel\Prompts\Prompt;
 use RuntimeException;
 use Throwable;
@@ -18,8 +20,8 @@ final class InstallCommand extends CheckpointCommand
 {
     protected $signature = 'checkpoint:install
         {--skip-publish : Skip publishing package config and migrations.}
-        {--skip-migrate : Skip running migrations.}
-        {--skip-doctor : Skip checkpoint:doctor health checks.}
+        {--skip-migrate : Skip migration prompt.}
+        {--skip-doctor : Skip checkpoint:status --health health checks.}
         {--force : Force vendor publish overwrite.}';
 
     protected $description = 'Guided install for Laravel Checkpoint. Auto-detects your database and configures safety.';
@@ -33,7 +35,7 @@ final class InstallCommand extends CheckpointCommand
 
             $driver = $this->detectedDriver();
             $env = app()->environment();
-            $isProduction = ! in_array($env, ['local', 'testing'], true);
+            $isProduction = ! collect(['local', 'testing'])->containsStrict($env);
 
             if ($this->enhancedInteractiveMode()) {
                 intro('Laravel Checkpoint Install Wizard');
@@ -45,21 +47,19 @@ final class InstallCommand extends CheckpointCommand
                 ]);
             }
 
-            $this->applyRuntimeConfig([
-                'checkpoint.driver' => $driver,
-            ]);
-
             if (! (bool) $this->option('skip-publish')) {
                 $this->publishArtifacts((bool) $this->option('force'));
             }
 
+            $this->writeEnvValues($driver);
+
             if (! (bool) $this->option('skip-migrate')) {
-                $this->runMigrations();
+                $this->handleMigrations();
             }
 
             $doctor = ['ok' => null, 'failed' => 0, 'warn' => 0, 'warn_effective' => 0, 'blocker' => 0, 'warning' => 0, 'warning_effective' => 0];
             if (! (bool) $this->option('skip-doctor')) {
-                $doctor = $this->runDoctor();
+                $doctor = $this->runDoctor($driver);
             }
 
             $this->renderSummary($driver, $doctor);
@@ -68,17 +68,18 @@ final class InstallCommand extends CheckpointCommand
                 $this->promptProductionSafety();
             }
 
+            $this->detectQueueWorker();
+
             if ($this->enhancedInteractiveMode()) {
-                outro('Laravel Checkpoint installation completed.');
-                note('Next: php artisan checkpoint:backup');
+                outro('Done. Next: php artisan checkpoint:backup');
             }
 
             return $doctor['failed'] > 0 ? self::FAILURE : self::SUCCESS;
         } catch (Throwable $exception) {
             report($exception);
 
-            foreach (preg_split('/\r\n|\r|\n/', $exception->getMessage()) ?: [] as $line) {
-                if (trim($line) !== '') {
+            foreach (Str::of($exception->getMessage())->split('/\\r\\n|\\r|\\n/')->all() ?: [] as $line) {
+                if (Str::trim($line) !== '') {
                     $this->promptError($line);
                 }
             }
@@ -87,15 +88,17 @@ final class InstallCommand extends CheckpointCommand
         }
     }
 
-    private function detectedDriver(): string
+    private function detectedDriver(): ?string
     {
-        $defaultConnection = (string) config('database.default', 'mysql');
+        $default = config('database.default');
+        $defaultConnection = is_string($default) ? $default : 'mysql';
 
-        return match (strtolower(trim((string) config('database.connections.'.$defaultConnection.'.driver', 'mysql')))) {
+        $dbDriver = config('database.connections.'.$defaultConnection.'.driver');
+
+        return match (Str::lower(Str::trim(is_string($dbDriver) ? $dbDriver : 'mysql'))) {
             'pgsql', 'postgres', 'postgresql' => 'postgres',
             'mysql', 'mariadb' => 'mysql',
-            'sqlite' => 'shell',
-            default => 'shell',
+            default => 'mysql',
         };
     }
 
@@ -106,19 +109,8 @@ final class InstallCommand extends CheckpointCommand
         return match ($driver) {
             'postgres' => 'PostgreSQL',
             'mysql' => 'MySQL / MariaDB',
-            'shell' => 'SQLite / Other',
-            default => $driver,
+            default => 'Unknown',
         };
-    }
-
-    /**
-     * @param  array<string, mixed>  $overrides
-     */
-    private function applyRuntimeConfig(array $overrides): void
-    {
-        foreach ($overrides as $path => $value) {
-            config()->set($path, $value);
-        }
     }
 
     private function publishArtifacts(bool $force): void
@@ -126,13 +118,13 @@ final class InstallCommand extends CheckpointCommand
         $configCode = Artisan::call('vendor:publish', $this->publishParameters('checkpoint-config', $force));
 
         if ($configCode !== self::SUCCESS) {
-            throw new RuntimeException(trim(Artisan::output()) ?: 'Failed publishing checkpoint-config.');
+            throw new RuntimeException(Str::trim(Artisan::output()) ?: 'Failed publishing checkpoint-config.');
         }
 
         $migrationCode = Artisan::call('vendor:publish', $this->publishParameters('checkpoint-migrations', $force));
 
         if ($migrationCode !== self::SUCCESS) {
-            throw new RuntimeException(trim(Artisan::output()) ?: 'Failed publishing checkpoint-migrations.');
+            throw new RuntimeException(Str::trim(Artisan::output()) ?: 'Failed publishing checkpoint-migrations.');
         }
     }
 
@@ -150,21 +142,107 @@ final class InstallCommand extends CheckpointCommand
         return $parameters;
     }
 
-    private function runMigrations(): void
+    private function writeEnvValues(string $driver): void
     {
-        $code = Artisan::call('migrate', ['--force' => true]);
+        $proposed = [
+            'CP_DRIVER' => $driver,
+            'CP_BACKUP_ARCHIVE_PASSWORD' => '',
+            'CP_RESTORE_ALLOWED_ENVIRONMENTS' => 'local,testing,staging',
+        ];
 
-        if ($code !== self::SUCCESS) {
-            throw new RuntimeException(trim(Artisan::output()) ?: 'Migration command failed.');
+        if ($this->enhancedInteractiveMode()) {
+            $this->promptTable(['Proposed .env Values'], array_map(
+                static fn (string $key, string $value): array => [$key.'='.$value],
+                array_keys($proposed),
+                array_values($proposed),
+            ));
+
+            if (! confirm('Write these values to .env?', default: false)) {
+                return;
+            }
+
+            $this->appendToEnv($proposed);
+        } else {
+            foreach ($proposed as $key => $value) {
+                note(sprintf('Add %s=%s to your .env.', $key, $value));
+            }
+        }
+    }
+
+    /**
+     * @param  array<string, string>  $values
+     */
+    private function appendToEnv(array $values): void
+    {
+        $envPath = base_path('.env');
+
+        if (! File::exists($envPath)) {
+            note('.env file not found. Skipping.');
+
+            return;
+        }
+
+        $contents = File::get($envPath);
+
+        foreach ($values as $key => $value) {
+            if (preg_match('/^'.preg_quote($key, '/').'=/m', $contents)) {
+                continue;
+            }
+
+            File::append($envPath, PHP_EOL.$key.'='.$value);
+        }
+
+        note('.env updated with new keys.');
+    }
+
+    private function handleMigrations(): void
+    {
+        if ($this->enhancedInteractiveMode()) {
+            if (! confirm('Run migration now?', default: false)) {
+                return;
+            }
+        }
+
+        $this->runCheckpointMigration();
+    }
+
+    private function runCheckpointMigration(): void
+    {
+        $migrationDir = database_path('migrations');
+        $chkptFiles = File::glob($migrationDir.'/*_create_db_ops_*_table.php');
+
+        if ($chkptFiles === []) {
+            note('No checkpoint migration files found. Skipping.');
+
+            return;
+        }
+
+        $tempDir = $migrationDir.'/checkpoint_run';
+        File::makeDirectory($tempDir, 0755, true);
+
+        try {
+            foreach ($chkptFiles as $file) {
+                $filename = basename((string) $file);
+                File::copy((string) $file, $tempDir.'/'.$filename);
+            }
+
+            Artisan::call('migrate', [
+                '--path' => 'database/migrations/checkpoint_run',
+                '--force' => true,
+            ]);
+
+            $this->promptInfo(Str::trim(Artisan::output()));
+        } finally {
+            File::deleteDirectory($tempDir);
         }
     }
 
     /**
      * @return array{ok:bool|null,failed:int,warn:int,warn_effective:int,blocker:int,warning:int,warning_effective:int}
      */
-    private function runDoctor(): array
+    private function runDoctor(string $driver): array
     {
-        $code = Artisan::call('checkpoint:doctor', ['--format' => 'json']);
+        $code = Artisan::call('checkpoint:status', ['--health' => true, '--format' => 'json']);
         $report = json_decode(Artisan::output(), true);
 
         if (! is_array($report)) {
@@ -182,17 +260,17 @@ final class InstallCommand extends CheckpointCommand
         $checks = is_array($report['checks'] ?? null) ? $report['checks'] : [];
 
         return [
-            'ok' => count(array_filter($checks, static fn (mixed $c): bool => is_array($c) && ($c['status'] ?? null) === 'fail')) === 0,
-            'failed' => count(array_filter($checks, static fn (mixed $c): bool => is_array($c) && ($c['status'] ?? null) === 'fail')),
-            'warn' => count(array_filter($checks, static fn (mixed $c): bool => is_array($c) && ($c['status'] ?? null) === 'warn')),
-            'warn_effective' => count(array_filter($checks, static fn (mixed $c): bool => is_array($c)
+            'ok' => collect($checks)->filter(static fn (mixed $c): bool => is_array($c) && ($c['status'] ?? null) === 'fail')->count() === 0,
+            'failed' => collect($checks)->filter(static fn (mixed $c): bool => is_array($c) && ($c['status'] ?? null) === 'fail')->count(),
+            'warn' => collect($checks)->filter(static fn (mixed $c): bool => is_array($c) && ($c['status'] ?? null) === 'warn')->count(),
+            'warn_effective' => collect($checks)->filter(fn (mixed $c): bool => is_array($c)
                 && ($c['status'] ?? null) === 'warn'
-                && ! $this->isAdvisoryWarningForReadiness($c))),
-            'blocker' => count(array_filter($checks, static fn (mixed $c): bool => is_array($c) && (($c['severity'] ?? null) === 'blocker'))),
-            'warning' => count(array_filter($checks, static fn (mixed $c): bool => is_array($c) && (($c['severity'] ?? null) === 'warning'))),
-            'warning_effective' => count(array_filter($checks, static fn (mixed $c): bool => is_array($c)
+                && ! $this->isAdvisoryWarningForReadiness($c))->count(),
+            'blocker' => collect($checks)->filter(static fn (mixed $c): bool => is_array($c) && (($c['severity'] ?? null) === 'blocker'))->count(),
+            'warning' => collect($checks)->filter(static fn (mixed $c): bool => is_array($c) && (($c['severity'] ?? null) === 'warning'))->count(),
+            'warning_effective' => collect($checks)->filter(fn (mixed $c): bool => is_array($c)
                 && (($c['severity'] ?? null) === 'warning')
-                && ! $this->isAdvisoryWarningForReadiness($c))),
+                && ! $this->isAdvisoryWarningForReadiness($c))->count(),
         ];
     }
 
@@ -201,17 +279,17 @@ final class InstallCommand extends CheckpointCommand
      */
     private function isAdvisoryWarningForReadiness(array $check): bool
     {
-        if (! in_array(app()->environment(), ['local', 'testing'], true)) {
+        if (! collect(['local', 'testing'])->containsStrict(app()->environment())) {
             return false;
         }
 
-        return in_array($check['code'] ?? '', [
+        return collect([
             'backup_drill.latest_run',
             'backup_drill.pass_rate',
             'backup_drill.trend',
             'backup_drill.playbook',
             'verification.runs',
-        ], true);
+        ])->containsStrict($check['code'] ?? '');
     }
 
     /**
@@ -236,31 +314,22 @@ final class InstallCommand extends CheckpointCommand
 
     private function promptProductionSafety(): void
     {
-        if ($this->enhancedInteractiveMode() && ! confirm('Production detected. Restrict restores to staging only? (recommended)', default: true)) {
-            note('Restores will be allowed in this environment. Manage safety in config/checkpoint.php.');
+        note('Production environment detected. Add these to your .env:');
+        note('  CP_RESTORE_ALLOWED_ENVIRONMENTS=staging');
+    }
 
-            return;
-        }
+    private function detectQueueWorker(): void
+    {
+        $queueName = 'db-ops';
+        $output = null;
+        $returnCode = null;
 
-        $envPath = app()->environmentFilePath();
+        exec('pgrep -f "artisan queue:work" 2>/dev/null', $output, $returnCode);
 
-        if (! file_exists($envPath)) {
-            note(sprintf('Could not find environment file at [%s]. Add CP_RESTORE_ALLOWED_ENVIRONMENTS=staging manually.', $envPath));
-
-            return;
-        }
-
-        $contents = (string) file_get_contents($envPath);
-        $line = 'CP_RESTORE_ALLOWED_ENVIRONMENTS=staging';
-
-        if (str_contains($contents, 'CP_RESTORE_ALLOWED_ENVIRONMENTS=')) {
-            $contents = (string) preg_replace('/^CP_RESTORE_ALLOWED_ENVIRONMENTS=.*/m', $line, $contents);
+        if ($returnCode === 0) {
+            $this->promptInfo(sprintf('Queue worker detected ✓ (queue: %s)', $queueName));
         } else {
-            $contents = rtrim($contents)."\n".$line."\n";
+            note(sprintf('Start queue worker: php artisan queue:work --queue=%s', $queueName));
         }
-
-        file_put_contents($envPath, $contents);
-
-        note('Added CP_RESTORE_ALLOWED_ENVIRONMENTS=staging to your .env file.');
     }
 }

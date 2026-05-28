@@ -419,9 +419,9 @@ it('records append-only restore decision evidence for successful restore checks'
         ->and($events[0]->decision)->toBe('evaluate')
         ->and($events[1]->decision)->toBe('allow')
         ->and($events[1]->reason)->toBe('restore_safety_passed')
-        ->and($events[1]->payload['restore_audit']['verified_signal_run_id'] ?? null)->toBe((int) $verified->id)
+        ->and($events[1]->payload['restore_audit']['verified_signal_run_id'] ?? null)->toBe($verified->id)
         ->and($events[1]->payload['restore_audit']['blast_radius']['status'] ?? null)->toBeString()
-        ->and($audit['restore_audit']['verified_signal_run_id'])->toBe((int) $verified->id);
+        ->and($audit['restore_audit']['verified_signal_run_id'])->toBe($verified->id);
 });
 
 it('blocks restore execution when blast radius score exceeds block threshold', function (): void {

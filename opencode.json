@@ -4,7 +4,11 @@
         "laravel-boost": {
             "type": "local",
             "enabled": true,
-            "command": ["ddev", "exec", "vendor/bin/testbench", "boost:mcp"]
+            "command": [
+                "php",
+                "artisan",
+                "boost:mcp"
+            ]
         }
     }
 }

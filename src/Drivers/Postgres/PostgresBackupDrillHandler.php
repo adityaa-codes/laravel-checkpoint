@@ -6,15 +6,14 @@ namespace AdityaaCodes\LaravelCheckpoint\Drivers\Postgres;
 
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
-use Illuminate\Support\Str;
 use Symfony\Component\Process\Process;
 
 /** @internal */
-final class PostgresBackupDrillHandler implements PostgresOperationHandler
+final readonly class PostgresBackupDrillHandler implements PostgresOperationHandler
 {
     public function __construct(
-        private readonly PostgresDriverConfig $config,
-        private readonly PostgresRestoreTargetResolver $targetResolver,
+        private PostgresDriverConfig $config,
+        private PostgresRestoreTargetResolver $targetResolver,
     ) {}
 
     public function supports(string $operation): bool
@@ -22,9 +21,6 @@ final class PostgresBackupDrillHandler implements PostgresOperationHandler
         return $operation === 'backup_drill';
     }
 
-    /**
-     * @param  array<string, mixed>  $plannedMetadata
-     */
     public function buildProcess(CommandRun $run, array $plannedMetadata): Process
     {
         if ($this->config->drillCommand !== '') {
@@ -54,9 +50,6 @@ final class PostgresBackupDrillHandler implements PostgresOperationHandler
         return sprintf('pg_restore -l %s', $plannedMetadata['drill_artifact_path'] ?? '');
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     public function plannedMetadata(CommandRun $run): array
     {
         return [
@@ -68,15 +61,14 @@ final class PostgresBackupDrillHandler implements PostgresOperationHandler
     }
 
     /**
-     * @param  array<string, mixed>  $plannedMetadata
      * @return list<string>
      */
     private function customDrillCommand(array $plannedMetadata): array
     {
-        $argv = preg_split('/\s+/', $this->config->drillCommand);
+        $tokens = preg_split('/\s+/', trim($this->config->drillCommand)) ?: [];
 
-        if ($argv === false) {
-            throw new ConfigurationException('checkpoint.drivers.postgres.drill_command must contain a valid executable token.');
+        if ($tokens === [] || ! isset($tokens[0])) {
+            throw ConfigurationException::missingDrillExecutable();
         }
 
         $replacements = [
@@ -84,17 +76,16 @@ final class PostgresBackupDrillHandler implements PostgresOperationHandler
             '{target}' => $plannedMetadata['drill_artifact_path'] ?? '',
         ];
 
-        return array_values(collect($argv)->map(
-            static fn (string $token): string => Str::replace(
+        return collect($tokens)->map(
+            fn (string $token): string => str_replace(
                 array_keys($replacements),
                 array_values($replacements),
                 $token,
             ),
-        )->all());
+        )->values()->all();
     }
 
     /**
-     * @param  array<string, mixed>  $plannedMetadata
      * @return list<string>
      */
     private function defaultDrillCommand(array $plannedMetadata): array

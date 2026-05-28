@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Support;
 
+use Illuminate\Support\Str;
 use Symfony\Component\Process\ExecutableFinder;
 
 /** @internal */
@@ -14,7 +15,7 @@ final readonly class BinaryFinder
      */
     public function resolve(string $binary): array
     {
-        $trimmed = trim($binary);
+        $trimmed = Str::trim($binary);
 
         if ($trimmed === '') {
             return ['found' => false, 'path' => null];

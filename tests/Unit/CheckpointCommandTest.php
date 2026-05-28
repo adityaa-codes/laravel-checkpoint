@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Console\CheckpointCommand;
+use AdityaaCodes\LaravelCheckpoint\ValueObjects\GateDecision;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Input\InputDefinition;
 use Symfony\Component\Console\Input\InputInterface;
@@ -56,10 +57,9 @@ function makeProbeCommand(): CheckpointCommand
         }
 
         /**
-         * @param  array<string,mixed>  $gateDecision
          * @return array{profile:string,profile_source:string,verdict:string,failed_gate:string,exit_code:int}
          */
-        public function probeMachineGateDecision(array $gateDecision): array
+        public function probeMachineGateDecision(GateDecision $gateDecision): array
         {
             return $this->machineGateDecision($gateDecision);
         }
@@ -91,9 +91,9 @@ test('resolves output mode', function (): void {
 
     expect($command->probeResolveOutputMode('table', false))->toBe('table');
     expect($command->probeResolveOutputMode('json', false))->toBe('json');
-    expect($command->probeResolveOutputMode('compact-json', false))->toBe('compact-json');
+    expect($command->probeResolveOutputMode('compact-json', false))->toBe('table');
     expect($command->probeResolveOutputMode('invalid', false))->toBe('table');
-    expect($command->probeResolveOutputMode('table', true))->toBe('agent');
+    expect($command->probeResolveOutputMode('table', true))->toBe('table');
 });
 
 test('provides priority labels', function (): void {
@@ -145,13 +145,13 @@ test('orders checks for display with fail first', function (): void {
 test('normalizes machine gate decision', function (): void {
     $command = makeProbeCommand();
 
-    $result = $command->probeMachineGateDecision([
-        'profile' => 'ci',
-        'profile_source' => 'override',
-        'verdict' => 'pass',
-        'failed_gate' => 'health',
-        'exit_code' => 0,
-    ]);
+    $result = $command->probeMachineGateDecision(new GateDecision(
+        profile: 'ci',
+        profileSource: 'override',
+        verdict: 'pass',
+        failedGate: 'health',
+        exitCode: 0,
+    ));
 
     expect($result)->toMatchArray([
         'profile' => 'ci',
@@ -162,10 +162,16 @@ test('normalizes machine gate decision', function (): void {
     ]);
 });
 
-test('fills defaults in machine gate decision', function (): void {
+test('maps gate decision properties to array keys', function (): void {
     $command = makeProbeCommand();
 
-    $result = $command->probeMachineGateDecision([]);
+    $result = $command->probeMachineGateDecision(new GateDecision(
+        profile: 'unknown',
+        profileSource: 'default',
+        verdict: 'fail',
+        failedGate: 'policy',
+        exitCode: 12,
+    ));
 
     expect($result)->toMatchArray([
         'profile' => 'unknown',

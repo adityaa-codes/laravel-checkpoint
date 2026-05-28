@@ -3,13 +3,11 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
+use AdityaaCodes\LaravelCheckpoint\Enums\CheckpointOperation;
 use AdityaaCodes\LaravelCheckpoint\Facades\LaravelCheckpoint as LaravelCheckpointFacade;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpoint;
-use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
-use AdityaaCodes\LaravelCheckpoint\Policies\BackupDrillRunPolicy;
-use AdityaaCodes\LaravelCheckpoint\Policies\CommandRunPolicy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Facade;
 
@@ -34,9 +32,9 @@ it('delegates execution through the public api wrapper', function (): void {
             private readonly CommandRun $run,
         ) {}
 
-        public function execute(string $operation, ?string $argument = null, ?Model $requestedBy = null): CommandRun
+        public function execute(CheckpointOperation $operation, ?string $argument = null, ?Model $requestedBy = null): CommandRun
         {
-            expect($operation)->toBe('logical_backup');
+            expect($operation)->toBe(CheckpointOperation::Backup);
             expect($argument)->toBeNull();
             expect($requestedBy)->toBeNull();
 
@@ -46,12 +44,12 @@ it('delegates execution through the public api wrapper', function (): void {
 
     $checkpoint = new LaravelCheckpoint($action);
 
-    expect($checkpoint->execute('logical_backup'))->toBe($expectedRun);
+    expect($checkpoint->execute(CheckpointOperation::Backup))->toBe($expectedRun);
 });
 
 it('delegates execution through the facade', function (): void {
     $expectedRun = CommandRun::factory()->make([
-        'operation' => 'physical_backup',
+        'operation' => 'logical_restore_file',
     ]);
 
     $action = new class($expectedRun) extends EnqueueCommandRunAction
@@ -60,9 +58,9 @@ it('delegates execution through the facade', function (): void {
             private readonly CommandRun $run,
         ) {}
 
-        public function execute(string $operation, ?string $argument = null, ?Model $requestedBy = null): CommandRun
+        public function execute(CheckpointOperation $operation, ?string $argument = null, ?Model $requestedBy = null): CommandRun
         {
-            expect($operation)->toBe('physical_backup');
+            expect($operation)->toBe(CheckpointOperation::RestoreFile);
             expect($argument)->toBeNull();
             expect($requestedBy)->toBeNull();
 
@@ -74,29 +72,7 @@ it('delegates execution through the facade', function (): void {
 
     Facade::clearResolvedInstance(LaravelCheckpoint::class);
 
-    expect(LaravelCheckpointFacade::execute('physical_backup'))->toBe($expectedRun);
-});
-
-it('allows viewing command runs and creating new ones', function (): void {
-    $policy = new CommandRunPolicy;
-    $user = new stdClass;
-    $run = CommandRun::factory()->make();
-
-    expect($policy->viewAny($user))->toBeTrue()
-        ->and($policy->view($user, $run))->toBeTrue()
-        ->and($policy->create($user))->toBeTrue();
-});
-
-it('allows viewing backup drill runs but forbids mutations', function (): void {
-    $policy = new BackupDrillRunPolicy;
-    $user = new stdClass;
-    $run = BackupDrillRun::factory()->make();
-
-    expect($policy->viewAny($user))->toBeTrue()
-        ->and($policy->view($user, $run))->toBeTrue()
-        ->and($policy->create($user))->toBeFalse()
-        ->and($policy->update($user, $run))->toBeFalse()
-        ->and($policy->delete($user, $run))->toBeFalse();
+    expect(LaravelCheckpointFacade::execute(CheckpointOperation::RestoreFile))->toBe($expectedRun);
 });
 
 it('exposes verification runs as a public model surface', function (): void {

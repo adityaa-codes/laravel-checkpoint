@@ -1,6 +1,6 @@
 {
     "generated_at": "2026-03-11T12:00:00+00:00",
-    "driver": "shell",
+    "driver": "mysql",
     "format": "json",
     "limit_requested": 10,
     "limit": 10,
@@ -15,7 +15,7 @@
         {
             "command_run_id": 2,
             "operation": "logical_backup",
-            "driver": "shell",
+            "driver": "mysql",
             "repository": null,
             "stanza": null,
             "type": "logical_export",

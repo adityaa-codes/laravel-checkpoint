@@ -1,0 +1,13 @@
+{
+    "$schema": "https://laravel-ide.com/schema/ide-json-v2.json",
+    "completions": [
+        {
+            "type": "config",
+            "path": "checkpoint.*"
+        },
+        {
+            "type": "enum",
+            "class": "\\AdityaaCodes\\LaravelCheckpoint\\Enums\\CheckpointOperation"
+        }
+    ]
+}

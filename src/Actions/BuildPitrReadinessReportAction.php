@@ -9,6 +9,8 @@ use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 
 final readonly class BuildPitrReadinessReportAction
 {
@@ -30,10 +32,7 @@ final readonly class BuildPitrReadinessReportAction
         $resolvedTarget = $this->resolvedTarget($target);
         $baseline = $this->latestBaseline();
         $configuredBinlogs = $this->configuredBinlogFiles();
-        $missingBinlogs = array_values(array_filter(
-            $configuredBinlogs,
-            static fn (string $path): bool => ! is_file($path),
-        ));
+        $missingBinlogs = collect($configuredBinlogs)->filter(static fn (string $path): bool => ! File::isFile($path))->values()->all();
 
         $checks = [
             [
@@ -50,8 +49,8 @@ final readonly class BuildPitrReadinessReportAction
             ],
             [
                 'code' => 'baseline.artifact_exists',
-                'status' => $baseline instanceof CommandRun && is_string($baseline->artifact_path) && $baseline->artifact_path !== '' && is_file($baseline->artifact_path) ? 'pass' : 'fail',
-                'message' => $baseline instanceof CommandRun && is_string($baseline->artifact_path) && $baseline->artifact_path !== '' && is_file($baseline->artifact_path)
+                'status' => $baseline instanceof CommandRun && is_string($baseline->artifact_path) && $baseline->artifact_path !== '' && File::isFile($baseline->artifact_path) ? 'pass' : 'fail',
+                'message' => $baseline instanceof CommandRun && is_string($baseline->artifact_path) && $baseline->artifact_path !== '' && File::isFile($baseline->artifact_path)
                     ? 'Baseline backup artifact exists on disk.'
                     : 'Baseline backup artifact is missing on disk.',
                 'data' => [
@@ -107,10 +106,7 @@ final readonly class BuildPitrReadinessReportAction
             ],
         ];
 
-        $failedChecks = count(array_filter(
-            $checks,
-            static fn (array $check): bool => $check['status'] === 'fail',
-        ));
+        $failedChecks = collect($checks)->filter(static fn (array $check): bool => $check['status'] === 'fail')->count();
 
         return [
             'generated_at' => now()->toIso8601String(),
@@ -126,7 +122,7 @@ final readonly class BuildPitrReadinessReportAction
 
     private function resolvedTarget(?string $target): Carbon
     {
-        $value = is_string($target) ? trim($target) : '';
+        $value = is_string($target) ? Str::trim($target) : '';
 
         if ($value === '') {
             return now();
@@ -137,7 +133,7 @@ final readonly class BuildPitrReadinessReportAction
         } catch (\Throwable $exception) {
             report($exception);
 
-            throw new CheckpointArgumentException('PITR target must be a valid datetime string.');
+            throw new CheckpointArgumentException('PITR target must be a valid datetime string.', $exception->getCode(), $exception);
         }
     }
 
@@ -166,9 +162,6 @@ final readonly class BuildPitrReadinessReportAction
             return [];
         }
 
-        return array_values(array_filter(array_map(
-            static fn (mixed $item): string => is_string($item) ? trim($item) : '',
-            $configured,
-        ), static fn (string $item): bool => $item !== ''));
+        return collect($configured)->map(static fn (mixed $item): string => is_string($item) ? Str::trim($item) : '')->filter(static fn (string $item): bool => $item !== '')->values()->all();
     }
 }

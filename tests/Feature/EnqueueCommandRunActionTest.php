@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
+use AdityaaCodes\LaravelCheckpoint\Enums\CheckpointOperation;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupQueued;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
@@ -10,12 +11,13 @@ use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Js;
 
 it('creates a pending command run and dispatches processing after commit', function (): void {
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    $run = resolve(EnqueueCommandRunAction::class)->execute('logical_restore_file', ' nightly.sql ');
+    $run = resolve(EnqueueCommandRunAction::class)->execute(CheckpointOperation::RestoreFile, ' nightly.sql ');
 
     expect($run->exists)->toBeTrue()
         ->and($run->status)->toBe(CommandRunStatus::Pending)
@@ -39,7 +41,7 @@ it('rejects invalid arguments without creating a run or dispatching a job', func
     Bus::fake();
     Event::fake([BackupQueued::class]);
 
-    expect(fn () => resolve(EnqueueCommandRunAction::class)->execute('logical_restore_file'))
+    expect(fn () => resolve(EnqueueCommandRunAction::class)->execute(CheckpointOperation::RestoreFile))
         ->toThrow(CheckpointArgumentException::class);
 
     expect(CommandRun::query()->count())->toBe(0);
@@ -58,7 +60,7 @@ it('normalizes replication enqueue payloads and stores redacted metadata only', 
     ]);
 
     $run = resolve(EnqueueCommandRunAction::class)->execute(
-        'replication_sync',
+        CheckpointOperation::Replicate,
         '{"source":"profile:pg-source","destination":"pgsql://replicator:supersecret@db.internal/prod","dry_run":true}',
     );
 
@@ -87,7 +89,7 @@ it('normalizes replication enqueue payloads and stores redacted metadata only', 
         ->and($run->metadata['replication']['source']['identifier'] ?? null)->toBe('pg-source')
         ->and($run->metadata['replication']['destination']['kind'] ?? null)->toBe('dsn')
         ->and($run->metadata['replication']['destination']['redacted'] ?? null)->toBe('pgsql://[REDACTED]@db.internal')
-        ->and(json_encode($run->metadata, JSON_THROW_ON_ERROR))->not->toContain('supersecret');
+        ->and(Js::encode($run->metadata, JSON_THROW_ON_ERROR))->not->toContain('supersecret');
 
     Bus::assertDispatched(fn (ProcessCommandRunJob $job): bool => $job->run->is($run)
         && $job->queue === 'db-ops'
@@ -105,7 +107,7 @@ it('maps replication apply and force aliases into operation metadata', function 
     ]);
 
     $run = resolve(EnqueueCommandRunAction::class)->execute(
-        'replication_sync',
+        CheckpointOperation::Replicate,
         '{"source":"profile:pg-source","destination":"profile:pg-destination","dry_run":false,"apply":true,"force":true,"critical_tables":["users","orders"]}',
     );
 
@@ -135,7 +137,7 @@ it('blocks replication apply runs outside governance preflight', function (): vo
     ]);
 
     expect(fn () => resolve(EnqueueCommandRunAction::class)->execute(
-        'replication_sync',
+        CheckpointOperation::Replicate,
         '{"source":"profile:pg-source","destination":"profile:prod-destination","dry_run":false,"apply":true}',
     ))->toThrow(CheckpointArgumentException::class, 'Replication apply is blocked by governance preflight: destination_not_allowlisted.');
 
@@ -154,7 +156,7 @@ it('persists replication governance preflight metadata when apply is allowed', f
     ]);
 
     $run = resolve(EnqueueCommandRunAction::class)->execute(
-        'replication_sync',
+        CheckpointOperation::Replicate,
         '{"source":"profile:pg-source","destination":"profile:prod-destination","dry_run":false,"apply":true,"force":true}',
     );
 

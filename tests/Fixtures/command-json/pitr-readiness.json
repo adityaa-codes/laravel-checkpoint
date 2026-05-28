@@ -64,7 +64,7 @@
         "pass": 6,
         "fail": 0
     },
-    "driver": "shell",
+    "driver": "mysql",
     "version": 1,
     "surface": "pitr_readiness"
 }

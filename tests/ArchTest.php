@@ -49,10 +49,6 @@ arch('drivers implement backup driver')
         'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlReplicationMetadataBuilder',
         'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlRestoreExecutor',
         'AdityaaCodes\\LaravelCheckpoint\\Drivers\\MysqlRestoreTargetValidator',
-        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\ShellCommandConfig',
-        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\ShellCommandMetadataBuilder',
-        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\ShellCommandProcessBuilder',
-        'AdityaaCodes\\LaravelCheckpoint\\Drivers\\ShellCommandSnapshotRunner',
     ]);
 
 arch('package classes are final by default')

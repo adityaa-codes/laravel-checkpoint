@@ -13,7 +13,6 @@ use Throwable;
 
 use function Laravel\Prompts\confirm;
 use function Laravel\Prompts\intro;
-use function Laravel\Prompts\note;
 use function Laravel\Prompts\outro;
 use function Laravel\Prompts\warning;
 
@@ -37,10 +36,6 @@ final class ReplicateCommand extends CheckpointCommand
         try {
             if ($this->enhancedInteractiveMode()) {
                 intro('Replication Sync Wizard');
-                note('Default mode is dry-run. Use apply mode only after validation.');
-                note('What: queue replication diff/apply workflow between endpoints.');
-                note('When: controlled data sync or migration scenarios.');
-                note('Next: run checkpoint:status to monitor replication execution.');
             }
 
             $applyRequested = (bool) $this->option('apply');

@@ -10,6 +10,7 @@ use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillPassRateAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\HealthCheckConfig;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
 
 final readonly class ComposeBackupDrillHealthChecksAction
 {
@@ -74,7 +75,7 @@ final readonly class ComposeBackupDrillHealthChecksAction
             'backup_drill.latest_run',
             'Backup drills: latest run',
             $isStale ? 'warn' : 'pass',
-            sprintf('%s %d days old (%s)', strtoupper((string) $latest->overall_result), $ageDays, $latest->run_uuid),
+            sprintf('%s %d days old (%s)', Str::upper($latest->overall_result), $ageDays, $latest->run_uuid),
             [
                 'run_uuid' => $latest->run_uuid,
                 'overall_result' => $latest->overall_result,

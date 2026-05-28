@@ -17,25 +17,10 @@ parameters:
             path: tests/ArchTest.php
         -
             message: '#Unable to resolve the template type TKey in call to function collect#'
-            path: tests/Feature/DoctorCommandTest.php
-        -
-            message: '#Unable to resolve the template type TValue in call to function collect#'
-            path: tests/Feature/DoctorCommandTest.php
-        -
-            message: '#Unable to resolve the template type TKey in call to function collect#'
-            path: tests/Feature/ReportCommandTest.php
-        -
-            message: '#Unable to resolve the template type TValue in call to function collect#'
-            path: tests/Feature/ReportCommandTest.php
-        -
-            message: '#Unable to resolve the template type TKey in call to function collect#'
             path: tests/Feature/HighVolumeOperationalFlowsTest.php
         -
             message: '#Unable to resolve the template type TValue in call to function collect#'
             path: tests/Feature/HighVolumeOperationalFlowsTest.php
-        -
-            message: '#Call to an undefined method Mockery\\ExpectationInterface\|Mockery\\HigherOrderMessage::once\(\)\.#'
-            path: tests/Feature/RecoverOrphansCommandTest.php
         -
             message: '#Call to an undefined method Illuminate\\Contracts\\Cache\\Repository::flush\(\)\.#'
             path: tests/Feature/OperationalReportBuilderTest.php

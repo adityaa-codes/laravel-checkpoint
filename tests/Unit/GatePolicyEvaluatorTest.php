@@ -17,12 +17,11 @@ it('keeps warning-only local checks as pass by default', function (): void {
         ],
     ]);
 
-    expect($decision)->toMatchArray([
-        'profile' => 'local',
-        'verdict' => 'pass',
-        'failed_gate' => 'none',
-        'exit_code' => 0,
-    ]);
+    expect($decision->profile)->toBe('local');
+    expect($decision->profileSource)->toBe('environment');
+    expect($decision->verdict)->toBe('pass');
+    expect($decision->failedGate)->toBe('none');
+    expect($decision->exitCode)->toBe(0);
 });
 
 it('fails evidence gate for staging profile when evidence checks degrade', function (): void {
@@ -39,12 +38,11 @@ it('fails evidence gate for staging profile when evidence checks degrade', funct
         ],
     ]);
 
-    expect($decision)->toMatchArray([
-        'profile' => 'staging',
-        'verdict' => 'fail',
-        'failed_gate' => 'evidence',
-        'exit_code' => 11,
-    ]);
+    expect($decision->profile)->toBe('staging');
+    expect($decision->profileSource)->toBe('environment');
+    expect($decision->verdict)->toBe('fail');
+    expect($decision->failedGate)->toBe('evidence');
+    expect($decision->exitCode)->toBe(11);
 });
 
 it('fails safety gate for staging profile when selected warning code appears', function (): void {
@@ -61,12 +59,11 @@ it('fails safety gate for staging profile when selected warning code appears', f
         ],
     ]);
 
-    expect($decision)->toMatchArray([
-        'profile' => 'staging',
-        'verdict' => 'fail',
-        'failed_gate' => 'safety',
-        'exit_code' => 10,
-    ]);
+    expect($decision->profile)->toBe('staging');
+    expect($decision->profileSource)->toBe('environment');
+    expect($decision->verdict)->toBe('fail');
+    expect($decision->failedGate)->toBe('safety');
+    expect($decision->exitCode)->toBe(10);
 });
 
 it('returns warning exit code when profile enables exit_on_warn', function (): void {
@@ -84,12 +81,11 @@ it('returns warning exit code when profile enables exit_on_warn', function (): v
         ],
     ]);
 
-    expect($decision)->toMatchArray([
-        'profile' => 'local',
-        'verdict' => 'warn',
-        'failed_gate' => 'none',
-        'exit_code' => 2,
-    ]);
+    expect($decision->profile)->toBe('local');
+    expect($decision->profileSource)->toBe('environment');
+    expect($decision->verdict)->toBe('warn');
+    expect($decision->failedGate)->toBe('none');
+    expect($decision->exitCode)->toBe(2);
 });
 
 it('uses explicit policy profile override when provided', function (): void {
@@ -106,11 +102,9 @@ it('uses explicit policy profile override when provided', function (): void {
         ],
     ], [], 'staging');
 
-    expect($decision)->toMatchArray([
-        'profile' => 'staging',
-        'profile_source' => 'override',
-        'verdict' => 'fail',
-        'failed_gate' => 'evidence',
-        'exit_code' => 11,
-    ]);
+    expect($decision->profile)->toBe('staging');
+    expect($decision->profileSource)->toBe('override');
+    expect($decision->verdict)->toBe('fail');
+    expect($decision->failedGate)->toBe('evidence');
+    expect($decision->exitCode)->toBe(11);
 });

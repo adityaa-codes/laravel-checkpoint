@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
+use AdityaaCodes\LaravelCheckpoint\ValueObjects\GateDecision;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
@@ -52,17 +53,16 @@ abstract class CheckpointCommand extends Command
     }
 
     /**
-     * @param  array<string, mixed>  $gateDecision
      * @return array{profile:string,profile_source:string,verdict:string,failed_gate:string,exit_code:int}
      */
-    protected function machineGateDecision(array $gateDecision): array
+    protected function machineGateDecision(GateDecision $gateDecision): array
     {
         return [
-            'profile' => $gateDecision['profile'] ?? 'unknown',
-            'profile_source' => $gateDecision['profile_source'] ?? 'default',
-            'verdict' => $gateDecision['verdict'] ?? 'fail',
-            'failed_gate' => $gateDecision['failed_gate'] ?? 'policy',
-            'exit_code' => (int) ($gateDecision['exit_code'] ?? 12),
+            'profile' => $gateDecision->profile,
+            'profile_source' => $gateDecision->profileSource,
+            'verdict' => $gateDecision->verdict,
+            'failed_gate' => $gateDecision->failedGate,
+            'exit_code' => $gateDecision->exitCode,
         ];
     }
 
@@ -138,13 +138,9 @@ abstract class CheckpointCommand extends Command
         return $value !== $key ? $value : $default;
     }
 
-    protected function resolveOutputMode(string $format, bool $agentMode): string
+    protected function resolveOutputMode(string $format): string
     {
-        if ($agentMode) {
-            return 'agent';
-        }
-
-        return collect(['table', 'json', 'compact-json'])->containsStrict($format) ? $format : 'table';
+        return collect(['table', 'json'])->containsStrict($format) ? $format : 'table';
     }
 
     protected function priorityLabel(string $status): string

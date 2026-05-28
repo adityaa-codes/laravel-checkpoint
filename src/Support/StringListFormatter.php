@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Support;
 
+use Illuminate\Support\Str;
+
 /** @internal */
 final readonly class StringListFormatter
 {
@@ -16,9 +18,14 @@ final readonly class StringListFormatter
             return [];
         }
 
-        return array_values(array_filter(array_map(
-            static fn (mixed $item): string => is_string($item) ? trim($item) : '',
-            $value,
-        ), static fn (string $item): bool => $item !== ''));
+        $result = [];
+
+        foreach ($value as $item) {
+            if (is_string($item) && Str::trim($item) !== '') {
+                $result[] = Str::trim($item);
+            }
+        }
+
+        return $result;
     }
 }

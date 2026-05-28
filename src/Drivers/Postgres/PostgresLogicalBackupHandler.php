@@ -4,15 +4,16 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Drivers\Postgres;
 
+use AdityaaCodes\LaravelCheckpoint\Enums\PostgresFormat;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use Symfony\Component\Process\Process;
 
 /** @internal */
-final class PostgresLogicalBackupHandler implements PostgresOperationHandler
+final readonly class PostgresLogicalBackupHandler implements PostgresOperationHandler
 {
     public function __construct(
-        private readonly PostgresDriverConfig $config,
-        private readonly PostgresRestoreTargetResolver $targetResolver,
+        private PostgresDriverConfig $config,
+        private PostgresRestoreTargetResolver $targetResolver,
     ) {}
 
     public function supports(string $operation): bool
@@ -20,9 +21,6 @@ final class PostgresLogicalBackupHandler implements PostgresOperationHandler
         return $operation === 'logical_backup';
     }
 
-    /**
-     * @param  array<string, mixed>  $plannedMetadata
-     */
     public function buildProcess(CommandRun $run, array $plannedMetadata): Process
     {
         return new Process(
@@ -41,9 +39,6 @@ final class PostgresLogicalBackupHandler implements PostgresOperationHandler
         return $this->buildProcess($run, $plannedMetadata)->getCommandLine();
     }
 
-    /**
-     * @return array<string, mixed>
-     */
     public function plannedMetadata(CommandRun $run): array
     {
         return [
@@ -52,7 +47,7 @@ final class PostgresLogicalBackupHandler implements PostgresOperationHandler
             'verification_state' => 'not_applicable',
             'metadata' => [
                 'driver' => 'postgres',
-                'format' => $this->config->format,
+                'format' => $this->config->format->value,
                 'jobs' => $this->config->jobs,
                 'compress_level' => $this->config->compressLevel,
             ],
@@ -69,15 +64,21 @@ final class PostgresLogicalBackupHandler implements PostgresOperationHandler
         $command = [
             $this->config->dumpBinary,
             '--dbname='.$this->config->databaseName,
-            '--format='.$format,
+            '--format='.$format->value,
             '--file='.$target,
         ];
 
-        if ($format === 'directory') {
+        if ($format === PostgresFormat::Directory) {
             $command[] = '--jobs='.$this->config->jobs;
         }
 
         $command[] = '--compress='.$this->config->compressLevel;
+
+        $connectionArgs = $this->config->connectionArgs();
+
+        if ($connectionArgs !== []) {
+            $command = [...$command, ...$connectionArgs];
+        }
 
         return [
             ...$command,

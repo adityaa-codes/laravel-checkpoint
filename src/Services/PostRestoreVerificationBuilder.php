@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Services;
 
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
+use Illuminate\Support\Arr;
 
 /** @internal */
 final readonly class PostRestoreVerificationBuilder
@@ -66,7 +67,7 @@ final readonly class PostRestoreVerificationBuilder
             'operation' => $run->operation,
             'generated_at' => now()->toIso8601String(),
             'aggregate_result' => $aggregate,
-            'checks_performed' => array_column($checks, 'name'),
+            'checks_performed' => Arr::pluck($checks, 'name'),
             'checks' => $checks,
         ];
     }

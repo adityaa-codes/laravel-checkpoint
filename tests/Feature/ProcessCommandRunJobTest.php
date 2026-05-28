@@ -209,7 +209,7 @@ it('forces destructive operations to a single attempt and logs a warning for hig
         ->once()
         ->with('Destructive checkpoint operation forced to a single attempt', Mockery::on(
             fn (array $context): bool => $context['operation'] === 'logical_restore_file'
-                && $context['driver'] === 'shell'
+                && $context['driver'] === 'mysql'
                 && $context['restore_target'] === 'nightly.sql'
                 && $context['configured_attempts'] === 5
         ));
@@ -234,7 +234,7 @@ it('marks the run failed and emits the failure event in the failed callback', fu
         ->with('ProcessCommandRunJob failed', Mockery::on(
             fn (array $context): bool => $context['run_id'] > 0
                 && $context['operation'] === 'physical_backup'
-                && $context['driver'] === 'shell'
+                && $context['driver'] === 'mysql'
                 && $context['error'] === 'boom'
         ));
 

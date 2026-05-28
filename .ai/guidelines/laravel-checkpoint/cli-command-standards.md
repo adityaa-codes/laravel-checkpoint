@@ -3,7 +3,7 @@
 ## Naming
 All commands use `checkpoint:*` prefix. No `do:`, `check:`, `admin:` namespaces.
 
-Public surface: `install`, `doctor`, `status`, `report`, `backup`, `drill`, `replicate`, `migrate-from-spatie`, `health-check`, `pitr-readiness`, `prune`, `recover-orphans`, `retention-policy`, `catalog-export`, `record-drill`, `test`.
+Public surface: `install`, `doctor`, `status`, `report`, `backup`, `drill`, `replicate`, `migrate-from-spatie`, `sweep`, `pitr-readiness`, `prune`, `recover-orphans`, `retention-policy`, `catalog-export`, `record-drill`, `test`.
 
 ## Structure
 Commands extend `Illuminate\Console\Command` and use `UsesLaravelPrompts` trait. All commands are `final class` with constructor DI.

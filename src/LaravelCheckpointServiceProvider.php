@@ -16,16 +16,13 @@ use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
 use AdityaaCodes\LaravelCheckpoint\Console\BackupCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\CatalogExportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ConfigShowCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoctorHealthCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoctorPitrCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\DoctorReportCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\DrillCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\MakeDriverCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\MigrateFromSpatieCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\PruneCommand;
-use AdityaaCodes\LaravelCheckpoint\Console\PublishFullConfigCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\ReplicateCommand;
+use AdityaaCodes\LaravelCheckpoint\Console\RestoreCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\StatusCommand;
 use AdityaaCodes\LaravelCheckpoint\Console\SweepCommand;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
@@ -37,6 +34,7 @@ use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresLogicalRestoreHandle
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresMetadataEnricher;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresPhysicalBackupHandler;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresPhysicalRestoreHandler;
+use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresPitrHandler;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresReplicationDebugRenderer;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresReplicationOrchestrator;
 use AdityaaCodes\LaravelCheckpoint\Drivers\Postgres\PostgresReplicationResultBuilder;
@@ -80,16 +78,13 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
                 BackupCommand::class,
                 CatalogExportCommand::class,
                 ConfigShowCommand::class,
-                DoctorHealthCommand::class,
-                DoctorPitrCommand::class,
-                DoctorReportCommand::class,
                 DrillCommand::class,
                 InstallCommand::class,
                 MakeDriverCommand::class,
                 MigrateFromSpatieCommand::class,
                 PruneCommand::class,
-                PublishFullConfigCommand::class,
                 ReplicateCommand::class,
+                RestoreCommand::class,
                 StatusCommand::class,
                 SweepCommand::class,
             ]);
@@ -134,20 +129,29 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             $config = $app['config'];
             $prefix = (string) $config->get('checkpoint.table_prefix', 'db_ops_');
 
+            $driver = (string) $config->get('checkpoint.driver');
+            $connectionName = match ($driver) {
+                'postgres' => 'pgsql',
+                'mysql' => 'mysql',
+                default => (string) $config->get('database.default', 'mysql'),
+            };
+            $binaryPath = rtrim((string) $config->get('database.connections.'.$connectionName.'.dump.dump_binary_path', ''), '/');
+            $prefixForBin = static fn (string $name): string => $binaryPath !== '' ? $binaryPath.'/'.$name : $name;
+
             return new HealthCheckConfig(
-                driver: (string) $config->get('checkpoint.driver', 'shell'),
+                driver: $driver,
                 queueName: (string) $config->get('checkpoint.queue.name', 'db-ops'),
                 logChannel: (string) $config->get('checkpoint.log_channel', 'stack'),
                 environment: (string) $config->get('app.env', 'production'),
                 currentDatabaseName: (string) $config->get('database.connections.'.$config->get('database.default', '').'.database', ''),
                 lockStore: $config->get('checkpoint.queue.lock_store'),
                 bin: [
-                    'pgbasebackup' => (string) $config->get('checkpoint.drivers.postgres.binary', 'pg_basebackup'),
-                    'pgdump_dump' => (string) $config->get('checkpoint.drivers.postgres.dump_binary', 'pg_dump'),
-                    'pgdump_restore' => (string) $config->get('checkpoint.drivers.postgres.restore_binary', 'pg_restore'),
-                    'mysqldump' => (string) $config->get('checkpoint.drivers.mysql.dump_binary', 'mysqldump'),
-                    'mysql' => (string) $config->get('checkpoint.drivers.mysql.mysql_binary', 'mysql'),
-                    'mysqlbinlog' => (string) $config->get('checkpoint.drivers.mysql.mysqlbinlog_binary', 'mysqlbinlog'),
+                    'pgbasebackup' => $prefixForBin('pg_basebackup'),
+                    'pgdump_dump' => $prefixForBin('pg_dump'),
+                    'pgdump_restore' => $prefixForBin('pg_restore'),
+                    'mysqldump' => $prefixForBin('mysqldump'),
+                    'mysql' => $prefixForBin('mysql'),
+                    'mysqlbinlog' => $prefixForBin('mysqlbinlog'),
                 ],
                 obs: [
                     'orphanThreshold' => max(1, (int) $config->get('checkpoint.queue.orphan_threshold', 10)),
@@ -169,7 +173,7 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
                 backupDrillRunsTable: $prefix.'backup_drill_runs',
                 verificationRunsTable: $prefix.'verification_runs',
                 driverBinaries: collect((array) $config->get(
-                    'checkpoint.drivers.'.$config->get('checkpoint.driver', 'shell').'.health_binaries',
+                    'checkpoint.drivers.'.$config->get('checkpoint.driver').'.health_binaries',
                     [],
                 ))->values()->all(),
             );
@@ -216,6 +220,7 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
                 $config->get('checkpoint.drivers.postgres', []),
                 new Filesystem,
                 $database,
+                $config,
             );
         });
 
@@ -267,6 +272,14 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
             new Filesystem,
         ));
 
+        $this->app->bind(PostgresPitrHandler::class, fn ($app): PostgresPitrHandler => new PostgresPitrHandler(
+            $app->make(PostgresDriverConfig::class),
+            $app->make(PostgresLogicalRestoreHandler::class),
+            $app->make(PostgresRestoreTargetResolver::class),
+            $app->make(PostgresSnapshotService::class),
+            new Filesystem,
+        ));
+
         $this->app->bind(PostgresMetadataEnricher::class, fn ($app): PostgresMetadataEnricher => new PostgresMetadataEnricher(
             $app->make(PostgresSnapshotService::class),
             $app->make(PostgresDriverConfig::class),
@@ -283,6 +296,7 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
                 $app->make(PostgresBackupDrillHandler::class),
                 $app->make(PostgresPhysicalBackupHandler::class),
                 $app->make(PostgresPhysicalRestoreHandler::class),
+                $app->make(PostgresPitrHandler::class),
             ],
             $app->make(RestoreSafetyGuard::class),
             $app->make(PostgresMetadataEnricher::class),

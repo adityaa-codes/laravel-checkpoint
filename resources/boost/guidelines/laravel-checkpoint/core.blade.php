@@ -22,7 +22,7 @@ Make backup, restore, PITR, replication, and recovery-drill operations safe, aud
 | Command | Purpose |
 |---|---|
 | `checkpoint:install` | Guided setup, auto-detects database driver |
-| `checkpoint:doctor` | Health diagnostics |
+ | `checkpoint:doctor:health` | Health diagnostics |
 | `checkpoint:status` | Recent run history with `--watch` polling |
 | `checkpoint:report` | Consolidated operational report |
 | `checkpoint:backup` | Run a logical backup |

@@ -7,6 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Actions;
 use AdityaaCodes\LaravelCheckpoint\Contracts\ReplicationEndpointParser;
 use AdityaaCodes\LaravelCheckpoint\Exceptions\CheckpointArgumentException;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Support\Str;
 
 final readonly class BuildReplicationCommandPayloadAction
 {
@@ -26,8 +27,8 @@ final readonly class BuildReplicationCommandPayloadAction
         bool $forceOverwrite,
         array $criticalTables = [],
     ): array {
-        $normalizedSource = trim($source);
-        $normalizedDestination = trim($destination);
+        $normalizedSource = Str::trim($source);
+        $normalizedDestination = Str::trim($destination);
 
         $this->assertEndpoint($normalizedSource, 'source');
         $this->assertEndpoint($normalizedDestination, 'destination');
@@ -88,7 +89,7 @@ final readonly class BuildReplicationCommandPayloadAction
                 throw new CheckpointArgumentException('Critical tables must be non-empty strings.');
             }
 
-            $value = trim($table);
+            $value = Str::trim($table);
 
             if ($value === '') {
                 throw new CheckpointArgumentException('Critical tables must be non-empty strings.');
@@ -97,6 +98,6 @@ final readonly class BuildReplicationCommandPayloadAction
             $normalized[] = $value;
         }
 
-        return array_values(array_unique($normalized));
+        return collect($normalized)->unique()->values()->all();
     }
 }

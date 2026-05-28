@@ -104,7 +104,7 @@ Policy profile resolution order:
 
 ## Maintenance commands
 
-`checkpoint:health-check`
+`checkpoint:sweep`
 
 - marks timed-out running runs as failed based on package health logic
 

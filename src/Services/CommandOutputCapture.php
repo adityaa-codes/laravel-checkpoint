@@ -6,6 +6,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Services;
 
 use AdityaaCodes\LaravelCheckpoint\Exceptions\ConfigurationException;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Support\Str;
 use Symfony\Component\Process\Process;
 
 /** @internal */
@@ -21,7 +22,7 @@ final readonly class CommandOutputCapture
     public function capture(string $output, ?int $maxBytes = null): array
     {
         $maxBytes ??= $this->maxPersistedBytes();
-        $originalBytes = strlen($output);
+        $originalBytes = Str::length($output);
 
         return $this->finalizeCapture(
             $this->cut($output, 0, $maxBytes),
@@ -49,10 +50,10 @@ final readonly class CommandOutputCapture
             if ($tap !== null) {
                 $tap($chunk, $type);
             }
-            $originalBytes += strlen($chunk);
+            $originalBytes += Str::length($chunk);
 
-            if (strlen($prefix) < $maxBytes) {
-                $prefix .= $this->cut($chunk, 0, $maxBytes - strlen($prefix));
+            if (Str::length($prefix) < $maxBytes) {
+                $prefix .= $this->cut($chunk, 0, $maxBytes - Str::length($prefix));
             }
 
             $suffix = $this->tail($suffix.$chunk, $maxBytes);
@@ -91,10 +92,10 @@ final readonly class CommandOutputCapture
         }
 
         $marker = "\n...[truncated ".($originalBytes - $maxBytes)." bytes]...\n";
-        $markerBytes = strlen($marker);
+        $markerBytes = Str::length($marker);
 
         if ($markerBytes >= $maxBytes) {
-            $persistedOutput = substr($marker, 0, $maxBytes);
+            $persistedOutput = Str::substr($marker, 0, $maxBytes);
         } else {
             $headBytes = (int) floor(($maxBytes - $markerBytes) / 2);
             $tailBytes = $maxBytes - $markerBytes - $headBytes;
@@ -109,7 +110,7 @@ final readonly class CommandOutputCapture
                 'output_capture' => [
                     'truncated' => true,
                     'original_bytes' => $originalBytes,
-                    'persisted_bytes' => strlen($persistedOutput),
+                    'persisted_bytes' => Str::length($persistedOutput),
                     'max_persisted_bytes' => $maxBytes,
                 ],
             ],
@@ -118,7 +119,7 @@ final readonly class CommandOutputCapture
 
     private function tail(string $value, int $maxBytes): string
     {
-        if ($maxBytes < 1 || strlen($value) <= $maxBytes) {
+        if ($maxBytes < 1 || Str::length($value) <= $maxBytes) {
             return $value;
         }
 
@@ -131,6 +132,6 @@ final readonly class CommandOutputCapture
             return mb_strcut($value, $start, $length, 'UTF-8');
         }
 
-        return $length === null ? substr($value, $start) : substr($value, $start, $length);
+        return $length === null ? Str::substr($value, $start) : Str::substr($value, $start, $length);
     }
 }

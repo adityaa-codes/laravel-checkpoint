@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
+use AdityaaCodes\LaravelCheckpoint\Enums\CheckpointOperation;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupQueued;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
@@ -32,7 +33,7 @@ it('prints an error and exits with failure when drill enqueueing fails', functio
     $action = Mockery::mock(EnqueueCommandRunAction::class);
     $action->shouldReceive('execute')
         ->once()
-        ->with('backup_drill')
+        ->with(CheckpointOperation::Drill)
         ->andThrow(new RuntimeException('Drill queue unavailable.'));
 
     app()->instance(EnqueueCommandRunAction::class, $action);

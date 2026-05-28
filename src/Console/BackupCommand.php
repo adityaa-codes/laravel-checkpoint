@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AdityaaCodes\LaravelCheckpoint\Console;
 
 use AdityaaCodes\LaravelCheckpoint\Actions\EnqueueCommandRunAction;
+use AdityaaCodes\LaravelCheckpoint\Enums\CheckpointOperation;
 use AdityaaCodes\LaravelCheckpoint\Jobs\ProcessCommandRunJob;
 use Illuminate\Support\Facades\Bus;
 use Throwable;
@@ -19,7 +20,7 @@ final class BackupCommand extends CheckpointCommand
     public function handle(EnqueueCommandRunAction $enqueueCommandRun): int
     {
         try {
-            $run = $enqueueCommandRun->execute('logical_backup');
+            $run = $enqueueCommandRun->execute(CheckpointOperation::Backup);
 
             if ($this->option('sync')) {
                 Bus::dispatchSync(new ProcessCommandRunJob($run));
@@ -40,10 +41,6 @@ final class BackupCommand extends CheckpointCommand
             }
 
             $this->promptInfo($this->queuedMessage((int) $run->getKey()));
-
-            if ($this->enhancedInteractiveMode()) {
-                \Laravel\Prompts\note('Monitor progress: php artisan checkpoint:status');
-            }
 
             return self::SUCCESS;
         } catch (Throwable $exception) {
