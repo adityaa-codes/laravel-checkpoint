@@ -4,77 +4,68 @@ sidebar_position: 1
 
 # Basic Configuration
 
-Checkpoint's configuration powers every layer of the reliability stack — from backup execution to recovery verification. Start simple and layer in safety gates as your confidence grows.
-
-You do not need every config key on day one.
-
-For a simple setup, start with these values:
+You do not need every config key on day one. Start with these.
 
 ## Required basics
 
 ```env
-CP_DRIVER=shell
-CP_QUEUE_NAME=db-ops
-CP_QUEUE_TIMEOUT=3600
-CP_QUEUE_RETRY_AFTER=3660
-CP_QUEUE_UNIQUE_FOR=3660
-CP_CMD_TIMEOUT=3600
-CP_CMD_LOGICAL_BACKUP="php -r if(!is_dir($argv[1]))mkdir($argv[1],0777,true);touch($argv[2]); {backup_dir} {output}"
+CP_DRIVER=postgres
+CP_QUEUE_NAME=checkpoint
+CP_BACKUP_ARCHIVE_PASSWORD=your-password-here
 ```
 
-| Env var | Dot-notation equivalent |
-|---|---|
-| `CP_DRIVER` | `checkpoint.default_driver` |
-| `CP_QUEUE_NAME` | `checkpoint.queue.name` |
-| `CP_QUEUE_TIMEOUT` | `checkpoint.queue.timeout` |
-| `CP_QUEUE_RETRY_AFTER` | `checkpoint.queue.retry_after` |
-| `CP_QUEUE_UNIQUE_FOR` | `checkpoint.queue.unique_for` |
-| `CP_CMD_TIMEOUT` | `checkpoint.drivers.shell.command_timeout_seconds` |
-| `CP_CMD_LOGICAL_BACKUP` | `checkpoint.drivers.shell.commands.logical_backup` |
+`CP_DRIVER` must be one of: `postgres`, `mysql`, or `fake`.
 
-## What each one does
+`CP_QUEUE_NAME` defaults to `checkpoint`. Change it only if your queue worker uses a different queue name.
 
-- `CP_DRIVER`
-  Chooses the driver for reliability operations. Start with `shell` unless you already know you need `pgbackrest`, `pgdump`, `postgres`, or `mysql`.
-- `CP_QUEUE_NAME`
-  The queue name used for checkpoint jobs.
-- `CP_QUEUE_TIMEOUT`
-  Maximum runtime for a checkpoint job before Laravel marks it as timed out.
-- `CP_QUEUE_RETRY_AFTER`
-  How long Laravel waits before retrying a job that looks lost.
-- `CP_QUEUE_UNIQUE_FOR`
-  How long uniqueness locks are kept for exclusive jobs.
-- `CP_CMD_TIMEOUT`
-  Maximum runtime for the shell command.
-- `CP_CMD_LOGICAL_BACKUP`
-  The command used for a logical backup.
-  The guided minimal preset seeds a local bootstrap placeholder command only; replace it with your real backup command.
+`CP_BACKUP_ARCHIVE_PASSWORD` enables encryption. Leave unset to skip encryption.
 
-This is enough for a first backup — the backup layer of the reliability stack.
+## Config reference
 
-Shell driver first-run prerequisite:
+| Env var | Config key (dot notation) | What it does |
+|---|---|---|
+| `CP_DRIVER` | `checkpoint.driver` | Backup driver (`postgres`, `mysql`, `fake`) |
+| `CP_QUEUE_NAME` | `checkpoint.queue.name` | Queue name for checkpoint jobs (default: `checkpoint`) |
+| `CP_BACKUP_ARCHIVE_PASSWORD` | `checkpoint.encryption.password` | Encryption password (unset = no encryption) |
+| `CP_RESTORE_ALLOWED_ENVIRONMENTS` | `checkpoint.restore.allowed_environments` | Comma-separated envs where restore is allowed (default: `local,testing,staging`) |
+| `CP_ALERT_EMAIL` | `checkpoint.notifications.mail.to` | Email for backup/drill failure notifications |
+| `CP_SLACK_WEBHOOK` | `checkpoint.notifications.slack.webhook_url` | Slack incoming webhook URL |
+| `CP_TELEGRAM_BOT_TOKEN` | `checkpoint.notifications.telegram.bot_token` | Telegram bot token |
+| `CP_TELEGRAM_CHAT_ID` | `checkpoint.notifications.telegram.chat_id` | Telegram chat ID |
 
-- define command templates for every operation you plan to run (`logical_backup`, restore, drill, and so on); if a template is missing, the run fails with a configuration error.
+## Queue settings (config only, not env vars)
 
-## Next layer: recovery verification and safety gates
+These live in `config/checkpoint.php`:
 
-Once backups are working, layer in:
+- `queue.timeout` — seconds before the queue worker kills the job (default: 3600)
+- `queue.unique_for` — uniqueness lock duration (default: 3660)
+- `queue.max_attempts` — max retries per job (default: 1)
+- `queue.heartbeat_interval_seconds` — how often the driver records a heartbeat (default: 30)
+
+Set your queue worker timeout to match:
+
+```bash
+php artisan queue:work --queue=checkpoint --timeout=3600
+```
+
+## Binary paths
+
+Binary paths for `pg_dump`, `pg_restore`, `mysqldump`, and `mysql` come from Laravel's `config/database.php` connections, not from Checkpoint config. Use the `dump.dump_binary_path` key, same as spatie/laravel-backup:
+
+```php
+// config/database.php
+'pgsql' => [
+    'dump' => [
+        'dump_binary_path' => '/usr/bin',
+        'timeout' => 60 * 5,
+    ],
+],
+```
+
+## Next: safety configuration
 
 ```env
 CP_RESTORE_ALLOWED_ENVIRONMENTS=local,staging
-CP_RESTORE_ALLOWED_DATABASES=app
-CP_RESTORE_REQUIRE_CONFIRMATION=true
-CP_RESTORE_CONFIRMATION_PHRASE="I understand the risks"
 ```
 
-See [Restore Guardrails](../safety/restore-guardrails.md) for the full safety surface.
-
-## Important rule
-
-Keep this relationship:
-
-```text
-driver timeout <= queue timeout < queue retry_after <= unique_for
-```
-
-If this is wrong, boot-time config validation can fail before jobs even start.
+Restore is blocked outside these environments. See [Restore Guardrails](../safety/restore-guardrails.md) for the full safety surface.

@@ -4,29 +4,58 @@ sidebar_position: 1
 
 # Backup And Restore
 
-The package exposes queue-first backup and restore workflows through `checkpoint:enqueue`, `checkpoint:enqueue-backup`, and driver-specific operations.
-
-## Queue a logical backup
+## Queue a backup
 
 ```bash
-php artisan checkpoint:enqueue-backup
-php artisan checkpoint:enqueue logical_backup
+php artisan checkpoint:backup
 ```
 
-## Queue a restore
-
-Restore operations are destructive and exclusive in the operation catalog.
-
-Latest tracked artifact:
+Run synchronously:
 
 ```bash
-php artisan checkpoint:enqueue logical_restore_latest
+php artisan checkpoint:backup --sync
 ```
 
-Specific artifact:
+## Restore
+
+Restore operations are destructive. Use `--force` to skip confirmation prompts.
+
+Restore latest tracked artifact:
 
 ```bash
-php artisan checkpoint:enqueue logical_restore_file --argument="backup-file-or-label"
+php artisan checkpoint:restore
+```
+
+Restore a specific file:
+
+```bash
+php artisan checkpoint:restore --file="backup-file-or-label"
+```
+
+Restore to a point in time:
+
+```bash
+php artisan checkpoint:restore --pitr="2026-03-11 11:30:00"
+```
+
+Dry-run PITR readiness:
+
+```bash
+php artisan checkpoint:restore --pitr-dry-run
+```
+
+## Verification
+
+Post-restore verification level:
+
+```bash
+php artisan checkpoint:restore --verification=strict
+```
+
+Verify an existing restore without re-executing:
+
+```bash
+php artisan checkpoint:restore --verify-only
 ```
 
 ## Observe the run
@@ -34,16 +63,14 @@ php artisan checkpoint:enqueue logical_restore_file --argument="backup-file-or-l
 ```bash
 php artisan checkpoint:status --limit=10
 php artisan checkpoint:status --summary
-php artisan checkpoint:report --limit=10
 ```
 
 ## Scheduled flows
 
 The package can schedule:
 
-- logical backup
-- health checks
-- orphan recovery
-- pruning
-
-Backup drills are also schedulable when enabled.
+- Logical backup
+- Health checks
+- Orphan recovery
+- Pruning
+- Backup drills

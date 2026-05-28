@@ -7,56 +7,41 @@ slug: /overview
 
 Laravel Checkpoint is a Laravel package for queue-driven backup, restore, drill, reporting, and operational safety workflows.
 
-This docs site is generated from the package's current code and configuration surface:
+## Drivers
 
-- registered Artisan commands in `LaravelCheckpointServiceProvider`
-- operation definitions in `CommandRunCatalog`
-- runtime config in `config/checkpoint.php`
-- scheduling hooks and guardrails enforced at boot
+The package ships three drivers:
 
-## What the package exposes
+- `postgres` — PostgreSQL backup and restore
+- `mysql` — MySQL backup and restore
+- `fake` — testing driver that simulates operations without touching a real database
 
-- queueable operations for backup, restore, PITR, drills, and replication
-- scheduled backup, drill, health-check, orphan-recovery, and prune hooks
-- operator-facing status, doctor, report, catalog, and PITR-readiness commands
-- driver implementations for `shell`, `pgbackrest`, `pgdump`, and `mysql`
-- restore guardrails for environment, target database, confirmation, verification, and blast radius
+## Commands
 
-## Public operator surface
+```
+checkpoint:backup           Queue a logical backup (async by default)
+checkpoint:restore          Restore from file or PITR
+checkpoint:drill            Queue a recovery drill
+checkpoint:replicate        Replication sync (dry-run by default)
+checkpoint:sweep            Mark timed-out runs as failed, re-dispatch stale orphans
+checkpoint:status           Status, health checks, summary, and reporting
+checkpoint:catalog:export   Export backup catalog
+checkpoint:prune            Clean old records
+checkpoint:install          Guided setup
+checkpoint:make-driver      Scaffold a custom driver
+checkpoint:migrate-from-spatie  Migrate from spatie/laravel-backup
+checkpoint:config:show      Show resolved config
+```
 
-The package currently registers these commands:
+Operations are async by default. Use `--sync` for inline execution.
 
-- `checkpoint:enqueue`
-- `checkpoint:enqueue-backup`
-- `checkpoint:enqueue-drill`
-- `checkpoint:status`
-- `checkpoint:doctor`
-- `checkpoint:report`
-- `checkpoint:catalog-export`
-- `checkpoint:pitr-readiness`
-- `checkpoint:retention-policy`
-- `checkpoint:record-drill`
-- `checkpoint:replicate`
-- `checkpoint:sweep`
-- `checkpoint:recover-orphans`
-- `checkpoint:prune`
+## Queue
 
-## Built-in operations
+The default queue name is `checkpoint`. Workers should listen on that queue:
 
-`CommandRunCatalog` currently defines these queueable operations:
+```bash
+php artisan queue:work --queue=checkpoint
+```
 
-- `logical_backup`
-- `logical_restore_latest`
-- `logical_restore_file`
-- `pitr_restore`
-- `backup_drill`
-- `pgbackrest_backup_full`
-- `pgbackrest_backup_diff`
-- `pgbackrest_backup_incr`
-- `pgbackrest_restore`
-- `pgbackrest_verify`
-- `pgbackrest_check`
-- `pgbackrest_info`
-- `replication_sync`
+## Scheduling
 
-Some operations are destructive and exclusive by design. The package enforces those semantics before the job reaches the driver.
+The package registers scheduled commands for backup, drill, health check, orphan recovery, and pruning when the matching config flags are enabled.

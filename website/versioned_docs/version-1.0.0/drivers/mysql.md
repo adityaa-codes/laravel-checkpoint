@@ -4,7 +4,7 @@ sidebar_position: 5
 
 # MySQL Driver
 
-The `mysql` driver is built around `mysqldump`, `mysql`, and `mysqlbinlog`.
+The `mysql` driver handles MySQL backup, restore, and PITR workflows.
 
 ## Key config
 
@@ -23,17 +23,17 @@ The `mysql` driver is built around `mysqldump`, `mysql`, and `mysqlbinlog`.
 
 ## What it supports
 
-- logical MySQL dumps
-- restore from the latest known artifact
-- restore from a specific file
+- Logical MySQL dumps
+- Restore from the latest known artifact
+- Restore from a specific file
 - PITR-style workflows using configured binlog files
-- package-driven backup drill orchestration
+- Package-driven backup drill orchestration
 
-## Operational expectation
+## Requirements
 
-The package does not create binlogs or provision an isolated drill environment for you. You still need:
+The package does not create binlogs or provision an isolated drill environment. You need:
 
-- valid MySQL privileges
-- binlog retention aligned with your recovery window
-- worker hosts with `mysqldump`, `mysql`, and `mysqlbinlog`
-- restore targets allowed by the package safety config
+- Valid MySQL privileges
+- Binlog retention aligned with your recovery window
+- Worker hosts with `mysqldump`, `mysql`, and `mysqlbinlog` installed
+- Restore targets allowed by the package safety config

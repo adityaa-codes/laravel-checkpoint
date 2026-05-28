@@ -4,9 +4,9 @@ sidebar_position: 1
 
 # Common Failures
 
-## Config validator fails during Composer or package discovery
+## Config validation fails during Composer or package discovery
 
-This package validates config during app boot. That means bad config can fail during:
+Bad config fails early. Checkpoint validates config at boot, so failures happen during:
 
 - `composer update`
 - `package:discover`
@@ -14,48 +14,36 @@ This package validates config during app boot. That means bad config can fail du
 
 Check:
 
-- selected driver exists in `checkpoint.drivers`
-- driver timeout does not exceed `checkpoint.queue.timeout`
-- queue retry and uniqueness windows are coherent
-- restore and scheduler posture is valid for the current environment
+- `CP_DRIVER` is set to `postgres` or `mysql`
+- driver `command_timeout_seconds` does not exceed `queue.timeout`
+- queue timeout and uniqueness windows are coherent
 
-Most common example:
-
-```env
-CP_QUEUE_TIMEOUT=3600
-CP_CMD_TIMEOUT=7200
-```
-
-Fix it by making the command timeout less than or equal to the queue timeout.
+Most common fix: reduce `command_timeout_seconds` to match or stay below `queue.timeout`.
 
 ## Queue worker kills long-running operations
 
-Symptoms:
-
-- jobs stop mid-backup or mid-restore
-- status shows failed runs without driver-level completion
+Symptoms: jobs stop mid-backup or mid-restore. Status shows failed runs with no driver-level completion.
 
 Check:
 
-- worker `--timeout`
-- `checkpoint.queue.timeout`
-- driver `command_timeout_seconds`
-- `checkpoint.queue.retry_after`
+- worker `--timeout` matches `queue.timeout`
+- driver `command_timeout_seconds` is not shorter than expected operation time
+- `queue.unique_for` exceeds `queue.timeout`
 
 ## Scheduler coordination breaks in production
 
-Symptoms:
-
-- duplicate scheduled runs
-- overlap guards fail across hosts
+Symptoms: duplicate scheduled runs. Overlap guards fail across hosts.
 
 Check:
 
-- shared cache backend is configured
-- `checkpoint.queue.lock_store` is production-safe
-- `checkpoint.schedule.without_overlapping` and `checkpoint.schedule.on_one_server` match your deployment model
+- shared cache backend is configured (Redis)
+- `queue.lock_store` is production-safe
 
-## PITR readiness reports `not_ready`
+## PITR readiness reports not ready
+
+```bash
+php artisan checkpoint:restore --pitr-dry-run
+```
 
 Common causes:
 
@@ -65,24 +53,13 @@ Common causes:
 - configured binlog files missing
 - target timestamp is in the future or before the baseline
 
-Use:
-
-```bash
-php artisan checkpoint:pitr-readiness --format=json
-```
-
-to inspect the failing checks directly.
-
 ## Drill fails but backup succeeds
 
-Symptoms:
-
-- `checkpoint:status` shows backup runs as `succeeded`
-- drill runs show `failed` or partial completion
+Symptoms: `checkpoint:status` shows backup runs as `succeeded` but drills show `failed`.
 
 Common causes:
 
-- restore command template is missing or misconfigured
+- restore command is misconfigured for your driver
 - restore target environment is not in `allowed_environments`
 - blast radius analysis blocks the drill restore
 - disk space insufficient for restore artifact
@@ -90,43 +67,35 @@ Common causes:
 Check:
 
 ```bash
-php artisan checkpoint:doctor
-php artisan checkpoint:report --limit=10
+php artisan checkpoint:status --health
+php artisan checkpoint:status --full
 ```
 
 ## Gate blocks restore
 
-Symptoms:
-
-- restore job fails before any command executes
-- failure reason references "safety gate" or "evidence gate"
+Symptoms: restore job fails before any command executes. Failure reason mentions safety gate or evidence gate.
 
 Check:
 
-- `checkpoint:doctor` output for gate verdicts
+- `checkpoint:status --health` output for gate verdicts
 - `CP_RESTORE_ALLOWED_ENVIRONMENTS` includes your current environment
-- `CP_RESTORE_REQUIRE_CONFIRMATION` is set appropriately for your profile
 - blast radius score exceeds configured thresholds
+- `restore.require_verified_backup` is set and no verified backup exists
 
-See [Restore Guardrails](../safety/restore-guardrails.md) for gate configuration.
+See [Restore Guardrails](../safety/restore-guardrails.md).
 
 ## Verification check fails
 
-Symptoms:
-
-- `checkpoint:doctor` shows verification or evidence checks as failed
-- report output shows missing drill evidence
+Symptoms: health checks show verification or evidence checks as failed. Report shows missing drill evidence.
 
 Common causes:
 
-- no drills have been run in the current retention window
+- no drills have run in the current window
 - last drill failed and evidence is stale
-- required verification markers are not configured
+- required verification markers missing
 
-Fix:
+Fix: run a drill.
 
 ```bash
-php artisan checkpoint:enqueue-drill
+php artisan checkpoint:drill
 ```
-
-Run a drill and check the results to restore verification health.

@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # Configuration Overview
 
-The package configuration lives in `config/checkpoint.php`. These are the top-level groups:
+Configuration lives in `config/checkpoint.php`. Top-level groups:
 
 - `user_model`, `user_name_column`, `table_prefix`
 - `queue`
@@ -24,19 +24,13 @@ The package configuration lives in `config/checkpoint.php`. These are the top-le
 
 ## Driver selection
 
-`checkpoint.driver` selects the active backup driver. Available drivers:
+`checkpoint.driver` selects the active driver. Available drivers:
 
-- `shell`
-- `pgbackrest`
-- `pgdump`
+- `postgres`
 - `mysql`
+- `fake`
 
-Each block under `checkpoint.drivers` also declares the class resolved for the `BackupDriver` contract.
-
-Shell driver prerequisite:
-
-- define command templates for every operation you plan to run; if a template is missing, execution fails with a configuration error.
-- guided install `--preset=minimal` seeds `logical_backup` with a local bootstrap placeholder command; replace it with your real backup command before relying on artifacts.
+Each block under `checkpoint.drivers` declares the class resolved for the `BackupDriver` contract.
 
 ## Scheduling
 
@@ -48,16 +42,9 @@ The service provider registers scheduled commands when the matching config flags
 - `schedule.recover_orphans_enabled`
 - `schedule.prune_enabled`
 
-By default, scheduled commands also use:
-
-- `withoutOverlapping()`
-- `onOneServer()`
-
-In clustered deployments, this requires a shared cache backend and a safe lock store.
+Scheduled commands use `withoutOverlapping()` and `onOneServer()`. This requires a shared cache backend in clustered deployments.
 
 ## Output and temp storage
-
-You can limit persisted output and optionally store command output on a filesystem:
 
 - `output.max_persisted_bytes`
 - `output.storage`
@@ -65,4 +52,4 @@ You can limit persisted output and optionally store command output on a filesyst
 - `output.filesystem.path_prefix`
 - `output.filesystem.inline_bytes`
 
-Temporary package artifacts use `temp_dir`.
+Temporary artifacts use `temp_dir`.

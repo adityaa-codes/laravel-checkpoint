@@ -4,71 +4,59 @@ sidebar_position: 3
 
 # Restore A Backup
 
-Restore is where reliability proves itself. Backups are easy — restoring safely under pressure is what matters.
-
-Do this only after you already have working backups. Run a drill before your first real restore (see [Run A Drill](./run-a-drill.md)).
-
-## Two restore styles
-
-`logical_restore_latest`
-
-- use this when you want the latest available backup
-- best when your restore process usually targets the newest successful artifact
-
-`logical_restore_file`
-
-- use this when you want one specific backup file
-- best when you know the exact file or label you want to restore
-
-Simple difference:
-
-- `logical_restore_latest` picks the newest backup for you
-- `logical_restore_file` lets you choose the exact backup yourself
+Restore is where reliability proves itself. Do this after you have working backups. Run a drill first (see [Run A Drill](./run-a-drill.md)).
 
 ## Restore the latest backup
 
 ```bash
-php artisan checkpoint:enqueue logical_restore_latest
+php artisan checkpoint:restore --sync
 ```
 
-Use this when:
+Without `--file`, the driver restores the newest backup it finds.
 
-- you want the newest backup
-- you do not need to pick a file manually
-
-## Restore a specific backup
+## Restore a specific backup file
 
 ```bash
-php artisan checkpoint:enqueue logical_restore_file --argument="nightly-backup.sql"
+php artisan checkpoint:restore --file="/path/to/backup.dump" --sync
 ```
 
-Use this when:
+Bring your own file path. The driver validates it exists before proceeding.
 
-- you know the file name
-- you want an older backup instead of the latest one
+## Point-in-time recovery
 
-Example values for `--argument`:
+```bash
+php artisan checkpoint:restore --pitr="2026-03-11 11:30:00" --sync
+```
 
-- `nightly-backup.sql`
-- `logical-export-2026-03-11.dump`
+PITR requires WAL archiving (Postgres) or binlog config (MySQL). Check readiness first:
 
-## Before you try restore
+```bash
+php artisan checkpoint:restore --pitr-dry-run
+```
 
-Make sure you have set:
+## Verification
 
-- `CP_RESTORE_ALLOWED_ENVIRONMENTS`
-- `CP_RESTORE_ALLOWED_DATABASES`
-- `CP_RESTORE_REQUIRE_CONFIRMATION`
+The default verification mode is `moderate`. For a deeper check after restore:
 
-If your environment requires verified backups, make sure that is working too.
+```bash
+php artisan checkpoint:restore --sync --verification=full
+```
+
+Verify a previous restore without re-running it:
+
+```bash
+php artisan checkpoint:restore --verify-only
+```
+
+## Safety
+
+Restore is blocked unless your current environment is in `CP_RESTORE_ALLOWED_ENVIRONMENTS` (defaults to `local,testing,staging`). You will be prompted to type the confirmation phrase (`RESTORE`) before execution. Pass `--force` to skip the prompt in automation contexts.
 
 See [Restore Guardrails](../safety/restore-guardrails.md) for the full safety configuration.
 
-## After you queue the restore
-
-Check progress with:
+## Check progress
 
 ```bash
 php artisan checkpoint:status --limit=10
-php artisan checkpoint:report --limit=10
+php artisan checkpoint:status --full
 ```

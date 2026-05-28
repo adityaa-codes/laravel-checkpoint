@@ -4,19 +4,18 @@ sidebar_position: 1
 
 # Contributing
 
-## Positioning guidelines
+## Positioning
 
 When writing docs, code, or public communication about Checkpoint:
 
-- **Frame Checkpoint as complementary to spatie/laravel-backup**, never as an alternative or replacement. Checkpoint complements laravel-backup by adding the recovery and verification layers.
-- Use "Database Reliability Layer" framing, not "backup tool."
-- Emphasize the 3-layer model: backup (commodity) → recovery (rare) → verification (moat).
+- Frame Checkpoint as a database reliability layer, not a backup tool.
+- Use the 3-layer model: backup → recovery → verification.
 
 ## Package workflow
 
-Keep package changes small, atomic, and test-backed.
+Keep changes small, atomic, and test-backed.
 
-Before opening a PR, run the narrowest relevant check and then the broader package quality commands when needed:
+Before opening a PR:
 
 ```bash
 vendor/bin/pest
@@ -25,16 +24,11 @@ vendor/bin/pint
 composer quality
 ```
 
-CI compatibility policy:
-
-- run tests across Laravel 12/13 and PHP 8.3/8.4/8.5
-- validate both `prefer-stable` and `prefer-lowest` dependency resolution paths
+CI runs across Laravel 12/13 and PHP 8.3/8.4/8.5 with both `prefer-stable` and `prefer-lowest` dependency resolution.
 
 ## Docs workflow
 
 The documentation site lives in `website/`.
-
-Local docs commands:
 
 ```bash
 cd website
@@ -43,17 +37,17 @@ npm run start
 npm run build
 ```
 
-When package behavior changes, update the docs pages that describe:
+When package behaviour changes, update the docs pages that describe:
 
 - config keys
 - commands
-- driver behavior
+- driver behaviour
 - safety posture
 - operational workflows
 
 ## Documentation file list
 
-All files that need updates when behavior changes:
+Files to update when behaviour changes:
 
 - `website/docs/start-here.md`
 - `website/docs/getting-started/installation.md`

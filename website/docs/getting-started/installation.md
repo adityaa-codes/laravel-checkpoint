@@ -10,31 +10,15 @@ Install the package:
 composer require adityaa-codes/laravel-checkpoint
 ```
 
-Run guided install (recommended):
+Run guided install:
 
 ```bash
-php artisan checkpoint:install --preset=minimal
+php artisan checkpoint:install
 ```
 
-Available presets:
+The wizard auto-detects your database driver from `DB_CONNECTION` and walks you through setup. It publishes config, runs migrations, and checks health.
 
-- `minimal`: local/testing baseline (`shell`)
-- `postgres-prod`: production PostgreSQL baseline (`postgres` facade)
-- `mysql-prod`: production MySQL baseline (`mysql`)
-
-Minimal preset note:
-
-- `CP_CMD_LOGICAL_BACKUP` is seeded with a local bootstrap placeholder command that creates the backup directory and a marker file.
-- Replace it with your real backup command before relying on backup artifacts.
-
-Install summary readiness labels:
-
-- `dev-only`: suitable for local/testing bootstrap
-- `staging-ready`: production preset applied, but warnings remain to resolve
-- `prod-ready`: no blocker or warning checks after doctor
-- `not-ready`: blocker checks failed; resolve before non-local rollout
-
-If you need manual control, you can still publish and migrate directly:
+If you need manual control:
 
 ```bash
 php artisan vendor:publish --tag="checkpoint-config"
@@ -42,29 +26,27 @@ php artisan vendor:publish --tag="checkpoint-migrations"
 php artisan migrate
 ```
 
-## Baseline application requirements
+## What you need before running Checkpoint
 
-Before the package can run reliability operations, your Laravel app needs:
+- a working queue connection (database, Redis, or SQS)
+- a running queue worker
+- the database binaries on the worker host (`pg_dump`, `pg_restore` for Postgres; `mysqldump`, `mysql` for MySQL)
 
-- a working queue connection for long-running jobs
-- a queue worker
-- the selected backup binaries on the worker host
+For production:
 
-For production, you will also want:
-
-- a shared cache backend such as Redis
-- a scheduler process running `php artisan schedule:run`
+- set `CP_DRIVER` to `postgres` or `mysql`
+- set `CP_BACKUP_ARCHIVE_PASSWORD` for encryption
+- set `CP_ALERT_EMAIL` for failure notifications
+- configure a scheduler: `php artisan schedule:run` every minute
 
 ## For contributors
-
-Common package checks are:
 
 ```bash
 composer install
 composer quality
 ```
 
-If you are working on the docs site:
+Docs site:
 
 ```bash
 cd website

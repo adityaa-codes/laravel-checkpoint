@@ -4,82 +4,34 @@ sidebar_position: 1
 
 # Choose A Driver
 
-Start with the simplest driver that matches your database engine and reliability requirements.
+Pick the driver that matches your database engine.
 
-## Feature matrix
+## Available drivers
 
-| Driver | Backup | PITR | Verification | Drills | Replication |
+| Driver | Backup | Restore | PITR | Drills | Replication |
 |---|---|---|---|---|---|
-| `shell` | Yes | — | — | — | — |
-| `mysql` | Yes | Yes (binlog) | Yes | Yes | — |
-| `pgdump` | Yes | — | Yes | Yes | — |
-| `pgbackrest` | Yes | Yes (WAL) | Yes | Yes | — |
-| `postgres` (facade) | Yes | via pgbackrest | Yes | Yes | — |
-| `fake` | Test only | — | — | — | — |
+| `postgres` | Yes | Yes | Yes (WAL) | Yes | Yes |
+| `mysql` | Yes | Yes | Yes (binlog) | Yes | Yes |
+| `fake` | Test only | Test only | — | — | — |
 
-## `postgres` (facade)
+## `postgres`
 
-Use this as the default PostgreSQL choice. It is a unified facade:
+Uses `pg_dump` and `pg_restore` for logical operations. Supports physical base backups via `pg_basebackup` and WAL-based PITR.
 
-- routes logical operations (`logical_*`, `replication_sync`) to `pgdump`
-- routes `pgbackrest_*` operations to `pgbackrest`
+Binary paths come from Laravel's `config/database.php` connections under the `dump.dump_binary_path` key, same convention as spatie/laravel-backup.
 
-Best for:
-
-- production PostgreSQL setups with one driver key
-- environments where you need both disaster recovery and logical workflows
-
-## `shell`
-
-Use this when you already have working shell scripts or wrapper commands.
-
-Best for:
-
-- simple custom scripts
-- existing internal backup tooling
-- getting started quickly
-
-## `pgbackrest`
-
-Use this for PostgreSQL disaster-recovery style backup and restore workflows.
-
-Best for:
-
-- repository-based PostgreSQL backups
-- PostgreSQL restore and verification flows
-
-## `pgdump`
-
-Use this for PostgreSQL logical dumps.
-
-Best for:
-
-- export-style backups
-- logical restore workflows
+Set `CP_DRIVER=postgres` in your `.env`.
 
 ## `mysql`
 
-Use this for MySQL logical dumps and optional binlog replay.
+Uses `mysqldump` for logical backups and `mysql` for restore. Supports binlog-based point-in-time recovery.
 
-Best for:
+Binary paths come from Laravel's `config/database.php` connections under the `dump.dump_binary_path` key.
 
-- `mysqldump`
-- MySQL PITR-style workflows
+Set `CP_DRIVER=mysql` in your `.env`.
 
 ## `fake`
 
-Use this for testing. Returns controlled output without touching any real binary.
+Returns controlled output without touching any real binary. Use for testing and CI.
 
-Best for:
-
-- CI pipelines
-- package development and test suites
-
-## Recommendation
-
-If you are unsure:
-
-- PostgreSQL: start with `postgres`
-- MySQL: start with `mysql`
-- custom/legacy commands: use `shell`
-- testing/CI: use `fake`
+Set `CP_DRIVER=fake` in your `.env` (or in your test environment config).

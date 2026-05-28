@@ -4,44 +4,30 @@ sidebar_position: 2
 
 # PITR And Drills
 
-PITR and drills are separate workflows in the package:
+## PITR restore
 
-- PITR evaluates whether a point-in-time restore is currently possible
-- drills record evidence that restore procedures actually work
-
-## PITR readiness
-
-Evaluate readiness for now or a specific target:
+Restore to a point in time:
 
 ```bash
-php artisan checkpoint:pitr-readiness
-php artisan checkpoint:pitr-readiness "2026-03-11 11:30:00" --format=json
-php artisan checkpoint:pitr-readiness "2026-03-11 11:30:00" --agent
+php artisan checkpoint:restore --pitr="2026-03-11 11:30:00"
 ```
 
-The readiness command reports pass/fail checks and returns a non-zero exit code when readiness is `not_ready`.
+Evaluate PITR readiness without executing:
+
+```bash
+php artisan checkpoint:restore --pitr-dry-run
+```
 
 ## Queue a drill
 
 ```bash
-php artisan checkpoint:enqueue-drill
+php artisan checkpoint:drill
 ```
 
-## Record a drill result
+## Drill results
 
-```bash
-php artisan checkpoint:record-drill \
-  --run-uuid="00000000-0000-0000-0000-000000000000" \
-  --overall-result=pass \
-  --executed-at="2026-03-11T10:30:00+00:00"
-```
-
-Additional fields allow marker, RTO, and RPO evidence to be attached to the drill record.
-
-## Reporting surfaces
-
-Drill and PITR health show up in:
+Drill results appear in:
 
 - `checkpoint:status --summary`
-- `checkpoint:doctor`
-- `checkpoint:report`
+- `checkpoint:status --health`
+- `checkpoint:status --full`

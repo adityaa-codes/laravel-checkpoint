@@ -4,59 +4,56 @@ sidebar_position: 1
 
 # Take Your First Backup
 
-This is the fastest way to prove the backup layer of the reliability stack works.
+## Before you start
 
-## Step 1: queue a backup
+A queue worker must be running to process the backup job. If you do not have one, skip to the `--sync` option below.
+
+Start a worker:
 
 ```bash
-php artisan checkpoint:enqueue-backup
+php artisan queue:work --queue=checkpoint --timeout=3600
 ```
 
-What it does:
-
-- queues a `logical_backup` job
-- stores a command run record
-- returns the queued run id
-
-## Step 2: check recent runs
+## Option 1: Queue the backup (recommended)
 
 ```bash
-php artisan checkpoint:status --limit=10
+php artisan checkpoint:backup
 ```
 
-What it does:
+This pushes a backup job to the queue. The worker picks it up and runs it. You get a run ID back.
 
-- shows recent reliability operation runs
-- shows status such as `pending`, `running`, `succeeded`, or `failed`
-
-## Step 3: check the summary view
+## Option 2: Run inline
 
 ```bash
+php artisan checkpoint:backup --sync
+```
+
+Runs the backup in the current process. Blocks until complete. Use this when you do not have a queue worker or you are testing.
+
+## Check that it worked
+
+```bash
+php artisan checkpoint:status
 php artisan checkpoint:status --summary
 ```
 
-What it does:
-
-- shows a simple operator summary
-- tells you if there are pending, running, or failed runs
+The status command shows recent runs. Each run has a status: `pending`, `running`, `succeeded`, or `failed`.
 
 ## If the backup fails
 
-Run:
-
 ```bash
-php artisan checkpoint:doctor
-php artisan checkpoint:report --limit=10
+php artisan checkpoint:status --health
+php artisan checkpoint:status --full
 ```
 
-That usually tells you whether the issue is config, queue setup, or the backup command itself.
+This tells you whether the issue is config, missing binaries, queue setup, or something else.
 
-## What next: run a drill
+## Next step: run a drill
 
-Backups are the first layer. The next step is proving you can restore — run a drill:
+Backups are the first layer. Prove you can restore:
 
 ```bash
-php artisan checkpoint:enqueue-drill
+php artisan checkpoint:drill
 ```
 
 [Run A Drill](./run-a-drill.md) covers the full verification workflow.

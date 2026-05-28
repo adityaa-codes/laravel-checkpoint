@@ -8,7 +8,7 @@ Laravel Checkpoint is queue-first. Most failures that look like driver bugs are 
 
 ## Queue settings
 
-The queue config block currently exposes:
+The queue config block exposes:
 
 - `connection`
 - `name`
@@ -26,13 +26,13 @@ The queue config block currently exposes:
 
 ## Required invariants
 
-The config validator enforces important timing relationships:
+The config validator enforces timing relationships:
 
-- each driver timeout must be less than or equal to `checkpoint.queue.timeout`
-- queue uniqueness and retry windows must remain internally consistent
-- heartbeat settings must fit inside the worker budget
+- Each driver timeout must be less than or equal to `checkpoint.queue.timeout`
+- Queue uniqueness and retry windows must remain internally consistent
+- Heartbeat settings must fit inside the worker budget
 
-In practice, keep this relationship:
+Keep this relationship:
 
 ```text
 driver timeout <= queue timeout < queue retry_after <= unique_for
@@ -40,11 +40,13 @@ driver timeout <= queue timeout < queue retry_after <= unique_for
 
 ## Worker alignment
 
-Your actual worker process still has to match the package config:
+Your worker process must match the package config:
 
 ```bash
-php artisan queue:work --queue=db-ops --timeout=3600
+php artisan queue:work --queue=checkpoint --timeout=3600
 ```
+
+Set `CP_QUEUE_NAME` to change the default queue (`checkpoint`).
 
 If the worker timeout is shorter than the package timeout, the worker will kill jobs before the driver finishes.
 
@@ -52,13 +54,13 @@ If the worker timeout is shorter than the package timeout, the worker will kill 
 
 For non-local environments:
 
-- use a shared cache backend such as Redis
-- avoid `array` or `file` lock stores
-- keep scheduler overlap and `onOneServer()` coordination on a shared backend
+- Use a shared cache backend such as Redis
+- Avoid `array` or `file` lock stores
+- Keep scheduler overlap and `onOneServer()` coordination on a shared backend
 
 This matters for:
 
-- exclusive runs
-- duplicate job suppression
-- scheduled backup and drill overlap prevention
-- orphan recovery in multi-node environments
+- Exclusive runs
+- Duplicate job suppression
+- Scheduled backup and drill overlap prevention
+- Orphan recovery in multi-node environments

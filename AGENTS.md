@@ -101,7 +101,7 @@ Read these only when relevant to your task (in `.ai/guidelines/laravel-checkpoin
 | `testing-and-contribution.md` | Writing tests or preparing commits |
 | `../../IMPLEMENTATION_PLAN_V2.md` | Choosing what to work on next |
 
-Consumer-facing guidelines: `resources/boost/guidelines/laravel-checkpoint/core.blade.php`.
+AI agent guidelines: `docs/checkpoint-code.md`. Boost guidelines: `resources/boost/guidelines/core.blade.php`.
 
 ## Hard No's
 1. No facades in services/actions — constructor DI. `config()`/`app()` only in commands and providers.

@@ -6,43 +6,44 @@ sidebar_position: 1
 
 ## Config validator fails during Composer or package discovery
 
-This package validates config at boot. Any inconsistent queue, timeout, or safety settings can fail during:
+This package validates config at boot. Inconsistent queue, timeout, or safety settings can fail during:
 
 - `composer update`
 - `package:discover`
-- application boot
+- Application boot
 
 Check:
 
-- selected driver exists in `checkpoint.drivers`
-- driver timeout does not exceed `checkpoint.queue.timeout`
-- queue retry and uniqueness windows are coherent
-- restore and scheduler posture is valid for the current environment
+- `CP_DRIVER` is set to a valid driver (`postgres`, `mysql`, or `fake`)
+- Selected driver exists in `config/checkpoint.php` under `drivers`
+- Driver timeout does not exceed `checkpoint.queue.timeout`
+- Queue retry and uniqueness windows are coherent
+- Restore and scheduler posture is valid for the current environment
 
 ## Queue worker kills long-running commands
 
 Symptoms:
 
-- jobs stop mid-backup or mid-restore
-- status shows failed runs without driver-level completion
+- Jobs stop mid-backup or mid-restore
+- Status shows failed runs without driver-level completion
 
 Check:
 
-- worker `--timeout`
+- Worker `--timeout`
 - `checkpoint.queue.timeout`
-- driver `command_timeout_seconds`
+- Driver `command_timeout_seconds`
 - `checkpoint.queue.retry_after`
 
 ## Scheduler coordination breaks in production
 
 Symptoms:
 
-- duplicate scheduled runs
-- overlap guards fail across hosts
+- Duplicate scheduled runs
+- Overlap guards fail across hosts
 
 Check:
 
-- shared cache backend is configured
+- Shared cache backend is configured
 - `checkpoint.queue.lock_store` is production-safe
 - `checkpoint.schedule.without_overlapping` and `checkpoint.schedule.on_one_server` match your deployment model
 
@@ -50,16 +51,16 @@ Check:
 
 Common causes:
 
-- no last-known-good baseline
-- missing baseline artifact
+- No last-known-good baseline
+- Missing baseline artifact
 - MySQL binlog chain not configured
-- configured binlog files missing
-- target timestamp is in the future or before the baseline
+- Configured binlog files missing
+- Target timestamp is in the future or before the baseline
 
 Use:
 
 ```bash
-php artisan checkpoint:pitr-readiness --format=json
+php artisan checkpoint:restore --pitr-dry-run
 ```
 
-to inspect the failing checks directly.
+to inspect the failing checks.

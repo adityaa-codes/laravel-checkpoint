@@ -4,76 +4,73 @@ sidebar_position: 2
 
 # Quickstart
 
-This is the simplest path for a first working setup.
+The fastest path to a working setup.
 
-## Command groups
-
-- `checkpoint:enqueue*, checkpoint:status` → day-to-day operator actions
-- `checkpoint:doctor, checkpoint:report` → health/readiness checks
-- `checkpoint:prune, checkpoint:retention-policy` → maintenance/governance
-
-## 1. Run guided install
+## 1. Install
 
 ```bash
-php artisan checkpoint:install --preset=minimal
+composer require adityaa-codes/laravel-checkpoint
+php artisan checkpoint:install
 ```
 
-For PostgreSQL production, prefer:
-
-```bash
-php artisan checkpoint:install --preset=postgres-prod --write-env
-```
-
-This uses the unified `postgres` facade driver.
+The wizard auto-detects your database driver and sets `CP_DRIVER` in your `.env`.
 
 ## 2. Start a queue worker
 
 ```bash
-php artisan queue:work --queue=db-ops --timeout=3600
+php artisan queue:work --queue=checkpoint --timeout=3600
 ```
 
-## 3. Start scheduler loop
+The queue name must match `CP_QUEUE_NAME` (default is `checkpoint`, not `db-ops`).
+
+## 3. Run your first backup
+
+```bash
+php artisan checkpoint:backup
+```
+
+If you don't have a queue worker running yet, use `--sync`:
+
+```bash
+php artisan checkpoint:backup --sync
+```
+
+## 4. Check that it worked
+
+```bash
+php artisan checkpoint:status
+php artisan checkpoint:status --summary
+php artisan checkpoint:status --health
+```
+
+## 5. Schedule regular backups
+
+Add to `routes/console.php`:
+
+```php
+Schedule::command('checkpoint:backup')->cron('0 2 * * *');
+Schedule::command('checkpoint:prune')->cron('0 3 * * 0');
+Schedule::command('checkpoint:sweep')->cron('*/5 * * * *');
+```
+
+Then run the scheduler:
 
 ```bash
 php artisan schedule:work
 ```
 
-## 4. Queue your first backup
+## 6. Prove your recovery path
+
+Once backups work, run a drill:
 
 ```bash
-php artisan checkpoint:enqueue-backup
+php artisan checkpoint:drill
 ```
 
-## 5. Check that it worked
-
-```bash
-php artisan checkpoint:status --limit=10
-php artisan checkpoint:status --summary
-php artisan checkpoint:doctor
-```
-
-## 6. Replace placeholder backup command (minimal preset)
-
-If you installed with `--preset=minimal`, the seeded shell command is:
-
-```env
-CP_CMD_LOGICAL_BACKUP="php -r if(!is_dir($argv[1]))mkdir($argv[1],0777,true);touch($argv[2]); {backup_dir} {output}"
-```
-
-Replace it with your real backup command once queue wiring is validated.
+Read [Run A Drill](../common-tasks/run-a-drill.md) for the full workflow.
 
 ## What success looks like
 
 - the backup job appears in `checkpoint:status`
-- the summary page shows no obvious failure
-- `checkpoint:doctor` does not report config problems
-
-## Next: prove your recovery path
-
-Get one backup working, then immediately set up a drill to prove your recovery path:
-
-```bash
-php artisan checkpoint:enqueue-drill
-```
-
-Read [Run A Drill](../common-tasks/run-a-drill.md) for the full workflow.
+- the summary shows no failures
+- `checkpoint:status --health` passes all checks

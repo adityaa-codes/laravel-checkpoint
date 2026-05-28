@@ -4,84 +4,43 @@ sidebar_position: 3
 
 # Run A Drill
 
-Recovery drills are the killer feature. Backups are a commodity — proving you can restore under RTO is real business continuity.
-
-Drills are the verification layer that separates Checkpoint from backup tools. A backup without a verified restore path is just a file.
+A drill proves your restore path works before you need it in an incident. A backup without a verified restore is just a file.
 
 ## What a drill validates
 
-- the backup artifact is restorable (not corrupted)
+- the backup artifact is restorable (not corrupt)
 - restore commands execute correctly in your environment
 - restore completes within your RTO target
-- the restored data passes your integrity markers
+- the restored data passes integrity checks
 - you have evidence of recovery capability for audits
 
 ## Queue a drill
 
 ```bash
-php artisan checkpoint:enqueue-drill
+php artisan checkpoint:drill
 ```
 
-What it does:
-
-- queues the `backup_drill` operation
-- exercises your configured restore path end to end
-
-## Record a drill result manually
-
-```bash
-php artisan checkpoint:record-drill \
-  --run-uuid="00000000-0000-0000-0000-000000000000" \
-  --overall-result=pass \
-  --executed-at="2026-03-11T10:30:00+00:00"
-```
-
-Required values:
-
-- `--run-uuid`
-  A UUID for the drill run
-- `--overall-result`
-  `pass` or `fail`
-- `--executed-at`
-  A valid date or ISO-8601 timestamp
-
-Optional values:
-
-- `--executed-by`
-  Example: `ops-bot` or `aditya`
-- RTO and RPO fields — track target vs. actual recovery times
-- marker fields — integrity verification markers
+This queues a drill job. It exercises your configured restore path end to end.
 
 ## Scheduling drills
 
-Drills should run on a schedule, not just on-demand. Add to your scheduler:
+Drills work best on a schedule, not on-demand. Add to `routes/console.php`:
 
 ```php
-// app/Console/Kernel.php
-$schedule->command('checkpoint:enqueue-drill')->weekly()->sundays()->at('03:00');
+Schedule::command('checkpoint:drill')->weekly()->sundays()->at('03:00');
 ```
 
-Weekly is the recommended minimum. High-reliability environments should drill daily.
+Weekly is the minimum. High-reliability environments drill daily.
 
-## Drill report anatomy
-
-After a drill completes, use:
+## Check drill results
 
 ```bash
 php artisan checkpoint:status --summary
-php artisan checkpoint:report --limit=10
+php artisan checkpoint:status --full
 ```
 
-The report includes:
+The full report includes drill pass/fail status, RTO compliance, integrity marker results, and trend data.
 
-- drill pass/fail status
-- RTO compliance (target vs. actual)
-- integrity marker results
-- trend data across drill history
+## Drills and the status command
 
-## Check drill-related output
-
-```bash
-php artisan checkpoint:status --summary
-php artisan checkpoint:report --limit=10
-```
+A healthy status shows backups and drill results, not just backup success. If `checkpoint:status --summary` shows drills failing, fix your restore path before you need it.

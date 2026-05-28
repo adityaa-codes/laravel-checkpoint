@@ -4,9 +4,17 @@ sidebar_position: 1
 
 # Restore Guardrails
 
-Restore safety is a first-class package concern. The validator runs at package boot, and restore operations remain gated by dedicated restore config.
+Restore safety is a first-class concern. The validator runs at package boot, and restore operations remain gated by dedicated config.
 
-## Current restore controls
+## Environment variable
+
+`CP_RESTORE_ALLOWED_ENVIRONMENTS` controls which environments permit restores. Set it to a comma-separated list:
+
+```env
+CP_RESTORE_ALLOWED_ENVIRONMENTS=local,staging
+```
+
+## Config controls
 
 - `restore.allowed_environments`
 - `restore.allowed_databases`
@@ -21,16 +29,16 @@ Restore safety is a first-class package concern. The validator runs at package b
 - `restore.blast_radius.block_score`
 - `restore.blast_radius.weights.*`
 
-## What this means operationally
+## Operational rules
 
-- restores are not intended to be casual operator actions
+- Restores are gated by environment, confirmation, and verified-backup checks
 - CI restore execution is blocked by default
-- non-local posture defaults to requiring verified backups
-- blast-radius scoring can warn or block before the driver is invoked
+- Non-local posture defaults to requiring verified backups
+- Blast-radius scoring can warn or block before the driver is invoked
 
-## Related replication controls
+## Replication controls
 
-Replication is treated as destructive workflow governance too. Current controls include:
+Replication is also treated as destructive. Controls include:
 
 - `replication.require_confirmation_token`
 - `replication.block_in_ci`

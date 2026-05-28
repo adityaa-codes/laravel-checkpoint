@@ -4,135 +4,62 @@ sidebar_position: 1
 
 # Command Reference
 
-This page documents the command surface currently registered by `LaravelCheckpointServiceProvider`.
-
-Golden path:
-
-```bash
-php artisan checkpoint:install --preset=postgres-prod --write-env
-php artisan checkpoint:enqueue-backup
-php artisan checkpoint:status --summary
-php artisan checkpoint:doctor
-php artisan checkpoint:report
-```
-
-Command surface:
+All commands registered by the package.
 
 ## Queueing commands
 
-`checkpoint:enqueue {operation?} {--argument=}`
+### `checkpoint:backup {--sync} {--format=table}`
 
-- generic entrypoint for catalog-backed operations
-- prompts interactively when no operation is provided
-- validates required arguments through `CommandRunCatalog`
-- in non-interactive mode, missing operation/required argument fails immediately
+Queues a logical backup. Async by default. Use `--sync` for inline execution.
 
-`checkpoint:enqueue-backup`
+### `checkpoint:restore {--file=} {--pitr=} {--pitr-dry-run} {--target=} {--verification=moderate} {--verify-only} {--sync} {--force} {--format=table}`
 
-- queues `logical_backup`
+Restores from file or PITR. Use `--file` to specify a backup file, or `--pitr` for a point-in-time target. `--pitr-dry-run` evaluates readiness without executing. `--verification` controls post-restore verification level. `--verify-only` runs verification on an existing restore.
 
-`checkpoint:enqueue-drill`
+### `checkpoint:drill {--format=table}`
 
-- queues `backup_drill`
+Queues a recovery drill.
 
-`checkpoint:replicate {source?} {destination?} {--source=} {--destination=} {--apply} {--force-overwrite} {--critical-table=*}`
+### `checkpoint:replicate {source?} {destination?} {--source=} {--destination=} {--apply} {--force-overwrite} {--critical-table=*} {--format=table}`
 
-- queues `replication_sync`
-- defaults to dry-run mode
-- supports `profile:<id>`, DSN, or key-value endpoint input
-- execution supports only local/configured endpoint semantics
-- remote/cross-host endpoint intent is rejected at runtime
-- apply mode re-checks governance preflight at execution time
-- in non-interactive mode, missing source/destination fails immediately
+Replication sync. Dry-run by default. Pass `--apply` to execute. `--force-overwrite` skips confirmation prompts.
 
 ## Status and reporting
 
-`checkpoint:status {--limit=10} {--summary} {--brief} {--format=table} {--agent} {--policy-profile=}`
+### `checkpoint:status {--limit=10} {--summary} {--brief} {--format=table} {--policy-profile=} {--watch=} {--watch-timeout=300} {--health} {--full}`
 
-- recent runs or operator summary
-- `--brief` renders triage-first cause/action output
-- `table`, `json`, and `agent` output modes
-- `--policy-profile` overrides gate policy profile selection for CI/automation runs
+Status, health checks, summary, and reporting. Use `--health` for a doctor-style health check. `--watch` polls at an interval. `--full` includes all details.
 
-`checkpoint:doctor {--brief} {--format=table} {--agent} {--policy-profile=}`
+## Catalog
 
-- health checks and config validation
-- checks are severity-labeled as `blocker`, `warning`, or `info`
-- `--brief` returns top issues and immediate next action
-- `--policy-profile` overrides gate policy profile selection for CI/automation runs
-- default table output prioritizes P0/P1 checks and suppresses passing checks unless run with `-v`
+### `checkpoint:catalog:export {--output=} {--driver=} {--repository=} {--stanza=} {--window=} {--format=json} {--limit=10}`
 
-`checkpoint:report {--limit=10} {--brief} {--format=table} {--agent} {--policy-profile=}`
+Exports the backup catalog. Default format is JSON.
 
-- recent runs, summary, verification, and health payload
-- includes explicit `last_failed_run` in JSON/agent payloads
-- `--policy-profile` overrides gate policy profile selection for CI/automation runs
-- default table output prioritizes P0/P1 checks and suppresses passing checks unless run with `-v`
+## Maintenance
 
-Agent-friendly tips:
+### `checkpoint:sweep`
 
-- use `--agent` for concise output in scripts and agent loops
-- agent responses include `schema_version` for contract-safe parsing
-- use `--format=json` when you need full structured fields
-- for test output, run `vendor/bin/pest --compact`; PAO hooks in automatically when an agent is detected
+Marks timed-out runs as failed and re-dispatches stale orphans.
 
-## Exit code semantics (policy-gated)
+### `checkpoint:prune {--dry-run} {--force} {--format=table}`
 
-Operational commands evaluate safety/evidence gates and return deterministic exit codes:
+Cleans old command-run and backup-drill records. Preview with `--dry-run`.
 
-- `0` → pass
-- `2` → warning-only policy result (when enabled by profile policy)
-- `10` → safety gate failed
-- `11` → evidence gate failed
-- `12` → gate policy/config evaluation failed
+## Setup
 
-Policy profile resolution order:
+### `checkpoint:install {--skip-publish} {--skip-migrate} {--skip-doctor} {--force}`
 
-1. `--policy-profile=<name>` (highest priority)
-2. `CP_GATE_PROFILE` / `checkpoint.gates.override_profile`
-3. `checkpoint.gates.environment_profile_map[APP_ENV]`
-4. `checkpoint.gates.default_profile`
+Guided installation. Publishes config and migrations, runs the doctor check.
 
-`checkpoint:catalog-export {--format=json} {--driver=} {--repository=} {--stanza=} {--window=} {--limit=100}`
+### `checkpoint:make-driver`
 
-- machine-friendly backup catalog export
-- `json` or `csv`
+Scaffolds a custom driver class.
 
-`checkpoint:pitr-readiness {target?} {--format=table} {--agent}`
+### `checkpoint:migrate-from-spatie {--dry-run} {--force} {--remove-spatie}`
 
-- evaluates restore readiness for a target timestamp
+Migrates backup configuration from spatie/laravel-backup.
 
-## Maintenance commands
+### `checkpoint:config:show {--key=}`
 
-`checkpoint:sweep`
-
-- marks timed-out running runs as failed based on package health logic
-
-`checkpoint:recover-orphans`
-
-- claims and recovers stale queue work
-
-`checkpoint:prune`
-
-- prunes old command-run and backup-drill records
-
-`checkpoint:retention-policy {--format=table} {--limit=100} {--dry-run} {--apply}`
-
-- previews or applies policy-based retention
-
-## Drill recording
-
-`checkpoint:record-drill`
-
-Required flags:
-
-- `--run-uuid`
-- `--overall-result`
-- `--executed-at`
-
-Optional evidence flags:
-
-- marker UUID, email, count, result
-- RTO target, actual, result
-- RPO target, actual, result
-- `--executed-by`
+Shows resolved package configuration. Pass `--key` for a specific config path.
