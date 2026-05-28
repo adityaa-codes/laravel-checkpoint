@@ -66,7 +66,7 @@ final class StatusSuggestionsCollector
         }
 
         if ((int) ($summary['pending_runs'] ?? 0) > 0) {
-            $suggestions[] = $compact ? 'Scale queue workers' : 'Start or scale queue workers for the db-ops queue to drain pending runs.';
+            $suggestions[] = $compact ? 'Scale queue workers' : 'Start or scale queue workers for the checkpoint queue to drain pending runs.';
         }
 
         if ((int) ($summary['running_runs'] ?? 0) > 0) {

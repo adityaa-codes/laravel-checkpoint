@@ -74,7 +74,7 @@ it('returns warning exit code when profile enables exit_on_warn', function (): v
     $decision = resolve(GatePolicyEvaluator::class)->evaluate([
         [
             'code' => 'queue.worker_visibility',
-            'check' => 'Queue: db-ops',
+            'check' => 'Queue: checkpoint',
             'status' => 'warn',
             'notes' => 'Cannot verify queue without running worker',
             'data' => [],

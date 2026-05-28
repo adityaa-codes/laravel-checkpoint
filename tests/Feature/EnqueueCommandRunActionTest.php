@@ -31,7 +31,7 @@ it('creates a pending command run and dispatches processing after commit', funct
     expect($storedRun?->argument_text)->toBe('nightly.sql');
 
     Bus::assertDispatched(fn (ProcessCommandRunJob $job): bool => $job->run->is($run)
-        && $job->queue === 'db-ops'
+        && $job->queue === 'checkpoint'
         && $job->afterCommit === true);
 
     Event::assertDispatched(fn (BackupQueued $event): bool => $event->run->is($run));
@@ -92,7 +92,7 @@ it('normalizes replication enqueue payloads and stores redacted metadata only', 
         ->and(Js::encode($run->metadata, JSON_THROW_ON_ERROR))->not->toContain('supersecret');
 
     Bus::assertDispatched(fn (ProcessCommandRunJob $job): bool => $job->run->is($run)
-        && $job->queue === 'db-ops'
+        && $job->queue === 'checkpoint'
         && $job->afterCommit === true);
 });
 

@@ -116,7 +116,7 @@ it('returns an exclusive unique id for exclusive operations', function (): void 
     ]);
 
     expect(new ProcessCommandRunJob($run)->uniqueId())
-        ->toBe('db-ops-exclusive:logical_backup');
+        ->toBe('checkpoint-exclusive:logical_backup');
 });
 
 it('uses the same unique key for concurrent exclusive backup runs', function (): void {
@@ -152,7 +152,7 @@ it('returns an exclusive unique id for physical backup operations', function ():
     ]);
 
     expect(new ProcessCommandRunJob($run)->uniqueId())
-        ->toBe('db-ops-exclusive:physical_backup');
+        ->toBe('checkpoint-exclusive:physical_backup');
 });
 
 it('uses the configured unique lock duration and cache store', function (): void {

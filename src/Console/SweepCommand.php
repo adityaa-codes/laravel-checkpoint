@@ -20,7 +20,10 @@ use function Laravel\Prompts\outro;
 
 final class SweepCommand extends CheckpointCommand
 {
-    protected $signature = 'checkpoint:sweep';
+    use RendersJsonOutput;
+
+    protected $signature = 'checkpoint:sweep
+                            {--format=table : Output format: table or json.}';
 
     protected $description = 'Mark timed-out running command runs as failed and re-dispatch stale pending runs.';
 
@@ -41,6 +44,12 @@ final class SweepCommand extends CheckpointCommand
 
         $this->sweepTimedOutRuns();
         $this->sweepOrphanedRuns();
+
+        if ($this->stringOption('format') === 'json') {
+            return $this->renderJson('sweep', [
+                'status' => 'completed',
+            ]);
+        }
 
         if ($this->enhancedInteractiveMode()) {
             outro('Sweep completed.');
@@ -96,7 +105,7 @@ final class SweepCommand extends CheckpointCommand
         $claimedAt = now();
         $batchSize = max(1, (int) $this->config->get('checkpoint.queue.orphan_batch_size', 100));
         $eventMaxIds = max(1, (int) $this->config->get('checkpoint.queue.orphan_event_max_ids', 50));
-        $queue = (string) $this->config->get('checkpoint.queue.name', 'db-ops');
+        $queue = (string) $this->config->get('checkpoint.queue.name', 'checkpoint');
         $claimedRunIds = [];
         $claimedRunCount = 0;
         $oldestStaleAgeMinutes = 0;

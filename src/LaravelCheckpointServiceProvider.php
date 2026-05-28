@@ -46,6 +46,7 @@ use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 use AdityaaCodes\LaravelCheckpoint\Models\RestoreDecisionEvent;
 use AdityaaCodes\LaravelCheckpoint\Models\VerificationRun;
+use AdityaaCodes\LaravelCheckpoint\Notifications\EventHandler;
 use AdityaaCodes\LaravelCheckpoint\Services\BackupArtifactUploader;
 use AdityaaCodes\LaravelCheckpoint\Services\CheckpointDriverManager;
 use AdityaaCodes\LaravelCheckpoint\Services\CommandLineRedactor;
@@ -60,6 +61,7 @@ use AdityaaCodes\LaravelCheckpoint\ValueObjects\GateProfileConfig;
 use AdityaaCodes\LaravelCheckpoint\ValueObjects\HealthCheckConfig;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Psr\Log\LoggerInterface;
 use Spatie\LaravelPackageTools\Package;
@@ -88,6 +90,11 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
                 StatusCommand::class,
                 SweepCommand::class,
             ]);
+    }
+
+    public function packageBooted(): void
+    {
+        Event::subscribe(EventHandler::class);
     }
 
     public function packageRegistered(): void
@@ -140,7 +147,7 @@ final class LaravelCheckpointServiceProvider extends PackageServiceProvider
 
             return new HealthCheckConfig(
                 driver: $driver,
-                queueName: (string) $config->get('checkpoint.queue.name', 'db-ops'),
+                queueName: (string) $config->get('checkpoint.queue.name', 'checkpoint'),
                 logChannel: (string) $config->get('checkpoint.log_channel', 'stack'),
                 environment: (string) $config->get('app.env', 'production'),
                 currentDatabaseName: (string) $config->get('database.connections.'.$config->get('database.default', '').'.database', ''),

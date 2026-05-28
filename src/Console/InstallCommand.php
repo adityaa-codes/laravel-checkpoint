@@ -95,7 +95,18 @@ final class InstallCommand extends CheckpointCommand
 
         $dbDriver = config('database.connections.'.$defaultConnection.'.driver');
 
-        return match (Str::lower(Str::trim(is_string($dbDriver) ? $dbDriver : 'mysql'))) {
+        $resolved = Str::lower(Str::trim(is_string($dbDriver) ? $dbDriver : 'mysql'));
+
+        if (in_array($resolved, ['sqlite', 'sqlsrv'], true)) {
+            $this->promptError(sprintf(
+                'Checkpoint does not support the "%s" database driver. Use MySQL or PostgreSQL instead.',
+                $resolved,
+            ));
+
+            throw new RuntimeException(sprintf('Unsupported database driver: %s', $resolved));
+        }
+
+        return match ($resolved) {
             'pgsql', 'postgres', 'postgresql' => 'postgres',
             'mysql', 'mariadb' => 'mysql',
             default => 'mysql',
@@ -320,7 +331,7 @@ final class InstallCommand extends CheckpointCommand
 
     private function detectQueueWorker(): void
     {
-        $queueName = 'db-ops';
+        $queueName = (string) config('checkpoint.queue.name', 'checkpoint');
         $output = null;
         $returnCode = null;
 

@@ -5,9 +5,9 @@
   "gates": {
     "profile": "local",
     "profile_source": "environment",
-    "verdict": "pass",
-    "failed_gate": "none",
-    "exit_code": 0
+    "verdict": "fail",
+    "failed_gate": "safety",
+    "exit_code": 10
   },
   "checks": [
     {
@@ -24,9 +24,9 @@
       "code": "config.queue_name",
       "check": "Config: queue.name",
       "status": "pass",
-      "notes": "db-ops",
+      "notes": "checkpoint",
       "data": {
-        "queue_name": "db-ops"
+        "queue_name": "checkpoint"
       },
       "severity": "info"
     },
@@ -186,11 +186,11 @@
     },
     {
       "code": "queue.worker_visibility",
-      "check": "Queue: db-ops",
+      "check": "Queue: checkpoint",
       "status": "warn",
       "notes": "Cannot verify queue without running worker",
       "data": {
-        "queue_name": "db-ops"
+        "queue_name": "checkpoint"
       },
       "severity": "warning"
     },

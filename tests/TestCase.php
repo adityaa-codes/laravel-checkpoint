@@ -7,6 +7,7 @@ namespace AdityaaCodes\LaravelCheckpoint\Tests;
 use AdityaaCodes\LaravelCheckpoint\Drivers\MysqlDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\PostgresDriver;
 use AdityaaCodes\LaravelCheckpoint\LaravelCheckpointServiceProvider;
+use AdityaaCodes\LaravelCheckpoint\Notifications\Notifiable;
 use AdityaaCodes\LaravelCheckpoint\Testing\InteractsWithCheckpoint;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
@@ -67,7 +68,7 @@ class TestCase extends Orchestra
             'log_channel' => 'stack',
             'driver' => 'mysql',
             'queue' => [
-                'name' => 'db-ops',
+                'name' => 'checkpoint',
                 'max_attempts' => 1,
                 'retry_after' => 3660,
                 'timeout' => 3600,
@@ -134,21 +135,11 @@ class TestCase extends Orchestra
                 'max_recent_runs' => 100,
             ],
             'notifications' => [
-                'enabled' => false,
-                'events' => [],
-                'routing' => [
-                    'info' => ['log'],
-                    'warning' => ['log'],
-                    'critical' => ['log'],
-                ],
-                'mail' => [
-                    'to' => [],
-                ],
-                'webhook' => [
-                    'url' => null,
-                    'provider' => 'generic',
-                    'timeout_seconds' => 5,
-                ],
+                'notifications' => [],
+                'notifiable' => Notifiable::class,
+                'mail' => ['to' => null],
+                'slack' => ['webhook_url' => null],
+                'telegram' => ['bot_token' => null, 'chat_id' => null],
             ],
             'output' => [
                 'max_persisted_bytes' => 65536,

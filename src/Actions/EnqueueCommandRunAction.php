@@ -56,7 +56,7 @@ class EnqueueCommandRunAction
         ]));
 
         $job = new ProcessCommandRunJob($run)
-            ->onQueue((string) $this->config->get('checkpoint.queue.name', 'db-ops'))
+            ->onQueue((string) $this->config->get('checkpoint.queue.name', 'checkpoint'))
             ->afterCommit();
 
         $this->dispatcher->dispatch($job);

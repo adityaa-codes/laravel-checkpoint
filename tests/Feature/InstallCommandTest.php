@@ -5,12 +5,16 @@ declare(strict_types=1);
 use AdityaaCodes\LaravelCheckpoint\Console\InstallCommand;
 
 it('uses configured driver and completes install', function (): void {
+    config()->set('database.connections.testing.driver', 'mysql');
+
     checkpoint_artisan('checkpoint:install --skip-publish --skip-migrate --skip-doctor')
         ->expectsOutputToContain('Driver')
         ->assertSuccessful();
 });
 
 it('publishes config and migrations', function (): void {
+    config()->set('database.connections.testing.driver', 'mysql');
+
     checkpoint_artisan('checkpoint:install --skip-migrate --skip-doctor')
         ->expectsOutputToContain('Driver')
         ->expectsOutputToContain('Migrations')
@@ -18,18 +22,24 @@ it('publishes config and migrations', function (): void {
 });
 
 it('completes install when doctor has no hard failures', function (): void {
+    config()->set('database.connections.testing.driver', 'mysql');
+
     checkpoint_artisan('checkpoint:install --skip-publish --skip-migrate')
         ->expectsOutputToContain('Doctor')
         ->assertSuccessful();
 });
 
 it('renders install summary in non-interactive mode', function (): void {
+    config()->set('database.connections.testing.driver', 'mysql');
+
     checkpoint_artisan('checkpoint:install --skip-publish --skip-migrate --skip-doctor --no-interaction')
         ->expectsOutputToContain('Driver')
         ->assertSuccessful();
 });
 
 it('supports the do install command alias', function (): void {
+    config()->set('database.connections.testing.driver', 'mysql');
+
     checkpoint_artisan('checkpoint:do:install --skip-publish --skip-migrate --skip-doctor')
         ->expectsOutputToContain('Driver')
         ->assertSuccessful();
@@ -49,6 +59,8 @@ it('outputs production restore safety instructions', function (): void {
     app()['env'] = 'production';
 
     try {
+        config()->set('database.connections.testing.driver', 'mysql');
+
         $exitCode = Artisan::call('checkpoint:install', [
             '--skip-publish' => true,
             '--skip-migrate' => true,
@@ -65,6 +77,8 @@ it('outputs production restore safety instructions', function (): void {
 });
 
 it('outputs driver persistence instructions', function (): void {
+    config()->set('database.connections.testing.driver', 'mysql');
+
     checkpoint_artisan('checkpoint:install --skip-publish --skip-migrate --skip-doctor')
         ->expectsOutputToContain('CP_DRIVER=')
         ->assertSuccessful();
