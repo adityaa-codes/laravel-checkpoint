@@ -6,12 +6,12 @@ This package supports Laravel `12.x` and `13.x`.
 
 ## Unreleased
 
-Replication workflows now have a dedicated queue entrypoint: `db-ops:replicate`.
+Replication workflows now have a dedicated queue entrypoint: `checkpoint:replicate`.
 When adopting this flow:
 
-1. configure replication policy env vars in each environment (`DB_OPS_REPLICATION_REQUIRE_CONFIRMATION_TOKEN`, `DB_OPS_REPLICATION_BLOCK_IN_CI`, `DB_OPS_REPLICATION_REQUIRE_DRY_RUN_BEFORE_APPLY`)
-2. define allowed destination identifiers via `DB_OPS_REPLICATION_ALLOWLISTED_DESTINATIONS`
-3. set default critical-table guardrails with `DB_OPS_REPLICATION_CRITICAL_TABLES`
+1. configure replication policy env vars in each environment (`CP_REPLICATION_REQUIRE_CONFIRMATION_TOKEN`, `CP_REPLICATION_BLOCK_IN_CI`, `CP_REPLICATION_REQUIRE_DRY_RUN_BEFORE_APPLY`)
+2. define allowed destination identifiers via `CP_REPLICATION_ALLOWLISTED_DESTINATIONS`
+3. set default critical-table guardrails with `CP_REPLICATION_CRITICAL_TABLES`
 4. verify operator runbooks use dry-run first, then `--apply`/`--force-overwrite` only through approved change windows
 
 When upgrading consumer applications from Laravel 12 to 13, review both guides and then validate your application-level configuration and listeners:
@@ -56,14 +56,14 @@ If you previously used the checkpoint and recovery logic inside an application m
 When upgrading existing environments, apply restore and observability hardening in stages so operator workflows stay predictable:
 
 1. publish latest package migrations and run `php artisan migrate`
-2. run `php artisan db-ops:status --summary`, `php artisan db-ops:doctor --format=json`, and `php artisan db-ops:report --limit=10` to capture a pre-enforcement baseline
+2. run `php artisan checkpoint:status --summary`, `php artisan checkpoint:doctor --format=json`, and `php artisan checkpoint:report --limit=10` to capture a pre-enforcement baseline
 3. set restore posture controls first:
-   - `DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS`
-   - `DB_OPS_RESTORE_ALLOWED_DATABASES`
-   - `DB_OPS_RESTORE_REQUIRE_CONFIRMATION=true`
-4. keep `DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=false` briefly while you establish a clean verified signal cadence
-5. run at least one successful verification cycle (`pgbackrest_check` / `pgbackrest_verify` or logical backup verification path), then switch `DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=true`
-6. keep `DB_OPS_RESTORE_ALLOW_IN_CI=false` unless CI restore execution is an explicit requirement
+   - `CP_RESTORE_ALLOWED_ENVIRONMENTS`
+   - `CP_RESTORE_ALLOWED_DATABASES`
+   - `CP_RESTORE_REQUIRE_CONFIRMATION=true`
+4. keep `CP_RESTORE_REQUIRE_VERIFIED_BACKUP=false` briefly while you establish a clean verified signal cadence
+5. run at least one successful verification cycle (`pgbackrest_check` / `pgbackrest_verify` or logical backup verification path), then switch `CP_RESTORE_REQUIRE_VERIFIED_BACKUP=true`
+6. keep `CP_RESTORE_ALLOW_IN_CI=false` unless CI restore execution is an explicit requirement
 
 Recommended migration safety checks after rollout:
 
@@ -78,21 +78,21 @@ Use this matrix to roll out strict controls without surprising operators:
 1. **Schema and baseline first**
    - Run migrations.
    - Capture baseline outputs:
-     - `php artisan db-ops:status --summary --format=json`
-     - `php artisan db-ops:doctor --format=json`
-     - `php artisan db-ops:report --limit=10 --format=json`
+     - `php artisan checkpoint:status --summary --format=json`
+     - `php artisan checkpoint:doctor --format=json`
+     - `php artisan checkpoint:report --limit=10 --format=json`
 
 2. **Restore posture controls**
    - Enforce:
-     - `DB_OPS_RESTORE_ALLOWED_ENVIRONMENTS`
-     - `DB_OPS_RESTORE_ALLOWED_DATABASES`
-     - `DB_OPS_RESTORE_REQUIRE_CONFIRMATION=true`
+     - `CP_RESTORE_ALLOWED_ENVIRONMENTS`
+     - `CP_RESTORE_ALLOWED_DATABASES`
+     - `CP_RESTORE_REQUIRE_CONFIRMATION=true`
    - Keep:
-     - `DB_OPS_RESTORE_ALLOW_IN_CI=false` (unless explicitly required)
+     - `CP_RESTORE_ALLOW_IN_CI=false` (unless explicitly required)
 
 3. **Verification provenance enforcement**
-   - Temporarily keep `DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=false` only while building verified signal coverage.
-   - After verified runs are healthy, set `DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=true`.
+   - Temporarily keep `CP_RESTORE_REQUIRE_VERIFIED_BACKUP=false` only while building verified signal coverage.
+   - After verified runs are healthy, set `CP_RESTORE_REQUIRE_VERIFIED_BACKUP=true`.
 
 4. **Scheduler and lock-store safety**
    - Keep `checkpoint.schedule.without_overlapping=true` and `checkpoint.schedule.on_one_server=true` in clustered environments.
@@ -100,9 +100,9 @@ Use this matrix to roll out strict controls without surprising operators:
 
 5. **Drill posture and remediation**
    - Enable scheduled drills:
-     - `DB_OPS_BACKUP_DRILL_SCHEDULE_ENABLED=true`
-     - `DB_OPS_BACKUP_DRILL_DAILY_AT`
-     - `DB_OPS_BACKUP_DRILL_TIMEZONE`
+     - `CP_BACKUP_DRILL_SCHEDULE_ENABLED=true`
+     - `CP_BACKUP_DRILL_DAILY_AT`
+     - `CP_BACKUP_DRILL_TIMEZONE`
    - Monitor:
      - `summary.backup_drill_trend`
      - `summary.backup_drill_remediation_playbook`
@@ -110,9 +110,9 @@ Use this matrix to roll out strict controls without surprising operators:
 
 6. **Notification routing and incident handoff**
    - Enable routing:
-     - `DB_OPS_NOTIFICATIONS_ENABLED=true`
-     - `DB_OPS_NOTIFICATIONS_ROUTE_WARNING`
-     - `DB_OPS_NOTIFICATIONS_ROUTE_CRITICAL`
+     - `CP_NOTIFICATIONS_ENABLED=true`
+     - `CP_NOTIFICATIONS_ROUTE_WARNING`
+     - `CP_NOTIFICATIONS_ROUTE_CRITICAL`
    - For chat/webhooks, verify drill alarms include `payload.remediation` and playbook context fields in message payloads.
 
 ## Rollback Strategy Per Stage
@@ -122,11 +122,11 @@ If a stage creates operational friction, roll back only that stage and keep earl
 - restore posture stage:
   - relax allowlists temporarily while preserving confirmation requirement
 - verification stage:
-  - set `DB_OPS_RESTORE_REQUIRE_VERIFIED_BACKUP=false` briefly, then re-enable after fixing verification pipeline
+  - set `CP_RESTORE_REQUIRE_VERIFIED_BACKUP=false` briefly, then re-enable after fixing verification pipeline
 - scheduler/lock-store stage:
   - disable `on_one_server`/`without_overlapping` only as a last resort and only in non-clustered contexts
 - drill stage:
-  - keep drill recording manual (`db-ops:record-drill`) if schedule cadence needs adjustment
+  - keep drill recording manual (`checkpoint:record-drill`) if schedule cadence needs adjustment
 - notification stage:
   - reduce routing fan-out (for example, log-only) while preserving event emission
 
@@ -134,8 +134,8 @@ If a stage creates operational friction, roll back only that stage and keep earl
 
 Before declaring upgrade completion:
 
-- `db-ops:doctor --format=json` has no unexpected `config.validation` failures
-- `db-ops:report --format=json` exposes expected `summary`, `breakdown`, `verification`, and `health` blocks
+- `checkpoint:doctor --format=json` has no unexpected `config.validation` failures
+- `checkpoint:report --format=json` exposes expected `summary`, `breakdown`, `verification`, and `health` blocks
 - restore attempts record `metadata.restore_audit` and append restore decision events
 - drill outputs include trend and remediation playbook payloads
 - notification payloads include actionable commands for critical/warn drill alarms

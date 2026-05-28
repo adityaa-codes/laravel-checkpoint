@@ -31,16 +31,17 @@ Set your driver explicitly in `.env`:
 
 ```env
 CP_DRIVER=postgres
-# or: mysql, shell, pgdump, pgbackrest
+# or: mysql
 ```
 
 ## First Backup
 
 1. **Configure your driver** — set `CP_DRIVER` in `.env` to match your database
-2. **Start a queue worker** — Checkpoint operations run on the `db-ops` queue:
+2. **Start a queue worker** — Checkpoint operations run on the `checkpoint` queue:
    ```bash
-   php artisan queue:work --queue=db-ops
+   php artisan queue:work --queue=checkpoint
    ```
+   **Note:** This package uses the `checkpoint` queue. Ensure a queue worker is running: `php artisan queue:work --queue=checkpoint`
 3. **Run a backup**:
    ```bash
    php artisan checkpoint:backup
@@ -51,7 +52,7 @@ CP_DRIVER=postgres
    ```
 5. **Run health diagnostics**:
    ```bash
-   php artisan checkpoint:doctor:health
+    php artisan checkpoint:status --health
    ```
 
 ## Key Commands
@@ -63,9 +64,9 @@ CP_DRIVER=postgres
 | `checkpoint:replicate` | Run replication sync |
 | `checkpoint:sweep` | Mark timed-out runs as failed |
 | `checkpoint:status` | View recent command runs |
-| `checkpoint:doctor:health` | Run database health checks |
-| `checkpoint:doctor:pitr` | Check point-in-time recovery readiness |
-| `checkpoint:doctor:report` | Generate operational report with triage |
+| `checkpoint:status --health` | Run database health checks |
+| `checkpoint:restore --pitr-dry-run` | Check point-in-time recovery readiness |
+| `checkpoint:status --full` | Generate operational report with triage |
 | `checkpoint:catalog:export` | Export the command run catalog |
 | `checkpoint:prune` | Clean old backups per retention policy |
 | `checkpoint:install` | Guided installation wizard |
@@ -79,7 +80,7 @@ CP_DRIVER=postgres
 - **Process safety** — all shell commands use Symfony Process array arguments (no string concatenation)
 - **No swallowed exceptions** — every failure is reported via `report($e)` or `logger()->error(...)`
 - **No error suppression** — return values are checked, `@` is never used
-- **Environment isolation** — all env vars prefixed with `DB_OPS_*`
+- **Environment isolation** — all env vars prefixed with `CP_*`
 
 ## Testing
 
@@ -108,9 +109,6 @@ The fake driver bypasses config entirely via direct container binding, so it is 
 |--------|----------|
 | `postgres` | Native PostgreSQL pg_dump/pg_restore |
 | `mysql` | Native MySQL mysqldump/mysql |
-| `pgdump` | PostgreSQL with custom dump options |
-| `pgbackrest` | PostgreSQL with pgBackRest |
-| `shell` | Custom shell-based backup scripts |
 | `fake` | Test-only driver (no real operations) |
 
 ## Requirements
@@ -127,4 +125,4 @@ Full documentation is available at [laravel-checkpoint.com](https://laravel-chec
 
 Authorization is owned by the consuming Laravel application. This package does not enforce RBAC policies.
 
-All environment variables for database operations use the `DB_OPS_*` prefix to avoid conflicts with Laravel's standard `DB_*` connection variables.
+All environment variables for database operations use the `CP_*` prefix to avoid conflicts with Laravel's standard `DB_*` connection variables.

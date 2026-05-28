@@ -64,7 +64,7 @@ Default to surfacing uncertainty, not hiding it.
 ## What
 Database reliability layer for Laravel: backup, restore, PITR, replication, recovery drills.
 PHP 8.3+, Laravel 12/13, Pest, Pint, PHPStan (level max), Orchestra Testbench, SQLite :memory:.
-Drivers: MySQL, PgDump, PgBackRest, Shell, Postgres, Fake.
+Drivers: MySQL, Postgres, Fake.
 Key locations: `src/Console/` (commands), `src/Services/` (domain logic), `src/Drivers/` (backup implementations),
 `src/Models/` (Eloquent), `config/checkpoint.php` (single config file).
 
@@ -86,7 +86,7 @@ CI: PHP 8.3–8.5 × Laravel 12–13 × prefer-stable/prefer-lowest (12 jobs).
 Pre-release: full matrix green + no `@` suppression + no swallowed exceptions +
 all `stringOption()` in `UsesLaravelPrompts` trait + no methods >50 lines.
 
-Security: all env vars `DB_OPS_*`. Restore requires confirmation in non-local environments.
+Security: all env vars `CP_*`. Restore requires confirmation in non-local environments.
 Queue locks (`ShouldBeUnique`) prevent concurrent destructive operations.
 All shell commands use Symfony Process array args — no string concatenation.
 

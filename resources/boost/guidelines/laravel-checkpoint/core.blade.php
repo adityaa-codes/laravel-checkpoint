@@ -12,8 +12,7 @@ Make backup, restore, PITR, replication, and recovery-drill operations safe, aud
 - 17 Artisan commands with `checkpoint:*` prefix
 
 ## Conventions
-- All env vars use `DB_OPS_*` prefix
-- `DB_OPS_TIMEOUT` (default 3600) auto-computes queue timeout chain
+- All env vars use `CP_*` prefix
 - Gate profiles auto-detected from `app()->environment()`
 - Restore requires confirmation in non-local environments
 - All shell commands use Symfony Process array args — no string concatenation
@@ -22,9 +21,9 @@ Make backup, restore, PITR, replication, and recovery-drill operations safe, aud
 | Command | Purpose |
 |---|---|
 | `checkpoint:install` | Guided setup, auto-detects database driver |
- | `checkpoint:doctor:health` | Health diagnostics |
+| `checkpoint:status --health` | Health diagnostics |
 | `checkpoint:status` | Recent run history with `--watch` polling |
-| `checkpoint:report` | Consolidated operational report |
+| `checkpoint:status --full` | Consolidated operational report |
 | `checkpoint:backup` | Run a logical backup |
 | `checkpoint:drill` | Run a backup drill |
 | `checkpoint:replicate` | Production→staging sync |
