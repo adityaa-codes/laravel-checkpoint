@@ -12,8 +12,11 @@ use Throwable;
 
 final class BackupCommand extends CheckpointCommand
 {
+    use RendersJsonOutput;
+
     protected $signature = 'checkpoint:backup
-                            {--sync : Run the backup inline instead of queueing.}';
+                            {--sync : Run the backup inline instead of queueing.}
+                            {--format=table : Output format: table or json.}';
 
     protected $description = 'Run a logical backup.';
 
@@ -21,6 +24,14 @@ final class BackupCommand extends CheckpointCommand
     {
         try {
             $run = $enqueueCommandRun->execute(CheckpointOperation::Backup);
+
+            if ($this->stringOption('format') === 'json') {
+                return $this->renderJson('backup', [
+                    'run_id' => (int) $run->getKey(),
+                    'operation' => $run->operation,
+                    'status' => $run->status->value,
+                ]);
+            }
 
             if ($this->option('sync')) {
                 Bus::dispatchSync(new ProcessCommandRunJob($run));

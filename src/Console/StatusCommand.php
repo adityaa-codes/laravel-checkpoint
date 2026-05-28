@@ -36,6 +36,18 @@ final class StatusCommand extends CheckpointCommand
 
     public function handle(): int
     {
+        $requestedModes = collect(['health', 'full', 'summary', 'watch'])
+            ->filter(fn (string $mode): bool => $mode === 'watch'
+                ? $this->stringOption('watch') !== null
+                : (bool) $this->option($mode))
+            ->count();
+
+        if ($requestedModes > 1) {
+            $this->promptError('The --health, --full, --summary, and --watch options are mutually exclusive.');
+
+            return self::FAILURE;
+        }
+
         if ((bool) $this->option('health')) {
             return $this->handleHealth();
         }

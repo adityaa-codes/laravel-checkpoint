@@ -15,9 +15,12 @@ use function Laravel\Prompts\warning;
 
 final class PruneCommand extends CheckpointCommand
 {
+    use RendersJsonOutput;
+
     protected $signature = 'checkpoint:prune
         {--dry-run : Preview what would be pruned without deleting records.}
-        {--force : Skip confirmation prompt for non-interactive environments.}';
+        {--force : Skip confirmation prompt for non-interactive environments.}
+        {--format=table : Output format: table or json.}';
 
     protected $description = 'Prune old checkpoint runs and backup drill records.';
 
@@ -42,6 +45,14 @@ final class PruneCommand extends CheckpointCommand
             $eligibleCommandRuns = $this->commandRun->prunable()->count();
             $eligibleDrillRuns = $this->backupDrillRun->prunable()->count();
 
+            if ($this->stringOption('format') === 'json') {
+                return $this->renderJson('prune', [
+                    'dry_run' => true,
+                    'eligible_command_runs' => $eligibleCommandRuns,
+                    'eligible_backup_drill_runs' => $eligibleDrillRuns,
+                ]);
+            }
+
             $this->promptInfo(sprintf(
                 'Dry run: %d command run(s) and %d backup drill run(s) eligible for pruning.',
                 $eligibleCommandRuns,
@@ -63,6 +74,14 @@ final class PruneCommand extends CheckpointCommand
 
         $commandRunCount = $this->commandRun->pruneAll();
         $backupDrillCount = $this->backupDrillRun->pruneAll();
+
+        if ($this->stringOption('format') === 'json') {
+            return $this->renderJson('prune', [
+                'dry_run' => false,
+                'pruned_command_runs' => $commandRunCount,
+                'pruned_backup_drill_runs' => $backupDrillCount,
+            ]);
+        }
 
         $message = $this->prunedMessage($commandRunCount, $backupDrillCount);
 

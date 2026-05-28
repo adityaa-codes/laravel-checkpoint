@@ -10,7 +10,10 @@ use Throwable;
 
 final class DrillCommand extends CheckpointCommand
 {
-    protected $signature = 'checkpoint:drill';
+    use RendersJsonOutput;
+
+    protected $signature = 'checkpoint:drill
+                            {--format=table : Output format: table or json.}';
 
     protected $description = 'Run a backup drill.';
 
@@ -18,6 +21,14 @@ final class DrillCommand extends CheckpointCommand
     {
         try {
             $run = $enqueueCommandRun->execute(CheckpointOperation::Drill);
+
+            if ($this->stringOption('format') === 'json') {
+                return $this->renderJson('drill', [
+                    'run_id' => (int) $run->getKey(),
+                    'operation' => $run->operation,
+                    'status' => $run->status->value,
+                ]);
+            }
 
             $this->promptInfo(sprintf('Queued Backup Drill run #%d.', (int) $run->getKey()));
 

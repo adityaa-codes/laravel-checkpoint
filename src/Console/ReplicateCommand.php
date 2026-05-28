@@ -18,6 +18,8 @@ use function Laravel\Prompts\warning;
 
 final class ReplicateCommand extends CheckpointCommand
 {
+    use RendersJsonOutput;
+
     protected $signature = 'checkpoint:replicate
         {source? : Source endpoint (profile:<id>, DSN, or key=value pairs)}
         {destination? : Destination endpoint (profile:<id>, DSN, or key=value pairs)}
@@ -25,7 +27,8 @@ final class ReplicateCommand extends CheckpointCommand
         {--destination= : Destination endpoint override}
         {--apply : Queue apply mode. Without this flag, replication runs in dry-run mode.}
         {--force-overwrite : Request overwrite behavior for apply mode.}
-        {--critical-table=* : Critical table names to guard overwrite. Repeat option for multiple tables.}';
+        {--critical-table=* : Critical table names to guard overwrite. Repeat option for multiple tables.}
+        {--format=table : Output format: table or json.}';
 
     protected $description = 'Queue a replication sync run with conservative defaults.';
 
@@ -71,6 +74,15 @@ final class ReplicateCommand extends CheckpointCommand
                 CheckpointOperation::Replicate,
                 json_encode($payload, JSON_THROW_ON_ERROR),
             );
+
+            if ($this->stringOption('format') === 'json') {
+                return $this->renderJson('replicate', [
+                    'run_id' => (int) $run->getKey(),
+                    'operation' => $run->operation,
+                    'status' => $run->status->value,
+                    'mode' => $payload['dry_run'] ? 'dry-run' : 'apply',
+                ]);
+            }
 
             $message = sprintf('Queued Replication Sync run #%d.', (int) $run->getKey());
 
