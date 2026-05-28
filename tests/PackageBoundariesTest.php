@@ -11,6 +11,7 @@ use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Drivers\FakeDriver;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupCompleted;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillCompleted;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillFreshnessAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillPassRateAlarmTriggered;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
@@ -74,6 +75,7 @@ it('keeps immutable payload and service objects readonly where appropriate', fun
         BackupDrillFreshnessAlarmTriggered::class,
         BackupDrillPassRateAlarmTriggered::class,
         BackupDrillCompleted::class,
+        BackupDrillFailed::class,
         OrphanRunRedispatched::class,
         QueueLagDetected::class,
         LaravelCheckpoint::class,
@@ -112,6 +114,7 @@ it('exposes public properties only for intentional payload seams', function (): 
         BackupDrillFreshnessAlarmTriggered::class => ['run', 'reason', 'ageDays', 'thresholdDays', 'version'],
         BackupDrillPassRateAlarmTriggered::class => ['latestRun', 'passRatePercent', 'passing', 'thresholdPercent', 'total', 'version', 'windowDays'],
         BackupDrillCompleted::class => ['run'],
+        BackupDrillFailed::class => ['run', 'exitCode', 'output', 'exception', 'version'],
         OrphanRunRedispatched::class => ['queue', 'run', 'staleAgeMinutes', 'thresholdMinutes', 'version'],
         QueueLagDetected::class => ['oldestStaleAgeMinutes', 'queue', 'staleRunCount', 'staleRunIds', 'staleRunIdsTruncated', 'thresholdMinutes', 'version'],
     ];

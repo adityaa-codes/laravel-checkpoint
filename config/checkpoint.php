@@ -1,6 +1,11 @@
 <?php
 
 declare(strict_types=1);
+use AdityaaCodes\LaravelCheckpoint\Notifications\Notifiable;
+use AdityaaCodes\LaravelCheckpoint\Notifications\Notifications\BackupCompletedNotification;
+use AdityaaCodes\LaravelCheckpoint\Notifications\Notifications\BackupDrillCompletedNotification;
+use AdityaaCodes\LaravelCheckpoint\Notifications\Notifications\BackupDrillFailedNotification;
+use AdityaaCodes\LaravelCheckpoint\Notifications\Notifications\BackupFailedNotification;
 
 /*
 |--------------------------------------------------------------------------
@@ -17,10 +22,15 @@ declare(strict_types=1);
 | inside Laravel's own config/database.php per connection — just like
 | spatie/laravel-backup.
 |
-| Only three env vars are used by default:
-|   CP_DRIVER    — which driver to use (postgres, mysql)
-|   CP_BACKUP_ARCHIVE_PASSWORD  — encryption password (null = disabled)
-|   CP_RESTORE_ALLOWED_ENVIRONMENTS — comma-separated envs where restore is allowed
+    | Only a few env vars are used by default:
+    |   CP_DRIVER    — which driver to use (postgres, mysql)
+    |   CP_QUEUE_NAME — optional override for the queue name (default: checkpoint)
+    |   CP_BACKUP_ARCHIVE_PASSWORD  — encryption password (null = disabled)
+    |   CP_RESTORE_ALLOWED_ENVIRONMENTS — comma-separated envs where restore is allowed
+    |   CP_ALERT_EMAIL — email address for alert notifications
+    |   CP_SLACK_WEBHOOK — Slack webhook URL for notifications
+    |   CP_TELEGRAM_BOT_TOKEN — Telegram bot token for notifications
+    |   CP_TELEGRAM_CHAT_ID — Telegram chat ID for notifications
 |
 */
 
@@ -72,13 +82,11 @@ return [
     | Encryption
     |--------------------------------------------------------------------------
     |
-    | Enable AES-256-GCM streaming encryption for backup artifacts.
-    | When enabled, a key is derived from CP_BACKUP_ARCHIVE_PASSWORD.
-    | Set the env var to null or leave it unset to skip encryption.
+    | Encryption is active when CP_BACKUP_ARCHIVE_PASSWORD is set to a
+    | non-empty string. Leave null/unset to skip encryption.
     |
     */
     'encryption' => [
-        'enabled' => false,
         'password' => env('CP_BACKUP_ARCHIVE_PASSWORD'),
     ],
 
@@ -99,7 +107,7 @@ return [
     |
     */
     'queue' => [
-        'name' => 'db-ops',
+        'name' => env('CP_QUEUE_NAME', 'checkpoint'),
         'timeout' => 3600,
         'lock_store' => null,
         'unique_for' => 3660,
@@ -230,14 +238,31 @@ return [
     | Notifications
     |--------------------------------------------------------------------------
     |
-    | Notification channels for backup/drill/health events.
-    | Empty channels array = no notifications sent.
+    | Map notification classes to channels. Supported channels:
+    | mail, slack, telegram (requires laravel-notification-channels/telegram).
+    |
+    | Remove a notification class or set its channels to empty to disable it.
+    | Channels that are empty will cause the notification to be skipped.
     |
     */
     'notifications' => [
-        'channels' => [],
-        'on_success' => false,
-        'on_failure' => true,
+        'notifications' => [
+            BackupFailedNotification::class => ['mail'],
+            BackupCompletedNotification::class => ['mail'],
+            BackupDrillFailedNotification::class => ['mail'],
+            BackupDrillCompletedNotification::class => ['mail'],
+        ],
+        'notifiable' => Notifiable::class,
+        'mail' => [
+            'to' => env('CP_ALERT_EMAIL'),
+        ],
+        'slack' => [
+            'webhook_url' => env('CP_SLACK_WEBHOOK'),
+        ],
+        'telegram' => [
+            'bot_token' => env('CP_TELEGRAM_BOT_TOKEN'),
+            'chat_id' => env('CP_TELEGRAM_CHAT_ID'),
+        ],
     ],
 
     /*

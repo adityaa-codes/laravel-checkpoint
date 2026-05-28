@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace AdityaaCodes\LaravelCheckpoint\Events;
 
-use AdityaaCodes\LaravelCheckpoint\Models\BackupDrillRun;
+use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
 
 final readonly class BackupDrillCompleted
 {
-    public function __construct(public BackupDrillRun $run) {}
+    public function __construct(public CommandRun $run) {}
 }

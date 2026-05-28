@@ -62,6 +62,9 @@ arch('package classes are final by default')
         RestoreDecisionEvent::class,
         BackupDrillRun::class,
         CheckpointCommand::class,
+        'AdityaaCodes\\LaravelCheckpoint\\Notifications\\Notifiable',
+        'AdityaaCodes\\LaravelCheckpoint\\Notifications\\BaseNotification',
+        'AdityaaCodes\\LaravelCheckpoint\\Notifications\\EventHandler',
     ]);
 
 arch('it will not use debugging functions')

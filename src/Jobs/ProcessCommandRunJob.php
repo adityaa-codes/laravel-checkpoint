@@ -7,6 +7,8 @@ namespace AdityaaCodes\LaravelCheckpoint\Jobs;
 use AdityaaCodes\LaravelCheckpoint\Contracts\BackupDriver;
 use AdityaaCodes\LaravelCheckpoint\Enums\CommandRunStatus;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupCompleted;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillCompleted;
+use AdityaaCodes\LaravelCheckpoint\Events\BackupDrillFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupFailed;
 use AdityaaCodes\LaravelCheckpoint\Events\BackupStarted;
 use AdityaaCodes\LaravelCheckpoint\Models\CommandRun;
@@ -43,7 +45,7 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
 
     public function __construct(public readonly CommandRun $run)
     {
-        $this->onQueue(config('checkpoint.queue.name', 'db-ops'));
+        $this->onQueue(config('checkpoint.queue.name', 'checkpoint'));
         $this->logChannel = (string) config('checkpoint.log_channel', 'stack');
         $this->configuredDriver = (string) config('checkpoint.driver');
         $this->timeout = max(60, (int) config('checkpoint.queue.timeout', 3600));
@@ -95,7 +97,11 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
 
             if ($result->isSuccessful()) {
                 $run->markAsSucceeded($result->exitCode, $result->output);
-                $events->dispatch(new BackupCompleted($run, $result->exitCode, $result->output));
+                if ($run->operation === 'backup_drill') {
+                    $events->dispatch(new BackupDrillCompleted($run));
+                } else {
+                    $events->dispatch(new BackupCompleted($run, $result->exitCode, $result->output));
+                }
 
                 $logger->info('Completed checkpoint operation', $this->logContext($run, $this->configuredDriver, [
                     'exit_code' => $result->exitCode,
@@ -105,7 +111,11 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
             }
 
             $run->markAsFailed($result->exitCode, $result->output);
-            $events->dispatch(new BackupFailed($run, $result->exitCode, $result->output));
+            if ($run->operation === 'backup_drill') {
+                $events->dispatch(new BackupDrillFailed($run, $result->exitCode, $result->output));
+            } else {
+                $events->dispatch(new BackupFailed($run, $result->exitCode, $result->output));
+            }
 
             $logger->error('Checkpoint operation failed', $this->logContext($run, $this->configuredDriver, [
                 'exit_code' => $result->exitCode,
@@ -117,7 +127,11 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
                 $run->markAsFailed(output: $exception->getMessage());
             }
 
-            $events->dispatch(new BackupFailed($run, -1, $exception->getMessage(), $exception));
+            if ($run->operation === 'backup_drill') {
+                $events->dispatch(new BackupDrillFailed($run, -1, $exception->getMessage(), $exception));
+            } else {
+                $events->dispatch(new BackupFailed($run, -1, $exception->getMessage(), $exception));
+            }
 
             $logger->error('Checkpoint operation crashed', $this->logContext($run, $this->configuredDriver, [
                 'error' => $exception->getMessage(),
@@ -132,10 +146,10 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
         $catalog = resolve(CommandRunCatalog::class);
 
         if ($catalog->isExclusive($this->run->operation)) {
-            return sprintf('db-ops-exclusive:%s', $this->run->operation);
+            return sprintf('checkpoint-exclusive:%s', $this->run->operation);
         }
 
-        return sprintf('db-ops-run:%s', (string) $this->run->getKey());
+        return sprintf('checkpoint-run:%s', (string) $this->run->getKey());
     }
 
     public function uniqueFor(): int
@@ -181,7 +195,11 @@ final class ProcessCommandRunJob implements ShouldBeUnique, ShouldQueue
             $run->markAsFailed(output: $exception->getMessage());
         }
 
-        event(new BackupFailed($run, -1, $exception->getMessage(), $exception));
+        if ($run->operation === 'backup_drill') {
+            event(new BackupDrillFailed($run, -1, $exception->getMessage(), $exception));
+        } else {
+            event(new BackupFailed($run, -1, $exception->getMessage(), $exception));
+        }
 
         Log::channel($this->logChannel)
             ->error('ProcessCommandRunJob failed', $this->logContext($run, $this->configuredDriver, [
