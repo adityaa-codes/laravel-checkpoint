@@ -38,22 +38,25 @@ CP_DRIVER=postgres
 
 1. **Configure your driver** — set `CP_DRIVER` in `.env` to match your database
 2. **Start a queue worker** — Checkpoint operations run on the `checkpoint` queue:
-   ```bash
-   php artisan queue:work --queue=checkpoint
-   ```
-   **Note:** This package uses the `checkpoint` queue. Ensure a queue worker is running: `php artisan queue:work --queue=checkpoint`
+    ```bash
+    php artisan queue:work --queue=checkpoint
+    ```
 3. **Run a backup**:
-   ```bash
-   php artisan checkpoint:backup
-   ```
+    ```bash
+    php artisan checkpoint:backup
+    ```
+    The backup is dispatched to the queue and runs asynchronously. Use `--sync` for inline execution during local development:
+    ```bash
+    php artisan checkpoint:backup --sync
+    ```
 4. **Check status**:
    ```bash
    php artisan checkpoint:status
    ```
 5. **Run health diagnostics**:
-   ```bash
+    ```bash
     php artisan checkpoint:status --health
-   ```
+    ```
 
 ## Key Commands
 
@@ -72,6 +75,41 @@ CP_DRIVER=postgres
 | `checkpoint:install` | Guided installation wizard |
 | `checkpoint:make-driver` | Scaffold a custom backup driver |
 | `checkpoint:migrate-from-spatie` | Migrate from spatie/laravel-backup |
+
+All commands support `--format=json` for CI/automation with consistent envelope contracts. See the documentation for schemas.
+
+## Restore
+
+Restoring is a destructive operation — safety gates apply. A basic restore from a backup file:
+
+```bash
+php artisan checkpoint:restore --file=storage/app/checkpoint/logical-exports/backup.dump
+```
+
+Point-in-time recovery:
+
+```bash
+php artisan checkpoint:restore --pitr="2026-01-01 12:00:00"
+```
+
+Verify the last restore without re-running:
+
+```bash
+php artisan checkpoint:restore --verify-only
+```
+
+Restore requires confirmation in non-local environments. Configure allowed environments via `CP_RESTORE_ALLOWED_ENVIRONMENTS`. See `config/checkpoint.php` for blast-radius scoring, verification modes, and PITR prerequisites (WAL archiving).
+
+## Notifications
+
+Configure in `config/checkpoint.php` or via env vars to receive alerts for backup/drill failures and completions via email, Slack, or Telegram:
+
+```env
+CP_ALERT_EMAIL=ops@example.com
+CP_SLACK_WEBHOOK=https://hooks.slack.com/...
+CP_TELEGRAM_BOT_TOKEN=12345:abc
+CP_TELEGRAM_CHAT_ID=-12345
+```
 
 ## Safety Model
 

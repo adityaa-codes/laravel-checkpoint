@@ -15,22 +15,27 @@ use AdityaaCodes\LaravelCheckpoint\Notifications\Notifications\BackupFailedNotif
 | This is the published configuration file. Review every section and
 | adjust values for your environment.
 |
-| Most users only need to set: CP_DRIVER, destination.disks, retention_days.
-| All other keys have sensible defaults shown below.
+| Required: CP_DRIVER (set via env var or directly here).
+|
+| Strongly recommended: CP_BACKUP_ARCHIVE_PASSWORD (encryption),
+| CP_ALERT_EMAIL (failure notifications).
+|
+| Review: destination.disks, retention_days, restore guardrails,
+| notification channels, and queue settings.
 |
 | For binary paths (pg_dump, mysqldump, etc.), configure the `dump` key
 | inside Laravel's own config/database.php per connection — just like
 | spatie/laravel-backup.
 |
-    | Only a few env vars are used by default:
-    |   CP_DRIVER    — which driver to use (postgres, mysql)
-    |   CP_QUEUE_NAME — optional override for the queue name (default: checkpoint)
-    |   CP_BACKUP_ARCHIVE_PASSWORD  — encryption password (null = disabled)
-    |   CP_RESTORE_ALLOWED_ENVIRONMENTS — comma-separated envs where restore is allowed
-    |   CP_ALERT_EMAIL — email address for alert notifications
-    |   CP_SLACK_WEBHOOK — Slack webhook URL for notifications
-    |   CP_TELEGRAM_BOT_TOKEN — Telegram bot token for notifications
-    |   CP_TELEGRAM_CHAT_ID — Telegram chat ID for notifications
+| Available env vars:
+|   CP_DRIVER                         — postgres or mysql (required)
+|   CP_QUEUE_NAME                     — queue name override (default: checkpoint)
+|   CP_BACKUP_ARCHIVE_PASSWORD        — encryption password (unset = no encryption)
+|   CP_RESTORE_ALLOWED_ENVIRONMENTS   — comma-separated envs where restore is allowed
+|   CP_ALERT_EMAIL                    — email address for backup/drill notifications
+|   CP_SLACK_WEBHOOK                  — Slack incoming webhook URL
+|   CP_TELEGRAM_BOT_TOKEN             — Telegram bot token
+|   CP_TELEGRAM_CHAT_ID               — Telegram chat ID
 |
 */
 

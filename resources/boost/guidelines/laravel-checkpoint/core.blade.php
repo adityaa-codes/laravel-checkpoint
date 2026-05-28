@@ -9,7 +9,7 @@ Make backup, restore, PITR, replication, and recovery-drill operations safe, aud
 - Multi-tier safety gates (local/staging/production profiles)
 - JSON, agent, and compact-json output for humans and AI agents
 - 25+ health checks (config, binaries, queue, drill, posture)
-- 17 Artisan commands with `checkpoint:*` prefix
+- 12 Artisan commands with `checkpoint:*` prefix
 
 ## Conventions
 - All env vars use `CP_*` prefix
