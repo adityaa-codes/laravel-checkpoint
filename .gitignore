@@ -18,15 +18,21 @@ yarn-error.log
 _ide_helper.php
 _ide_helper_models.php
 .phpstorm.meta.php
+.phpactor.json
+ide.json
 
 # Editors
 /.idea
 /.fleet
 /.vscode
+/.codex
+
+# Tool Config
+opencode.json
 
 # Misc
 phpunit.xml
 phpstan.neon
 testbench.yaml
-/docs
 /coverage
+/website/.docusaurus
