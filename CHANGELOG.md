@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/adityaa-codes/laravel-checkpoint/compare/v0.1.0...v0.1.1) (2026-05-29)
+
+
+### Miscellaneous Chores
+
+* gitignore IDE configs and tool files, clean disk bloat ([c3bffa0](https://github.com/adityaa-codes/laravel-checkpoint/commit/c3bffa0ea9cf341bdb460ba235516e373cbf4303))
+* remove stale PLAN.md and rector-only-ours.php ([b09c035](https://github.com/adityaa-codes/laravel-checkpoint/commit/b09c0359330cadd19ebc931337e6717120003ff1))
+
 ## v0.1.0 — First release
 
 Initial release of `adityaa-codes/laravel-checkpoint`.
